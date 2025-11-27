@@ -1,0 +1,152 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+
+:root {
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #f5f5f5;
+  background-color: #0a0d13;
+  line-height: 1.4;
+  font-weight: 400;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #162032, #05070b 70%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+.layout-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-content {
+  flex: 1;
+  padding: 1.5rem;
+}
+
+.glass-panel {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 1.5rem;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 25px 50px rgba(2, 8, 20, 0.6);
+}
+
+.grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.grid.two {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.route-blocked {
+  padding: 2rem;
+  text-align: center;
+  color: #fca5a5;
+}
+
+.auth-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 11, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+}
+
+.auth-card {
+  width: min(420px, 92vw);
+}
+
+.secure-button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.85rem 1.6rem;
+  background: linear-gradient(120deg, #8b5cf6, #ec4899);
+  color: white;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 15px 35px rgba(140, 92, 246, 0.35);
+}
+
+.secure-button[disabled],
+.secure-button.is-busy {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.secure-input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: white;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.secure-input:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.12);
+}
+
+.toast-stack {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  z-index: 1100;
+}
+
+.toast {
+  padding: 0.85rem 1.2rem;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #f5f5f5;
+  min-width: 220px;
+}
+
+.toast--error {
+  border-color: #f87171;
+  color: #fecaca;
+}
+
+.toast--success {
+  border-color: #34d399;
+  color: #d1fae5;
+}
+
