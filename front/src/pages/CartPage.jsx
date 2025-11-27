@@ -1,11 +1,13 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import useCart from "../hooks/useCart";
 import SecureButton from "../components/ui/SecureButton";
 import { formatCurrency } from "../utils/format";
 
 const CartPage = () => {
   const { items, updateQuantity, removeItem, clearCart, syncing } = useCart();
+  const navigate = useNavigate();
 
+  // Рассчитываем итоги
   const summary = items.reduce(
     (acc, item) => {
       const line = item.price * item.quantity;
@@ -15,6 +17,22 @@ const CartPage = () => {
     },
     { count: 0, subtotal: 0 }
   );
+
+  // Обработчик оформления заказа
+  const handleCheckout = async () => {
+    if (items.length === 0) return;
+
+    try {
+      // Здесь позже будет вызов API: await createOrder({ items });
+      console.log("Оформление заказа:", { items, summary });
+
+      // Пример: перенаправление после успешного оформления
+      navigate("/checkout/success");
+    } catch (error) {
+      console.error("Ошибка при оформлении заказа:", error);
+      // Можно показать тост: showToast("error", "Не удалось оформить заказ");
+    }
+  };
 
   return (
     <div className="shop-container py-12">
@@ -35,7 +53,11 @@ const CartPage = () => {
 
       {items.length === 0 ? (
         <div className="mt-10 glass-card p-8 text-center text-night-500">
-          Корзина пуста. <Link to="/catalog" className="text-accent">Перейдите в каталог</Link>, чтобы выбрать мебель.
+          Корзина пуста.{" "}
+          <Link to="/catalog" className="text-accent">
+            Перейдите в каталог
+          </Link>
+          , чтобы выбрать мебель.
         </div>
       ) : (
         <div className="mt-10 grid gap-8 lg:grid-cols-[2fr,1fr]">
@@ -69,7 +91,8 @@ const CartPage = () => {
                     <div className="inline-flex items-center rounded-full border border-night-100">
                       <button
                         className="px-3 py-2 text-night-500 hover:text-night-900"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                        disabled={item.quantity <= 1}
                       >
                         -
                       </button>
@@ -99,8 +122,12 @@ const CartPage = () => {
               <span>К оплате</span>
               <span>{formatCurrency(summary.subtotal)}</span>
             </div>
-            <SecureButton className="w-full justify-center" disabled={syncing}>
-              Оформить заказ
+            <SecureButton
+              onClick={handleCheckout} // ✅ Передаём функцию
+              className="w-full justify-center"
+              disabled={syncing || items.length === 0}
+            >
+              {syncing ? "Обработка..." : "Оформить заказ"}
             </SecureButton>
             <p className="text-xs text-night-400">
               При авторизации корзина сохраняется в аккаунте и доступна с любого устройства.
@@ -113,4 +140,3 @@ const CartPage = () => {
 };
 
 export default CartPage;
-

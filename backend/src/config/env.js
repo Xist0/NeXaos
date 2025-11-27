@@ -6,6 +6,14 @@ if (process.env.NODE_ENV !== "production") {
   dotenv.config();
 }
 
+const parseCsv = (value, fallback = []) =>
+  value
+    ? value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+    : fallback;
+
 // Валидация обязательных переменных
 const requiredEnvVars = [
   "DB_HOST",
@@ -25,6 +33,16 @@ for (const envVar of requiredEnvVars) {
 module.exports = {
   env: process.env.NODE_ENV || "development",
   port: process.env.PORT || 5000,
+  cors: {
+    origins: parseCsv(process.env.CORS_ORIGINS, [
+      "http://localhost:5173",
+      "http://localhost:3000",
+    ]),
+  },
+  proxy: {
+    target: process.env.PROXY_TARGET || null,
+    path: process.env.PROXY_PATH || "/proxy",
+  },
   db: {
     host: process.env.DB_HOST,
     port: parseInt(process.env.DB_PORT, 10),

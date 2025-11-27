@@ -1,9 +1,8 @@
-const baseApi = import.meta.env.VITE_API_URL || "http://localhost:5000";
-export const API_BASE_URL = `${baseApi}/api`;
+const fallbackApi = import.meta.env.DEV ? "/api" : "http://localhost:5000/api";
+export const API_BASE_URL = import.meta.env.VITE_API_URL || fallbackApi;
 
 export const ROLES = {
-  ADMIN: "admin",
-  MANAGER: "manager",
-  USER: "user",
+    ADMIN: "admin",
+    MANAGER: "manager",
+    USER: "user",
 };
-

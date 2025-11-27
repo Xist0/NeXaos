@@ -15,7 +15,11 @@ const createRateLimiter = () =>
 
 const applySecurityMiddleware = (app) => {
   app.set("trust proxy", 1);
-  app.use(createRateLimiter());
+
+  if (process.env.NODE_ENV === "production") {
+    app.use(createRateLimiter());
+  }
+
   app.use(xssClean());
   app.use(
     hpp({
@@ -25,4 +29,3 @@ const applySecurityMiddleware = (app) => {
 };
 
 module.exports = applySecurityMiddleware;
-

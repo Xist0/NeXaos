@@ -1,52 +1,72 @@
 import { useState } from "react";
-import useApi from "../hooks/useApi";
 import SecureButton from "../components/ui/SecureButton";
+import OrdersTable from "../components/admin/OrdersTable";
+import EntityManager from "../components/admin/EntityManager";
+
+const tabs = [
+  { id: "orders", label: "Заказы" },
+  { id: "modules", label: "Модули" },
+  { id: "materials", label: "Материалы" },
+];
+
+const entityConfigs = {
+  modules: {
+    title: "Каталог модулей",
+    endpoint: "/modules",
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "Артикул" },
+      { name: "final_price", label: "Цена", type: "number", required: true },
+      { name: "facade_color", label: "Цвет фасада" },
+      { name: "corpus_color", label: "Цвет корпуса" },
+    ],
+  },
+  materials: {
+    title: "Материалы",
+    endpoint: "/materials",
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "unit_id", label: "ID единицы", type: "number" },
+      { name: "price", label: "Цена", type: "number" },
+    ],
+  },
+};
 
 const AdminPage = () => {
-  const { post } = useApi();
-  const [logs, setLogs] = useState([]);
-
-  const handleSync = async () => {
-    const payload = { timestamp: new Date().toISOString(), action: "sync" };
-    const response = await post("/admin/run-sync", payload);
-    setLogs((prev) => [response, ...prev].slice(0, 10));
-  };
+  const [activeTab, setActiveTab] = useState("orders");
+  const entityConfig = entityConfigs[activeTab];
 
   return (
-    <div className="shop-container py-12">
-      <div className="space-y-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-night-400">
-            Панель администратора
-          </p>
-          <h1 className="text-3xl font-semibold text-night-900">Синхронизация данных</h1>
-        </div>
-        <div className="glass-card p-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="shop-container py-12 space-y-6">
+      <header className="space-y-2">
+        <p className="text-xs uppercase tracking-[0.3em] text-night-400">
+          Панель администратора
+        </p>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold text-night-900">Управление магазином</h1>
             <p className="text-sm text-night-500">
-              Обновите справочники модулей, материалов и цен, чтобы синхронизировать каталог.
+              Отслеживайте заказы, редактируйте каталог и контролируйте материалы.
             </p>
-            <SecureButton onClick={handleSync}>Запустить синхронизацию</SecureButton>
           </div>
         </div>
-        <div className="glass-card p-6">
-          <h2 className="text-xl font-semibold text-night-900">Последние действия</h2>
-          {logs.length === 0 ? (
-            <p className="mt-4 text-sm text-night-500">Пока нет действий</p>
-          ) : (
-            <ul className="mt-4 space-y-2 text-sm text-night-600">
-              {logs.map((log) => (
-                <li
-                  key={log.id || log.timestamp}
-                  className="rounded-xl border border-night-100 bg-night-50/60 px-4 py-3"
-                >
-                  {JSON.stringify(log)}
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="flex flex-wrap gap-3">
+          {tabs.map((tab) => (
+            <SecureButton
+              key={tab.id}
+              variant={tab.id === activeTab ? "primary" : "outline"}
+              className="px-5 py-2 text-sm"
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </SecureButton>
+          ))}
         </div>
-      </div>
+      </header>
+
+      {activeTab === "orders" && <OrdersTable />}
+      {entityConfig && <EntityManager {...entityConfig} />}
     </div>
   );
 };

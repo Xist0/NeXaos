@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import clsx from "clsx";
 import useLogger from "../../hooks/useLogger";
+;
 
 const SecureButton = ({
   children,
@@ -23,6 +24,7 @@ const SecureButton = ({
     }
     lastClickRef.current = now;
     setBusy(true);
+    
     try {
       await onClick?.(event);
     } catch (error) {

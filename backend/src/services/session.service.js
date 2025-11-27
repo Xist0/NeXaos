@@ -13,7 +13,7 @@ const createSession = async (userId, userAgent = "", ip = null) => {
     `INSERT INTO sessions (user_id, token, user_agent, ip, expires_at)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING id, token, expires_at`,
-    [userId, token, userAgent.slice(0, 255), ip]
+    [userId, token, userAgent.slice(0, 255), ip, expiresAt] // ← добавлен expiresAt как $5
   );
 
   logger.info("Session created", { userId, sessionId: rows[0].id });

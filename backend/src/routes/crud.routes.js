@@ -8,12 +8,16 @@ entities.forEach((entity) => {
   const controller = createCrudController(entity);
   const basePath = `/${entity.route}`;
 
-  router.get(basePath, authGuard, asyncHandler(controller.list));
-  router.get(`${basePath}/:id`, authGuard, asyncHandler(controller.getById));
+  router.get(basePath, asyncHandler(controller.list));
+  router.get(`${basePath}/:id`, asyncHandler(controller.getById));
   router.post(basePath, authGuard, asyncHandler(controller.create));
   router.put(`${basePath}/:id`, authGuard, asyncHandler(controller.update));
   router.delete(`${basePath}/:id`, authGuard, asyncHandler(controller.remove));
+  router.post("/logs", (req, res) => {
+    const { level, message, meta, timestamp } = req.body;
+    console.log(`[FRONT LOG] [${level}] ${message}`, meta);
+    res.status(204).end(); // No Content
+  });
 });
 
 module.exports = router;
-
