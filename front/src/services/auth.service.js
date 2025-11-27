@@ -11,7 +11,7 @@ export const login = async (credentials) => {
 };
 
 export const register = async (payload) => {
-    const { data } = await apiClient.post("/users", payload);
+    const { data } = await apiClient.post("/auth/register", payload);
     return data;
 };
 

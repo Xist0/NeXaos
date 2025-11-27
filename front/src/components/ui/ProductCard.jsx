@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import SecureButton from "./SecureButton";
 import { formatCurrency } from "../../utils/format";
 
@@ -13,17 +14,21 @@ const ProductCard = ({ product, onAdd }) => {
 
   return (
     <article className="glass-card flex flex-col overflow-hidden transition hover:-translate-y-1 hover:shadow-2xl">
-      <div className="relative aspect-[4/3] overflow-hidden bg-night-100">
+      <Link to={`/catalog/${product.id}`} className="relative aspect-[4/3] overflow-hidden bg-night-100 block">
         <img src={image} alt={product.name} className="h-full w-full object-cover" />
         {product.is_new && (
           <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-1 text-xs font-semibold text-night-900">
             Новинка
           </span>
         )}
-      </div>
+      </Link>
       <div className="flex flex-1 flex-col gap-4 p-5">
         <div>
-          <h3 className="text-lg font-semibold text-night-900">{product.name}</h3>
+          <Link to={`/catalog/${product.id}`}>
+            <h3 className="text-lg font-semibold text-night-900 hover:text-accent transition">
+              {product.name}
+            </h3>
+          </Link>
           <p className="mt-1 text-sm text-night-500 line-clamp-2">
             {product.short_desc || "Продуманный дизайн и современные материалы."}
           </p>
@@ -37,7 +42,11 @@ const ProductCard = ({ product, onAdd }) => {
           </div>
           <SecureButton
             className="px-5 py-2 text-sm"
-            onClick={() => onAdd?.(product)}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onAdd?.(product);
+            }}
           >
             В корзину
           </SecureButton>

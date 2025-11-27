@@ -1,8 +1,6 @@
 import { useRef, useState } from "react";
 import clsx from "clsx";
 import useLogger from "../../hooks/useLogger";
-;
-
 const SecureButton = ({
   children,
   onClick,
@@ -17,14 +15,58 @@ const SecureButton = ({
   const lastClickRef = useRef(0);
 
   const handleClick = async (event) => {
-    if (disabled || busy) return;
+    if (disabled || busy) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     const now = Date.now();
-    if (now - lastClickRef.current < 400) {
+    // Для submit кнопок уменьшаем debounce, для обычных - оставляем
+    const debounceTime = type === "submit" ? 200 : 400;
+    if (now - lastClickRef.current < debounceTime) {
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
     lastClickRef.current = now;
+
+    // Если это submit кнопка и onClick не передан, позволяем форме обработать submit естественным образом
+    if (type === "submit" && !onClick) {
+      // Не делаем ничего - форма сама обработает submit
+      return;
+    }
+
+    // Если это submit кнопка с onClick, предотвращаем стандартную отправку,
+    // вызываем onClick, и если он успешен - программно отправляем форму
+    if (type === "submit" && onClick) {
+      event.preventDefault();
+      event.stopPropagation();
+      
+      setBusy(true);
+      try {
+        await onClick(event);
+        // После успешного выполнения onClick, программно отправляем форму
+        const form = event.currentTarget.closest("form");
+        if (form) {
+          // Проверяем валидность формы перед отправкой
+          if (form.checkValidity()) {
+            form.requestSubmit();
+          } else {
+            form.reportValidity();
+          }
+        }
+      } catch (error) {
+        logger.error("Button handler failed", { error });
+        // При ошибке форма не отправляется
+      } finally {
+        setTimeout(() => setBusy(false), 250);
+      }
+      return;
+    }
+
+    // Для обычных кнопок (type="button") работаем как раньше
     setBusy(true);
-    
     try {
       await onClick?.(event);
     } catch (error) {

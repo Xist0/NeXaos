@@ -4,18 +4,15 @@ import { canAccessRole } from "../../utils/roleUtils";
 
 const ProtectedRoute = ({ allowedRoles = [] }) => {
   const location = useLocation();
-  const { token, role, requireAuth } = useAuth();
+  const { token, role } = useAuth(); // ← не вызываем requireAuth!
 
+  // Если нет токена — отправляем на логин
   if (!token) {
-    requireAuth(location.pathname);
-    return (
-      <div className="shop-container py-16 text-center text-night-500">
-        Требуется авторизация...
-      </div>
-    );
+    return <Navigate to="/" state={{ from: location }} replace />;
   }
 
-  if (!canAccessRole(role, allowedRoles)) {
+  // Если указаны allowedRoles и роль не подходит — домой
+  if (allowedRoles.length > 0 && !canAccessRole(role, allowedRoles)) {
     return <Navigate to="/" replace />;
   }
 
@@ -23,4 +20,3 @@ const ProtectedRoute = ({ allowedRoles = [] }) => {
 };
 
 export default ProtectedRoute;
-

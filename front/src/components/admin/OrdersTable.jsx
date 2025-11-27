@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import useApi from "../../hooks/useApi";
 import SecureButton from "../ui/SecureButton";
+import OrderDetailsModal from "./OrderDetailsModal";
 import { formatCurrency } from "../../utils/format";
 
 const statusOptions = [
@@ -16,6 +17,7 @@ const OrdersTable = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState("");
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -81,10 +83,14 @@ const OrdersTable = () => {
           </thead>
           <tbody>
             {filteredOrders.map((order) => (
-              <tr key={order.id} className="border-t border-night-100 text-night-900">
+              <tr
+                key={order.id}
+                className="border-t border-night-100 text-night-900 hover:bg-night-50 cursor-pointer"
+                onClick={() => setSelectedOrderId(order.id)}
+              >
                 <td className="py-3 pr-4 font-semibold">#{order.id}</td>
                 <td className="py-3 pr-4">
-                  <p className="font-medium">{order.user_id || "Гость"}</p>
+                  <p className="font-medium">{order.full_name || order.user_id || "Гость"}</p>
                   <p className="text-xs text-night-400">
                     {new Date(order.created_at).toLocaleString("ru-RU")}
                   </p>
@@ -125,6 +131,13 @@ const OrdersTable = () => {
           </tbody>
         </table>
       </div>
+
+      <OrderDetailsModal
+        orderId={selectedOrderId}
+        isOpen={!!selectedOrderId}
+        onClose={() => setSelectedOrderId(null)}
+        onUpdate={fetchOrders}
+      />
     </section>
   );
 };

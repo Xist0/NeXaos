@@ -25,27 +25,17 @@ const findByEmail = async (email) => {
 };
 
 const verifyPassword = async (plain, hash) => {
-  if (!hash) {
-    return false;
-  }
+  if (!hash) return false;
   return bcrypt.compare(plain, hash);
 };
 
 const hashPassword = (password) => bcrypt.hash(password, 10);
 
-const ensureAdminUser = async ({
-  email,
-  password,
-  fullName = "Test Admin",
-  phone = null,
-}) => {
+const ensureAdminUser = async ({ email, password, fullName = "Test Admin", phone = null }) => {
   const existing = await findByEmail(email);
-  if (existing) {
-    return existing;
-  }
+  if (existing) return existing;
 
   const passwordHash = await hashPassword(password);
-
   const { rows } = await query(
     `INSERT INTO users (role_id, email, password_hash, full_name, phone, is_active)
      SELECT r.id, $1, $2, $3, $4, true
@@ -54,7 +44,23 @@ const ensureAdminUser = async ({
      RETURNING *`,
     [email, passwordHash, fullName, phone]
   );
+  return rows[0];
+};
 
+// ✅ НОВОЕ: функция создания обычного пользователя
+const createUser = async ({ email, password, fullName, phone }) => {
+  if (!phone) {
+    throw new Error("Phone is required");
+  }
+  const passwordHash = await hashPassword(password);
+  const { rows } = await query(
+    `INSERT INTO users (role_id, email, password_hash, full_name, phone, is_active)
+     SELECT r.id, $1, $2, $3, $4, true
+     FROM roles r
+     WHERE r.name = 'user'
+     RETURNING *`,
+    [email, passwordHash, fullName, phone]
+  );
   return rows[0];
 };
 
@@ -63,6 +69,6 @@ module.exports = {
   verifyPassword,
   hashPassword,
   ensureAdminUser,
+  createUser, // ← экспортируем
   toSafeUser,
 };
-

@@ -3,7 +3,9 @@ import AppLayout from "../components/layout/AppLayout";
 import ProtectedRoute from "../components/layout/ProtectedRoute";
 import HomePage from "../pages/HomePage";
 import CatalogPage from "../pages/CatalogPage";
+import ProductPage from "../pages/ProductPage";
 import CartPage from "../pages/CartPage";
+import AccountPage from "../pages/AccountPage";
 import AdminPage from "../pages/AdminPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import { ROLES } from "../utils/constants";
@@ -14,7 +16,12 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <HomePage /> },
       { path: "catalog", element: <CatalogPage /> },
+      { path: "catalog/:id", element: <ProductPage /> },
       { path: "cart", element: <CartPage /> },
+      {
+        element: <ProtectedRoute />,
+        children: [{ path: "account", element: <AccountPage /> }],
+      },
       {
         element: <ProtectedRoute allowedRoles={[ROLES.ADMIN]} />,
         children: [{ path: "admin", element: <AdminPage /> }],

@@ -1,5 +1,6 @@
 const Joi = require("joi");
 const { hashPassword } = require("../services/user.service");
+const { query } = require("../config/db");
 
 const buildFieldSchema = (config) => {
   let field;
@@ -76,6 +77,24 @@ const passwordHook = async (payload) => {
   return payload;
 };
 
+// Хук для автоматической установки role_id = "user" если не указан
+const userCreateHook = async (payload, req) => {
+  // Сначала обрабатываем пароль
+  await passwordHook(payload);
+  
+  // Если role_id не указан, устанавливаем роль "user"
+  if (!payload.role_id) {
+    const { rows } = await query(
+      `SELECT id FROM roles WHERE name = 'user' LIMIT 1`
+    );
+    if (rows[0]) {
+      payload.role_id = rows[0].id;
+    }
+  }
+  
+  return payload;
+};
+
 const entities = [
   {
     route: "roles",
@@ -105,7 +124,7 @@ const entities = [
       password: { type: "string", required: true, min: 6, virtual: true },
       password_hash: { type: "string", internal: true },
       full_name: { type: "string", max: 255, allowNull: true },
-      phone: { type: "string", max: 50, allowNull: true },
+      phone: { type: "string", required: true, max: 50 },
       is_active: { type: "boolean" },
     },
     selectFields: [
@@ -118,7 +137,7 @@ const entities = [
       "created_at",
       "updated_at",
     ],
-    beforeCreate: passwordHook,
+    beforeCreate: userCreateHook,
     beforeUpdate: passwordHook,
   },
   {
@@ -283,7 +302,7 @@ const entities = [
     table: "orders",
     idColumn: "id",
     columns: {
-      user_id: { type: "integer" },
+      user_id: { type: "integer", allowNull: true },
       status: { type: "string", allowNull: true },
       total: { type: "number", precision: 2 },
     },
@@ -299,6 +318,25 @@ const entities = [
       qty: { type: "integer" },
       price: { type: "number", precision: 2 },
       cost_price: { type: "number", precision: 2 },
+    },
+  },
+  {
+    route: "order-notes",
+    table: "order_notes",
+    idColumn: "id",
+    columns: {
+      order_id: { type: "integer", required: true },
+      user_id: { type: "integer", allowNull: true },
+      note: { type: "string", required: true },
+      is_private: { type: "boolean", default: false },
+    },
+    selectFields: ["id", "order_id", "user_id", "note", "is_private", "created_at"],
+    beforeCreate: async (payload, req) => {
+      // Автоматически устанавливаем user_id из текущего пользователя
+      if (req.user?.id && !payload.user_id) {
+        payload.user_id = req.user.id;
+      }
+      return payload;
     },
   },
   {

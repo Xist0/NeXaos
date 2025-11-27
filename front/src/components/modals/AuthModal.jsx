@@ -1,6 +1,7 @@
 import { useState } from "react";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
+import PhoneInput from "../ui/PhoneInput";
 import useAuth from "../../hooks/useAuth";
 
 const modes = {
@@ -11,7 +12,7 @@ const modes = {
 const AuthModal = () => {
     const { login, register, pending, error } = useAuth();
     const [mode, setMode] = useState(modes.LOGIN);
-    const [form, setForm] = useState({ email: "", password: "", fullName: "" });
+    const [form, setForm] = useState({ email: "", password: "", fullName: "", phone: "" });
 
     const handleChange = (field) => (value) => {
         setForm((prev) => ({ ...prev, [field]: value }));
@@ -45,15 +46,26 @@ const AuthModal = () => {
             </div>
 
             {mode === modes.REGISTER && (
-                <div>
-                    <label className="text-sm font-medium text-night-700">Имя</label>
-                    <SecureInput
-                        value={form.fullName}
-                        onChange={handleChange("fullName")}
-                        placeholder="Иван Иванов"
-                        required
-                    />
-                </div>
+                <>
+                    <div>
+                        <label className="text-sm font-medium text-night-700">Имя</label>
+                        <SecureInput
+                            value={form.fullName}
+                            onChange={handleChange("fullName")}
+                            placeholder="Иван Иванов"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-night-700">Телефон</label>
+                        <PhoneInput
+                            value={form.phone}
+                            onChange={handleChange("phone")}
+                            placeholder="+7 (000) - 000 - 00 -00"
+                            required
+                        />
+                    </div>
+                </>
             )}
 
             <div>
@@ -85,13 +97,13 @@ const AuthModal = () => {
                 </div>
             ) : null}
 
-<SecureButton
-    onClick={handleSubmit} // ← вызываем напрямую
-    disabled={pending}
-    className="w-full justify-center"
-  >
-    {pending ? "Подождите..." : mode === modes.LOGIN ? "Войти" : "Создать"}
-  </SecureButton>
+            <SecureButton
+                type="submit"
+                disabled={pending}
+                className="w-full justify-center"
+            >
+                {pending ? "Подождите..." : mode === modes.LOGIN ? "Войти" : "Создать"}
+            </SecureButton>
 
             <button
                 type="button"

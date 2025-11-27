@@ -52,10 +52,13 @@ const AppLayout = () => {
           <div className="flex items-center gap-3">
             {user ? (
               <>
-                <div className="text-right text-xs">
+                <NavLink
+                  to="/account"
+                  className="text-right text-xs hover:text-accent transition"
+                >
                   <p className="font-semibold text-night-900">{user.fullName}</p>
                   <p className="text-night-400">{role?.toUpperCase()}</p>
-                </div>
+                </NavLink>
                 <SecureButton variant="ghost" className="px-4 py-2" onClick={logout}>
                   Выйти
                 </SecureButton>
