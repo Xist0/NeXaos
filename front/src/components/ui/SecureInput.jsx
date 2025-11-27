@@ -6,7 +6,7 @@ const sanitize = (value) =>
     .replace(/\s{2,}/g, " ")
     .trimStart();
 
-const SecureInput = ({ onChange, value, label, ...rest }) => {
+const SecureInput = ({ onChange, value, label, className = "", ...rest }) => {
   const id = useId();
 
   const handleChange = (event) => {
@@ -23,7 +23,7 @@ const SecureInput = ({ onChange, value, label, ...rest }) => {
       ) : null}
       <input
         id={id}
-        className="secure-input"
+        className={`secure-input ${className}`}
         value={value}
         autoComplete="off"
         spellCheck={false}

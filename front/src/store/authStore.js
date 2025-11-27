@@ -21,15 +21,8 @@ const useAuthStore = create((set, get) => ({
   role: initialUser?.roleName || ROLES.USER,
   pending: false,
   error: null,
-  authModalOpen: !localStorage.getItem(TOKEN_KEY),
+  authModalOpen: false,
   redirectAfterAuth: "/",
-
-  initializeFromSession: () => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (!token) {
-      set({ authModalOpen: true });
-    }
-  },
 
   requireAuth: (redirectAfterAuth = "/") => {
     set({ authModalOpen: true, redirectAfterAuth });
@@ -82,7 +75,7 @@ const useAuthStore = create((set, get) => ({
       token: null,
       user: null,
       role: ROLES.USER,
-      authModalOpen: true,
+      authModalOpen: false,
     });
   },
 }));

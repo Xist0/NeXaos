@@ -8,7 +8,11 @@ const ProtectedRoute = ({ allowedRoles = [] }) => {
 
   if (!token) {
     requireAuth(location.pathname);
-    return <div className="route-blocked">Требуется авторизация...</div>;
+    return (
+      <div className="shop-container py-16 text-center text-night-500">
+        Требуется авторизация...
+      </div>
+    );
   }
 
   if (!canAccessRole(role, allowedRoles)) {

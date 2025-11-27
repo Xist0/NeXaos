@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import clsx from "clsx";
 import useLogger from "../../hooks/useLogger";
 
 const SecureButton = ({
@@ -7,6 +8,7 @@ const SecureButton = ({
   variant = "primary",
   disabled,
   type = "button",
+  className = "",
   ...rest
 }) => {
   const [busy, setBusy] = useState(false);
@@ -34,7 +36,15 @@ const SecureButton = ({
     <button
       type={type}
       data-safe-click
-      className={`secure-button secure-button--${variant} ${busy ? "is-busy" : ""}`}
+      className={clsx(
+        "secure-button",
+        variant === "ghost" &&
+          "bg-transparent text-night-900 shadow-none border border-night-200 hover:border-night-400 hover:text-night-600",
+        variant === "outline" &&
+          "bg-white text-night-900 border border-night-200 shadow-sm hover:border-night-400",
+        busy && "is-busy",
+        className
+      )}
       aria-busy={busy}
       disabled={disabled || busy}
       onClick={handleClick}
