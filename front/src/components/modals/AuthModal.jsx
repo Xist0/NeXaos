@@ -3,6 +3,7 @@ import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import PhoneInput from "../ui/PhoneInput";
 import useAuth from "../../hooks/useAuth";
+import useLogger from "../../hooks/useLogger";
 
 const modes = {
     LOGIN: "login",
@@ -11,6 +12,7 @@ const modes = {
 
 const AuthModal = () => {
     const { login, register, pending, error } = useAuth();
+    const logger = useLogger();
     const [mode, setMode] = useState(modes.LOGIN);
     const [form, setForm] = useState({ email: "", password: "", fullName: "", phone: "" });
 
@@ -27,7 +29,10 @@ const AuthModal = () => {
                 await register(form);
             }
         }  catch (err) {
-            console.error("Auth error:", err.response?.data || err.message || err);
+            const message =
+                err.response?.data?.message ||
+                "Не удалось выполнить авторизацию. Попробуйте ещё раз.";
+            logger.error(message);
           }
     };
 

@@ -4,15 +4,15 @@ const logger = require("../utils/logger");
 const migrations = require("../migrations");
 
 const runMigrations = async () => {
-  console.log("🔍 Running database migrations...");
+  console.log("🔍 Запускаем миграции базы данных...");
   for (const migration of migrations) {
     await migration.up(query);
   }
-  console.log("✅ All migrations applied");
+  console.log("✅ Все миграции применены");
 };
 
 const seedBasicData = async () => {
-  console.log("🌱 Seeding basic data...");
+  console.log("🌱 Наполняем базу начальными данными...");
 
   await query(
     `INSERT INTO roles (name, description) 
@@ -51,10 +51,10 @@ const seedBasicData = async () => {
        ON CONFLICT (email) DO NOTHING`,
       [adminEmail, passwordHash, adminFullName, "+7 (000) 000-00-00"]
     );
-    logger.info("Test admin user created", { email: adminEmail });
+  logger.info("Создан тестовый администратор", { email: adminEmail });
   }
 
-  console.log("✅ Basic data seeded");
+  console.log("✅ Начальные данные добавлены");
 };
 
 const initDatabase = async () => {

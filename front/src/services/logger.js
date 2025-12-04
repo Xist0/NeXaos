@@ -1,10 +1,14 @@
 import { API_BASE_URL } from "../utils/constants";
 
 const emit = (level, message, meta = {}) => {
+  // Убеждаемся, что message всегда строка
+  const safeMessage = typeof message === "string" && message.trim() ? message : "Лог без сообщения";
+  const safeMeta = meta && typeof meta === "object" ? meta : {};
+  
   const payload = {
-    level,
-    message,
-    meta,
+    level: level || "info",
+    message: safeMessage,
+    meta: safeMeta,
     timestamp: new Date().toISOString(),
   };
 
@@ -17,7 +21,8 @@ const emit = (level, message, meta = {}) => {
   }
 
   try {
-    navigator.sendBeacon?.(`${API_BASE_URL}/logs`, JSON.stringify(payload));
+    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+    navigator.sendBeacon?.(`${API_BASE_URL}/logs`, blob);
   } catch (err) {
     // swallow telemetry errors
   }

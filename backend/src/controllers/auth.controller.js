@@ -1,16 +1,18 @@
 const Joi = require("joi");
 const ApiError = require("../utils/api-error");
 const {
-  createSession,
-  revokeSession,
-  findSessionByToken,
-} = require("../services/session.service");
+  createAccessToken,
+  createRefreshTokenRecord,
+  verifyAccessToken,
+  verifyRefreshToken,
+  revokeRefreshToken,
+  revokeAllUserRefreshTokens,
+} = require("../services/token.service");
 const {
   findByEmail,
   verifyPassword,
   toSafeUser,
 } = require("../services/user.service");
-const { SESSION_COOKIE_NAME } = require("../middleware/auth.middleware");
 
 const loginSchema = Joi.object({
   email: Joi.string().email().required(),
@@ -24,54 +26,82 @@ const login = async (req, res) => {
   });
 
   if (error) {
-    throw ApiError.badRequest("Validation failed", error.details);
+    throw ApiError.badRequest("Ошибка валидации", error.details);
   }
 
   const user = await findByEmail(value.email);
 
   if (!user || !user.is_active) {
-    throw ApiError.unauthorized("Invalid credentials");
+    throw ApiError.unauthorized("Неверные учетные данные");
   }
 
   const passwordOk = await verifyPassword(value.password, user.password_hash);
 
   if (!passwordOk) {
-    throw ApiError.unauthorized("Invalid credentials");
+    throw ApiError.unauthorized("Неверные учетные данные");
   }
 
-  const session = await createSession(
+  // Создаем refresh token (30 дней)
+  const refreshTokenRecord = await createRefreshTokenRecord(user.id);
+  
+  // Создаем access token (3 дня)
+  const accessToken = createAccessToken(
     user.id,
-    req.get("user-agent") || "unknown",
-    req.ip
+    user.role_id,
+    user.role_name || "user"
   );
 
-  const cookieOptions = {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  };
-
-  res.cookie(SESSION_COOKIE_NAME, session.token, cookieOptions);
-
   res.status(200).json({
-    token: session.token,
-    expiresAt: session.expires_at,
+    accessToken,
+    refreshToken: refreshTokenRecord.token,
+    expiresAt: refreshTokenRecord.expires_at,
     user: toSafeUser(user),
   });
 };
 
-const logout = async (req, res) => {
-  if (req.sessionId) {
-    await revokeSession(req.sessionId);
-  } else if (req.sessionToken) {
-    const session = await findSessionByToken(req.sessionToken);
-    if (session) {
-      await revokeSession(session.id);
-    }
+const refresh = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    throw ApiError.badRequest("Refresh token не указан");
   }
 
-  res.clearCookie(SESSION_COOKIE_NAME);
+  const tokenRecord = await verifyRefreshToken(refreshToken);
+
+  if (!tokenRecord) {
+    throw ApiError.unauthorized("Refresh token недействителен или истек");
+  }
+
+  // Создаем новый access token
+  const accessToken = createAccessToken(
+    tokenRecord.user_id,
+    tokenRecord.role_id,
+    tokenRecord.role_name || "user"
+  );
+
+  res.status(200).json({
+    accessToken,
+    user: {
+      id: tokenRecord.user_id,
+      email: tokenRecord.email,
+      fullName: tokenRecord.full_name,
+      roleId: tokenRecord.role_id,
+      roleName: tokenRecord.role_name,
+    },
+  });
+};
+
+const logout = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  if (refreshToken) {
+    await revokeRefreshToken(refreshToken);
+  }
+
+  if (req.user?.id) {
+    await revokeAllUserRefreshTokens(req.user.id);
+  }
+
   res.status(204).send();
 };
 
@@ -84,6 +114,7 @@ const getProfile = async (req, res) => {
 module.exports = {
   login,
   logout,
+  refresh,
   getProfile,
 };
 

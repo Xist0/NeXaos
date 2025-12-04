@@ -4,7 +4,7 @@ const logger = require("../utils/logger");
 const errorHandler = (err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const response = {
-    message: err.message || "Internal server error",
+    message: err.message || "Внутренняя ошибка сервера",
   };
 
   if (err.details) {
@@ -24,7 +24,7 @@ const errorHandler = (err, req, res, next) => {
   }
 
   if (!(err instanceof ApiError) && statusCode === 500) {
-    response.message = "Internal server error";
+    response.message = "Внутренняя ошибка сервера";
   }
 
   res.status(statusCode).json(response);

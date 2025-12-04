@@ -1,60 +1,100 @@
 const ApiError = require("../utils/api-error");
-const {
-  findSessionByToken,
-  revokeSession,
-} = require("../services/session.service");
+const { verifyAccessToken } = require("../services/token.service");
+const { query } = require("../config/db");
 
-const SESSION_COOKIE_NAME = "nexaos_session";
-
-const extractToken = (req) => {
+const extractAccessToken = (req) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith("Bearer ")) {
     return authHeader.split(" ")[1];
   }
-
-  if (req.cookies && req.cookies[SESSION_COOKIE_NAME]) {
-    return req.cookies[SESSION_COOKIE_NAME];
-  }
-
-  if (req.query && req.query.token) {
-    return req.query.token;
-  }
-
   return null;
 };
 
+// Обязательная авторизация - возвращает ошибку если нет токена
 const authGuard = async (req, res, next) => {
-  const token = extractToken(req);
+  const token = extractAccessToken(req);
+  
   if (!token) {
-    return next(ApiError.unauthorized("Missing session token"));
+    return next(ApiError.unauthorized("Токен доступа не предоставлен"));
   }
 
-  const session = await findSessionByToken(token);
-
-  if (!session) {
-    return next(ApiError.unauthorized("Session is invalid or expired"));
+  const decoded = verifyAccessToken(token);
+  
+  if (!decoded) {
+    return next(ApiError.unauthorized("Токен доступа недействителен или истек"));
   }
 
-  if (session.revoked) {
-    await revokeSession(session.id);
-    return next(ApiError.unauthorized("Session has been revoked"));
+  // Получаем актуальные данные пользователя из БД
+  const { rows } = await query(
+    `SELECT u.id, u.role_id, r.name AS role_name, u.email, u.full_name, u.is_active
+     FROM users u
+     LEFT JOIN roles r ON u.role_id = r.id
+     WHERE u.id = $1 AND u.is_active = true`,
+    [decoded.userId]
+  );
+
+  if (!rows[0]) {
+    return next(ApiError.unauthorized("Пользователь не найден или деактивирован"));
   }
 
-  req.sessionId = session.id;
-  req.sessionToken = session.token;
   req.user = {
-    id: session.user_id,
-    roleId: session.role_id,
-    roleName: session.role_name,
-    email: session.email,
-    fullName: session.full_name,
+    id: rows[0].id,
+    roleId: rows[0].role_id,
+    roleName: rows[0].role_name || "user",
+    email: rows[0].email,
+    fullName: rows[0].full_name,
   };
+  req.isGuest = false;
+
+  return next();
+};
+
+// Опциональная авторизация - работает как гость если нет токена
+const optionalAuth = async (req, res, next) => {
+  const token = extractAccessToken(req);
+  
+  if (!token) {
+    req.user = null;
+    req.isGuest = true;
+    return next();
+  }
+
+  const decoded = verifyAccessToken(token);
+  
+  if (!decoded) {
+    req.user = null;
+    req.isGuest = true;
+    return next();
+  }
+
+  // Получаем актуальные данные пользователя из БД
+  const { rows } = await query(
+    `SELECT u.id, u.role_id, r.name AS role_name, u.email, u.full_name, u.is_active
+     FROM users u
+     LEFT JOIN roles r ON u.role_id = r.id
+     WHERE u.id = $1 AND u.is_active = true`,
+    [decoded.userId]
+  );
+
+  if (rows[0]) {
+    req.user = {
+      id: rows[0].id,
+      roleId: rows[0].role_id,
+      roleName: rows[0].role_name || "user",
+      email: rows[0].email,
+      fullName: rows[0].full_name,
+    };
+    req.isGuest = false;
+  } else {
+    req.user = null;
+    req.isGuest = true;
+  }
 
   return next();
 };
 
 module.exports = {
   authGuard,
-  SESSION_COOKIE_NAME,
+  optionalAuth,
 };
 

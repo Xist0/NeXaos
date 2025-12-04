@@ -8,6 +8,7 @@ import SecureButton from "../components/ui/SecureButton";
 import SecureInput from "../components/ui/SecureInput";
 import PhoneInput from "../components/ui/PhoneInput";
 import { formatCurrency } from "../utils/format";
+import useLogger from "../hooks/useLogger";
 
 const AccountPage = () => {
   const { user, token } = useAuth();
@@ -25,6 +26,7 @@ const AccountPage = () => {
     email: user?.email || "",
   });
   const [saving, setSaving] = useState(false);
+  const logger = useLogger();
 
   useEffect(() => {
     if (!token) {
@@ -55,7 +57,7 @@ const AccountPage = () => {
       const userOrders = allOrders.filter((order) => order.user_id === user?.id);
       setOrders(userOrders);
     } catch (error) {
-      console.error("Ошибка при загрузке заказов:", error);
+      logger.error("Не удалось загрузить заказы");
       setOrders([]);
     } finally {
       setOrdersLoading(false);
@@ -72,7 +74,7 @@ const AccountPage = () => {
         [orderId]: response?.data || response,
       }));
     } catch (error) {
-      console.error("Ошибка при загрузке деталей заказа:", error);
+      logger.error("Не удалось загрузить детали заказа");
     }
   };
 
@@ -100,10 +102,9 @@ const AccountPage = () => {
       const updatedUser = await fetchProfile();
       useAuthStore.setState({ user: updatedUser });
       localStorage.setItem("nexaos_user", JSON.stringify(updatedUser));
-      alert("Изменения сохранены");
+      logger.info("Профиль обновлён");
     } catch (error) {
-      console.error("Ошибка при сохранении:", error);
-      alert("Не удалось сохранить изменения");
+      logger.error("Не удалось сохранить изменения профиля");
     } finally {
       setSaving(false);
     }

@@ -30,8 +30,12 @@ const OrdersTable = () => {
   }, [get]);
 
   const handleStatusChange = async (orderId, status) => {
-    await put(`/orders/${orderId}`, { status });
-    await fetchOrders();
+    try {
+      await put(`/orders/${orderId}`, { status });
+      await fetchOrders();
+    } catch (error) {
+      console.error("Не удалось изменить статус заказа", error);
+    }
   };
 
   useEffect(() => {
@@ -85,24 +89,38 @@ const OrdersTable = () => {
             {filteredOrders.map((order) => (
               <tr
                 key={order.id}
-                className="border-t border-night-100 text-night-900 hover:bg-night-50 cursor-pointer"
-                onClick={() => setSelectedOrderId(order.id)}
+                className="border-t border-night-100 text-night-900 hover:bg-night-50"
               >
-                <td className="py-3 pr-4 font-semibold">#{order.id}</td>
-                <td className="py-3 pr-4">
+                <td 
+                  className="py-3 pr-4 font-semibold cursor-pointer"
+                  onClick={() => setSelectedOrderId(order.id)}
+                >
+                  #{order.id}
+                </td>
+                <td 
+                  className="py-3 pr-4 cursor-pointer"
+                  onClick={() => setSelectedOrderId(order.id)}
+                >
                   <p className="font-medium">{order.full_name || order.user_id || "Гость"}</p>
                   <p className="text-xs text-night-400">
                     {new Date(order.created_at).toLocaleString("ru-RU")}
                   </p>
                 </td>
-                <td className="py-3 pr-4 font-semibold">
+                <td 
+                  className="py-3 pr-4 font-semibold cursor-pointer"
+                  onClick={() => setSelectedOrderId(order.id)}
+                >
                   {formatCurrency(order.total || 0)}
                 </td>
-                <td className="py-3 pr-4">
+                <td className="py-3 pr-4" onClick={(e) => e.stopPropagation()}>
                   <select
                     className="secure-input"
                     value={order.status || "pending"}
-                    onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      handleStatusChange(order.id, e.target.value);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                   >
                     {statusOptions.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -111,12 +129,16 @@ const OrdersTable = () => {
                     ))}
                   </select>
                 </td>
-                <td className="py-3 pr-4">
+                <td className="py-3 pr-4" onClick={(e) => e.stopPropagation()}>
                   <SecureButton
-                    className="px-4 py-2 text-xs"
-                    onClick={() => handleStatusChange(order.id, order.status)}
+                    variant="outline"
+                    className="px-3 py-1 text-xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedOrderId(order.id);
+                    }}
                   >
-                    Сохранить
+                    Подробнее
                   </SecureButton>
                 </td>
               </tr>

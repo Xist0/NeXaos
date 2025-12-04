@@ -4,7 +4,7 @@ import { canAccessRole } from "../../utils/roleUtils";
 
 const ProtectedRoute = ({ allowedRoles = [] }) => {
   const location = useLocation();
-  const { token, role } = useAuth(); // ← не вызываем requireAuth!
+  const { accessToken: token, role, user } = useAuth();
 
   // Если нет токена — отправляем на логин
   if (!token) {
@@ -13,6 +13,7 @@ const ProtectedRoute = ({ allowedRoles = [] }) => {
 
   // Если указаны allowedRoles и роль не подходит — домой
   if (allowedRoles.length > 0 && !canAccessRole(role, allowedRoles)) {
+    console.warn("[ProtectedRoute] Доступ запрещен:", { role, allowedRoles, user });
     return <Navigate to="/" replace />;
   }
 

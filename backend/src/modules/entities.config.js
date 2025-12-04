@@ -171,6 +171,7 @@ const entities = [
       sku: { type: "string", max: 255, allowNull: true },
       name: { type: "string", required: true, max: 255 },
       unit_id: { type: "integer" },
+      preview_url: { type: "string", allowNull: true },
       comment: { type: "string", allowNull: true },
       length_mm: { type: "integer" },
       width_mm: { type: "integer" },
@@ -211,6 +212,7 @@ const entities = [
       sku: { type: "string", max: 255 },
       name: { type: "string", required: true, max: 255 },
       short_desc: { type: "string", allowNull: true },
+      preview_url: { type: "string", allowNull: true },
       length_mm: { type: "integer" },
       depth_mm: { type: "integer" },
       height_mm: { type: "integer" },
@@ -377,9 +379,19 @@ const entities = [
 ];
 
 entities.forEach((entity) => {
-  entity.selectFields =
-    entity.selectFields ||
-    Object.keys(entity.columns).filter((key) => !entity.columns[key].virtual);
+  // Формируем selectFields: всегда включаем idColumn, затем поля из columns
+  if (!entity.selectFields) {
+    const columnFields = Object.keys(entity.columns).filter((key) => !entity.columns[key].virtual);
+    // Убеждаемся, что idColumn всегда включен
+    entity.selectFields = entity.idColumn && !columnFields.includes(entity.idColumn)
+      ? [entity.idColumn, ...columnFields]
+      : columnFields;
+  } else {
+    // Если selectFields задан явно, убеждаемся что idColumn включен
+    if (entity.idColumn && !entity.selectFields.includes(entity.idColumn)) {
+      entity.selectFields = [entity.idColumn, ...entity.selectFields];
+    }
+  }
 
   entity.createSchema = buildSchema(entity.columns, { requireRequired: true });
   entity.updateSchema = buildSchema(entity.columns, { requireRequired: false });

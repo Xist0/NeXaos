@@ -5,6 +5,7 @@ import SecureButton from "../components/ui/SecureButton";
 import { formatCurrency } from "../utils/format";
 import useApi from "../hooks/useApi";
 import useAuthStore from "../store/authStore";
+import useLogger from "../hooks/useLogger";
 
 // ✅ ВЫНЕСЕННЫЙ КОМПОНЕНТ
 const SuccessModal = ({ isOpen, onClose }) => {
@@ -41,6 +42,7 @@ const CartPage = () => {
   const { items, updateQuantity, removeItem, clearCart, syncing } = useCart();
   const { post } = useApi();
   const { user } = useAuthStore();
+  const logger = useLogger();
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const modalRef = useRef(null);
@@ -68,7 +70,7 @@ const CartPage = () => {
 
       const orderResponse = await post("/orders", orderData);
       const order = orderResponse?.data || orderResponse;
-      
+
       if (!order?.id) throw new Error("Не удалось создать заказ");
 
       const orderItemsPromises = items.map((item) =>
@@ -82,12 +84,12 @@ const CartPage = () => {
       );
 
       await Promise.all(orderItemsPromises);
-      clearCart(); // ← без await, если синхронная
+      clearCart();
 
       setIsSuccessModalOpen(true);
+      logger.info("Заказ успешно оформлен");
     } catch (error) {
-      console.error("Ошибка при оформлении заказа:", error);
-      alert("Не удалось оформить заказ. Попробуйте еще раз.");
+      logger.error("Не удалось оформить заказ. Попробуйте ещё раз.");
     } finally {
       setIsSubmitting(false);
     }

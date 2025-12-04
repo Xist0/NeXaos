@@ -6,27 +6,27 @@ class ApiError extends Error {
     Error.captureStackTrace(this, this.constructor);
   }
 
-  static badRequest(message = "Bad request", details) {
+  static badRequest(message = "Некорректный запрос", details) {
     return new ApiError(400, message, details);
   }
 
-  static unauthorized(message = "Unauthorized") {
+  static unauthorized(message = "Неавторизовано") {
     return new ApiError(401, message);
   }
 
-  static forbidden(message = "Forbidden") {
+  static forbidden(message = "Доступ запрещён") {
     return new ApiError(403, message);
   }
 
-  static notFound(message = "Not found") {
+  static notFound(message = "Ресурс не найден") {
     return new ApiError(404, message);
   }
 
-  static conflict(message = "Conflict", details) {
+  static conflict(message = "Конфликт данных", details) {
     return new ApiError(409, message, details);
   }
 
-  static internal(message = "Internal server error") {
+  static internal(message = "Внутренняя ошибка сервера") {
     return new ApiError(500, message);
   }
 }

@@ -3,9 +3,11 @@ import useApi from "../../hooks/useApi";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import { formatCurrency } from "../../utils/format";
+import useLogger from "../../hooks/useLogger";
 
 const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
   const { get, post, put } = useApi();
+  const logger = useLogger();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(false);
   const [newNote, setNewNote] = useState("");
@@ -24,7 +26,7 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
       const response = await get(`/orders/${orderId}`);
       setOrder(response?.data || response);
     } catch (error) {
-      console.error("Ошибка при загрузке заказа:", error);
+      logger.error("Не удалось загрузить заказ");
     } finally {
       setLoading(false);
     }
@@ -44,9 +46,9 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
       setIsPrivate(false);
       await fetchOrderDetails(); // Обновляем заказ для получения новых заметок
       if (onUpdate) onUpdate();
+      logger.info("Заметка добавлена");
     } catch (error) {
-      console.error("Ошибка при добавлении заметки:", error);
-      alert("Не удалось добавить заметку");
+      logger.error("Не удалось добавить заметку");
     } finally {
       setSavingNote(false);
     }
@@ -59,9 +61,9 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
       });
       await fetchOrderDetails();
       if (onUpdate) onUpdate();
+      logger.info("Видимость заметки изменена");
     } catch (error) {
-      console.error("Ошибка при изменении видимости заметки:", error);
-      alert("Не удалось изменить видимость заметки");
+      logger.error("Не удалось изменить видимость заметки");
     }
   };
 

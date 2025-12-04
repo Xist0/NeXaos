@@ -11,27 +11,27 @@ const startServer = async () => {
     await initDatabase();
 
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Server running in ${config.env} mode on port ${PORT}`);
-      console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`🚀 Сервер запущен в режиме ${config.env} на порту ${PORT}`);
+      console.log(`🔗 Проверка работоспособности: http://localhost:${PORT}/api/health`);
     });
 
-    // Graceful shutdown
+    // Корректное завершение
     process.on("SIGTERM", () => {
-      console.log("SIGTERM received. Shutting down gracefully...");
+      console.log("Получен SIGTERM. Корректное завершение...");
       server.close(() => {
-        console.log("✅ Server closed");
+        console.log("✅ Сервер остановлен");
         process.exit(0);
       });
     });
   } catch (error) {
-    console.error("❌ Failed to start server:", error);
+    console.error("❌ Не удалось запустить сервер:", error);
     process.exit(1);
   }
 };
 
 // Ловим необработанные ошибки
 process.on("unhandledRejection", (err) => {
-  console.error("UNHANDLED REJECTION! 💥 Shutting down...");
+  console.error("UNHANDLED REJECTION! 💥 Приложение будет остановлено...");
   console.error(err);
   process.exit(1);
 });

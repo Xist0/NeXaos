@@ -33,19 +33,57 @@ const formatDbError = (err, text) => {
   throw err;
 };
 
-const query = async (text, params = []) => {
-  const start = Date.now();
-  try {
-    const result = await pool.query(text, params);
-    const duration = Date.now() - start;
-    if (duration > 1000) {
-      logger.warn("Slow query detected", { text, duration });
+const sequential =
+  (() => {
+    let chain = Promise.resolve();
+    return (task) => {
+      const run = chain.then(task);
+      chain = run.catch(() => {});
+      return run;
+    };
+  })();
+
+const MAX_QUERY_RETRIES = 1;
+const RETRYABLE_ERROR_CODES = new Set(["40001", "40P01"]);
+const RETRYABLE_SYSTEM_ERRORS = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ECONNREFUSED",
+]);
+
+const shouldRetry = (error) => {
+  if (!error) return false;
+  if (error.code && RETRYABLE_ERROR_CODES.has(error.code)) {
+    return true;
+  }
+  if (RETRYABLE_SYSTEM_ERRORS.has(error.code)) {
+    return true;
+  }
+  return false;
+};
+
+const runQuery = async (text, params = []) => {
+  let attempt = 0;
+  while (attempt <= MAX_QUERY_RETRIES) {
+    const start = Date.now();
+    try {
+      const result = await pool.query(text, params);
+      const duration = Date.now() - start;
+      if (duration > 1000) {
+        logger.warn("Slow query detected", { text, duration });
+      }
+      return result;
+    } catch (error) {
+      if (attempt < MAX_QUERY_RETRIES && shouldRetry(error)) {
+        attempt += 1;
+        continue;
+      }
+      formatDbError(error, text);
     }
-    return result;
-  } catch (error) {
-    formatDbError(error, text);
   }
 };
+
+const query = (text, params = []) => sequential(() => runQuery(text, params));
 
 const withTransaction = async (callback) => {
   const client = await pool.connect();

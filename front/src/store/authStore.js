@@ -1,8 +1,9 @@
 import { create } from "zustand";
-import { login as loginRequest, register as registerRequest } from "../services/auth.service";
+import { login as loginRequest, register as registerRequest, refreshAccessToken } from "../services/auth.service";
 import { ROLES } from "../utils/constants";
 
-const TOKEN_KEY = "nexaos_token";
+const ACCESS_TOKEN_KEY = "nexaos_access_token";
+const REFRESH_TOKEN_KEY = "nexaos_refresh_token";
 const USER_KEY = "nexaos_user";
 
 const loadUser = () => {
@@ -16,7 +17,8 @@ const loadUser = () => {
 const initialUser = loadUser();
 
 const useAuthStore = create((set, get) => ({
-  token: localStorage.getItem(TOKEN_KEY),
+  accessToken: localStorage.getItem(ACCESS_TOKEN_KEY),
+  refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY),
   user: initialUser,
   role: initialUser?.roleName || ROLES.USER,
   pending: false,
@@ -35,12 +37,14 @@ const useAuthStore = create((set, get) => ({
     try {
       const data = await loginRequest(credentials);
       set({
-        token: data.token,
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
         user: data.user,
         role: data.user?.roleName || ROLES.USER,
         authModalOpen: false,
       });
-      localStorage.setItem(TOKEN_KEY, data.token);
+      localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
+      localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
     } catch (error) {
       set({
@@ -68,15 +72,44 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
+  refreshToken: async () => {
+    const refreshToken = get().refreshToken || localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!refreshToken) {
+      get().logout();
+      return null;
+    }
+
+    try {
+      const data = await refreshAccessToken(refreshToken);
+      set({
+        accessToken: data.accessToken,
+        user: data.user,
+        role: data.user?.roleName || ROLES.USER,
+      });
+      localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
+      localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      return data.accessToken;
+    } catch (error) {
+      get().logout();
+      return null;
+    }
+  },
+
   logout: () => {
-    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     set({
-      token: null,
+      accessToken: null,
+      refreshToken: null,
       user: null,
       role: ROLES.USER,
       authModalOpen: false,
     });
+  },
+
+  get token() {
+    return get().accessToken;
   },
 }));
 

@@ -7,6 +7,9 @@ const tabs = [
   { id: "orders", label: "Заказы" },
   { id: "modules", label: "Модули" },
   { id: "materials", label: "Материалы" },
+  { id: "hardware", label: "Фурнитура" },
+  { id: "materialPrices", label: "Цены материалов" },
+  { id: "hiddenSpecs", label: "Скрытые параметры" },
 ];
 
 const entityConfigs = {
@@ -16,9 +19,19 @@ const entityConfigs = {
     fields: [
       { name: "name", label: "Название", required: true },
       { name: "sku", label: "Артикул" },
+      {
+        name: "preview_url",
+        label: "Изображение (превью)",
+        inputType: "image",
+      },
       { name: "final_price", label: "Цена", type: "number", required: true },
       { name: "facade_color", label: "Цвет фасада" },
       { name: "corpus_color", label: "Цвет корпуса" },
+      { name: "shelf_count", label: "Полок", type: "number" },
+      { name: "front_count", label: "Фасадов", type: "number" },
+      { name: "supports_count", label: "Опор", type: "number" },
+      { name: "hinges_count", label: "Петель", type: "number" },
+      { name: "clips_count", label: "Клипс", type: "number" },
     ],
   },
   materials: {
@@ -26,9 +39,52 @@ const entityConfigs = {
     endpoint: "/materials",
     fields: [
       { name: "name", label: "Название", required: true },
-      { name: "sku", label: "SKU" },
+      { name: "sku", label: "Артикул" },
+      { name: "unit_id", label: "ID единицы", type: "number" },
+      {
+        name: "preview_url",
+        label: "Изображение материала",
+        inputType: "image",
+      },
+      { name: "comment", label: "Комментарий" },
+      { name: "length_mm", label: "Длина, мм", type: "number" },
+      { name: "width_mm", label: "Ширина, мм", type: "number" },
+    ],
+  },
+  hardware: {
+    title: "Фурнитура",
+    endpoint: "/hardware-items",
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "Артикул" },
       { name: "unit_id", label: "ID единицы", type: "number" },
       { name: "price", label: "Цена", type: "number" },
+    ],
+  },
+  materialPrices: {
+    title: "Цены материалов",
+    endpoint: "/material-prices",
+    fields: [
+      { name: "material_id", label: "ID материала", type: "number", required: true },
+      { name: "price", label: "Цена", type: "number", required: true },
+      { name: "price_per_sheet", label: "Цена за лист", type: "number" },
+      { name: "coeff", label: "Коэффициент", type: "number" },
+      { name: "unit_id", label: "ID единицы", type: "number" },
+    ],
+  },
+  hiddenSpecs: {
+    title: "Скрытые параметры модулей",
+    endpoint: "/module-specs",
+    fields: [
+      { name: "module_id", label: "ID модуля", type: "number", required: true },
+      {
+        name: "key",
+        label: "Название параметра (например, Полка, Фасад и т.д.)",
+        required: true,
+      },
+      { name: "value", label: "Текстовое значение" },
+      { name: "value_num", label: "Числовое значение", type: "number" },
+      { name: "unit_id", label: "ID единицы", type: "number" },
     ],
   },
 };

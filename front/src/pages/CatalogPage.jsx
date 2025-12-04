@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import useApi from "../hooks/useApi";
 import useCart from "../hooks/useCart";
 import SecureInput from "../components/ui/SecureInput";
@@ -11,6 +11,13 @@ const CatalogPage = () => {
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const getRef = useRef(get);
+  const isFetchingRef = useRef(false);
+
+  // Обновляем ref при изменении get
+  useEffect(() => {
+    getRef.current = get;
+  }, [get]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 400);
@@ -18,27 +25,45 @@ const CatalogPage = () => {
   }, [query]);
 
   useEffect(() => {
+    // Предотвращаем дублирование запросов
+    if (isFetchingRef.current) return;
+    
     let active = true;
+    let currentQuery = debouncedQuery;
+    
     const fetchItems = async () => {
+      // Двойная проверка для защиты от race condition
+      if (isFetchingRef.current) return;
+      
+      isFetchingRef.current = true;
       setLoading(true);
       try {
-        const response = await get("/modules", debouncedQuery ? { search: debouncedQuery } : undefined);
-        if (active) {
+        const response = await getRef.current("/modules", currentQuery ? { search: currentQuery } : undefined);
+        // Проверяем, что запрос все еще актуален
+        if (active && currentQuery === debouncedQuery) {
           setItems(response?.data || []);
         }
       } catch (error) {
-        if (active) {
+        if (active && currentQuery === debouncedQuery) {
           setItems([]);
         }
       } finally {
-        if (active) setLoading(false);
+        if (active && currentQuery === debouncedQuery) {
+          setLoading(false);
+        }
+        if (currentQuery === debouncedQuery) {
+          isFetchingRef.current = false;
+        }
       }
     };
+    
     fetchItems();
+    
     return () => {
       active = false;
+      // Не сбрасываем isFetchingRef здесь, чтобы не прерывать запрос
     };
-  }, [debouncedQuery, get]);
+  }, [debouncedQuery]);
 
   const grouped = useMemo(() => {
     if (!items.length) return [];
@@ -84,8 +109,12 @@ const CatalogPage = () => {
               </span>
             </div>
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {group.products.map((product) => (
-                <ProductCard key={product.id} product={product} onAdd={addItem} />
+              {group.products.map((product, index) => (
+                <ProductCard 
+                  key={product.id ? `${group.title}-${product.id}` : `${group.title}-${index}-${product.sku || product.name}`} 
+                  product={product} 
+                  onAdd={addItem} 
+                />
               ))}
             </div>
           </section>

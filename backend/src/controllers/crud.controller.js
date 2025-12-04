@@ -14,11 +14,43 @@ const validatePayload = (schema, payload) => {
 const createCrudController = (entity) => {
   const list = async (req, res) => {
     const data = await crudService.list(entity, req.query);
+    
+    // Для модулей добавляем preview_url из первого изображения
+    if (entity.route === "modules" && Array.isArray(data)) {
+      const { query } = require("../config/db");
+      for (const item of data) {
+        const { rows: imageRows } = await query(
+          `SELECT url FROM images 
+           WHERE entity_type = 'modules' AND entity_id = $1 
+           ORDER BY sort_order ASC, id ASC LIMIT 1`,
+          [item.id]
+        );
+        if (imageRows[0]) {
+          item.preview_url = imageRows[0].url;
+        }
+      }
+    }
+    
     res.status(200).json({ data });
   };
 
   const getById = async (req, res) => {
     const data = await crudService.getById(entity, req.params.id);
+    
+    // Для модулей добавляем preview_url из первого изображения
+    if (entity.route === "modules") {
+      const { query } = require("../config/db");
+      const { rows: imageRows } = await query(
+        `SELECT url FROM images 
+         WHERE entity_type = 'modules' AND entity_id = $1 
+         ORDER BY sort_order ASC, id ASC LIMIT 1`,
+        [data.id]
+      );
+      if (imageRows[0]) {
+        data.preview_url = imageRows[0].url;
+      }
+    }
+    
     res.status(200).json({ data });
   };
 
