@@ -57,7 +57,22 @@ const uploadImage = async (req, res) => {
   
   const sortOrder = existing[0]?.max_order != null ? existing[0].max_order + 1 : 0;
 
-  const urlPath = `/uploads/${req.file.filename}`;
+  // Переименовываем файл с учетом entityId и sort_order для лучшей организации
+  const ext = path.extname(req.file.filename);
+  const baseFilename = path.basename(req.file.filename, ext);
+  const newFilename = `${entityType}_${parsedId}_${sortOrder}_${Date.now()}${ext}`;
+  const newPath = path.join(path.dirname(req.file.path), newFilename);
+  
+  let finalFilename = req.file.filename;
+  try {
+    fs.renameSync(req.file.path, newPath);
+    finalFilename = newFilename;
+  } catch (err) {
+    // Если не удалось переименовать, используем оригинальное имя
+    console.warn("Не удалось переименовать файл, используем оригинальное имя:", err.message);
+  }
+  
+  const urlPath = `/uploads/${finalFilename}`;
 
   const { rows } = await query(
     `INSERT INTO images (entity_type, entity_id, url, alt, sort_order)

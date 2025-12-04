@@ -253,6 +253,22 @@ const ProductPage = () => {
     };
   }, [id, navigate, logger]);
 
+  // Обработка клавиатуры для слайдера
+  useEffect(() => {
+    if (images.length <= 1) return;
+
+    const handleKeyPress = (e) => {
+      if (e.key === "ArrowLeft") {
+        setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
+      } else if (e.key === "ArrowRight") {
+        setSelectedImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyPress);
+    return () => window.removeEventListener("keydown", handleKeyPress);
+  }, [images.length]);
+
   const handleAddToCart = () => {
     if (product) {
       addItem(product, 1);
@@ -313,11 +329,11 @@ const ProductPage = () => {
       <div className="grid gap-8 lg:grid-cols-2 mb-12">
         {/* Product Image Gallery */}
         <div className="space-y-4">
-          <div className="relative aspect-square bg-night-50 rounded-xl overflow-hidden border border-night-200">
+          <div className="relative aspect-square bg-night-50 rounded-xl overflow-hidden border border-night-200 group">
             <img 
               src={mainImage} 
               alt={product.name} 
-              className="w-full h-full object-contain p-4"
+              className="w-full h-full object-contain p-4 transition-opacity duration-300"
               crossOrigin="anonymous"
               onError={(e) => {
                 if (e.target.src !== placeholderImage) {
@@ -327,9 +343,36 @@ const ProductPage = () => {
               loading="lazy"
             />
             {product.is_new && (
-              <span className="absolute left-4 top-4 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-lg">
+              <span className="absolute left-4 top-4 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-lg z-10">
                 Новинка
               </span>
+            )}
+            {/* Навигация слайдера */}
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={() => setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1))}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-night-900 rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  aria-label="Предыдущее фото"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setSelectedImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0))}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-night-900 rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  aria-label="Следующее фото"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                {/* Индикатор текущего фото */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/90 rounded-full px-4 py-1.5 text-xs font-semibold text-night-900 shadow-lg z-10">
+                  {selectedImageIndex + 1} / {images.length}
+                </div>
+              </>
             )}
           </div>
           {images.length > 1 && (

@@ -55,7 +55,11 @@ const storage = multer.diskStorage({
     const ext = path.extname(file.originalname);
     const base = path.basename(file.originalname, ext);
     const safeBase = base.replace(/[^a-z0-9_-]/gi, "_");
-    cb(null, `${safeBase}-${Date.now()}${ext || ".bin"}`);
+    // Добавляем entityId и timestamp для уникальности
+    const entityId = req.body?.entityId || "temp";
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    cb(null, `${entityId}-${safeBase}-${timestamp}-${random}${ext || ".bin"}`);
   },
 });
 

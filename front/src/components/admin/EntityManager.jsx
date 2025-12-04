@@ -79,6 +79,12 @@ const EntityManager = ({ title, endpoint, fields }) => {
     }
     setEditingId(item.id);
     setForm(item);
+    // Обновляем изображения после начала редактирования
+    setTimeout(() => {
+      if (endpoint === "/modules") {
+        // Небольшая задержка чтобы убедиться что editingId установлен
+      }
+    }, 100);
   };
 
   const handleDelete = async (id, item) => {
@@ -246,9 +252,16 @@ const EntityManager = ({ title, endpoint, fields }) => {
                 />
                 {form[field.name] && (
                   <img
-                    src={form[field.name]}
+                    src={form[field.name].startsWith('/uploads/') 
+                      ? (import.meta.env.DEV ? `http://localhost:5000${form[field.name]}` : form[field.name])
+                      : form[field.name]}
                     alt={field.label}
                     className="h-20 w-20 rounded-md object-cover border border-night-100"
+                    crossOrigin="anonymous"
+                    onError={(e) => {
+                      console.error("Ошибка загрузки изображения:", form[field.name]);
+                      e.target.style.display = 'none';
+                    }}
                   />
                 )}
                 {uploadingField === field.name && (
@@ -287,9 +300,16 @@ const EntityManager = ({ title, endpoint, fields }) => {
         </div>
       </form>
 
-      {/* Image Manager для модулей */}
+      {/* Image Manager для модулей - показываем всегда при редактировании */}
       {endpoint === "/modules" && editingId && (
-        <div className="border-t border-night-200 pt-6">
+        <div className="border-t border-night-200 pt-6 mt-6">
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold text-night-900 mb-2">Управление изображениями</h3>
+            <p className="text-sm text-night-500">
+              Загрузите несколько фотографий товара. Первое фото будет использоваться как превью.
+              Перетаскивайте фото для изменения порядка.
+            </p>
+          </div>
           <ImageManager
             entityType="modules"
             entityId={editingId}
@@ -322,9 +342,15 @@ const EntityManager = ({ title, endpoint, fields }) => {
                   <td key={field.name} className="py-3 pr-4">
                     {field.inputType === "image" && item[field.name] ? (
                       <img
-                        src={item[field.name]}
+                        src={item[field.name].startsWith('/uploads/') 
+                          ? (import.meta.env.DEV ? `http://localhost:5000${item[field.name]}` : item[field.name])
+                          : item[field.name]}
                         alt={field.label}
                         className="h-10 w-10 rounded object-cover border border-night-100"
+                        crossOrigin="anonymous"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
                       />
                     ) : (
                       item[field.name] ?? "—"
