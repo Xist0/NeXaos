@@ -27,15 +27,117 @@ const list = async (entity, queryParams = {}) => {
 
   let sql = `SELECT ${fields} FROM ${entity.table}`;
   const params = [];
+  const conditions = [];
   
-  if (search && entity.table === "modules") {
-    sql += ` WHERE (name ILIKE $1 OR sku ILIKE $1)`;
-    params.push(`%${search}%`);
+  // Фильтрация для модулей
+  if (entity.table === "modules") {
+    // Поиск по названию и артикулу
+    if (search) {
+      conditions.push(`(name ILIKE $${params.length + 1} OR sku ILIKE $${params.length + 1})`);
+      params.push(`%${search}%`);
+    }
+    
+    // Фильтр по цвету фасада
+    if (queryParams.facadeColor) {
+      conditions.push(`facade_color = $${params.length + 1}`);
+      params.push(queryParams.facadeColor);
+    }
+    
+    // Фильтр по цвету корпуса
+    if (queryParams.corpusColor) {
+      conditions.push(`corpus_color = $${params.length + 1}`);
+      params.push(queryParams.corpusColor);
+    }
+    
+    // Фильтр по цене (от)
+    if (queryParams.priceFrom) {
+      conditions.push(`final_price >= $${params.length + 1}`);
+      params.push(parseFloat(queryParams.priceFrom));
+    }
+    
+    // Фильтр по цене (до)
+    if (queryParams.priceTo) {
+      conditions.push(`final_price <= $${params.length + 1}`);
+      params.push(parseFloat(queryParams.priceTo));
+    }
+    
+    // Фильтр по длине (от)
+    if (queryParams.lengthFrom) {
+      conditions.push(`length_mm >= $${params.length + 1}`);
+      params.push(parseInt(queryParams.lengthFrom, 10));
+    }
+    
+    // Фильтр по длине (до)
+    if (queryParams.lengthTo) {
+      conditions.push(`length_mm <= $${params.length + 1}`);
+      params.push(parseInt(queryParams.lengthTo, 10));
+    }
+    
+    // Фильтр по глубине (от)
+    if (queryParams.depthFrom) {
+      conditions.push(`depth_mm >= $${params.length + 1}`);
+      params.push(parseInt(queryParams.depthFrom, 10));
+    }
+    
+    // Фильтр по глубине (до)
+    if (queryParams.depthTo) {
+      conditions.push(`depth_mm <= $${params.length + 1}`);
+      params.push(parseInt(queryParams.depthTo, 10));
+    }
+    
+    // Фильтр по высоте (от)
+    if (queryParams.heightFrom) {
+      conditions.push(`height_mm >= $${params.length + 1}`);
+      params.push(parseInt(queryParams.heightFrom, 10));
+    }
+    
+    // Фильтр по высоте (до)
+    if (queryParams.heightTo) {
+      conditions.push(`height_mm <= $${params.length + 1}`);
+      params.push(parseInt(queryParams.heightTo, 10));
+    }
+    
+    // Фильтр по категории
+    if (queryParams.categoryId) {
+      conditions.push(`module_category_id = $${params.length + 1}`);
+      params.push(parseInt(queryParams.categoryId, 10));
+    }
+    
+    // Фильтр по типу
+    if (queryParams.typeId) {
+      conditions.push(`module_type_id = $${params.length + 1}`);
+      params.push(parseInt(queryParams.typeId, 10));
+    }
+    
+    // Фильтр по основе артикула (НМР1, НМР2, НМР.М1 и т.д.)
+    if (queryParams.baseSku) {
+      conditions.push(`base_sku = $${params.length + 1}`);
+      params.push(queryParams.baseSku);
+    }
+    
+    // Фильтр по активности
+    if (queryParams.isActive !== undefined) {
+      conditions.push(`is_active = $${params.length + 1}`);
+      params.push(queryParams.isActive === 'true' || queryParams.isActive === true);
+    }
+    
+    if (conditions.length > 0) {
+      sql += ` WHERE ${conditions.join(' AND ')}`;
+    }
+    
     sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(safeLimit, safeOffset);
   } else {
-    sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $1 OFFSET $2`;
-    params.push(safeLimit, safeOffset);
+    // Для других таблиц
+    if (search) {
+      sql += ` WHERE name ILIKE $1`;
+      params.push(`%${search}%`);
+      sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $2 OFFSET $3`;
+      params.push(safeLimit, safeOffset);
+    } else {
+      sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $1 OFFSET $2`;
+      params.push(safeLimit, safeOffset);
+    }
   }
   
   const { rows } = await query(sql, params);

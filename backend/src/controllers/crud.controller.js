@@ -15,10 +15,11 @@ const createCrudController = (entity) => {
   const list = async (req, res) => {
     const data = await crudService.list(entity, req.query);
     
-    // Для модулей добавляем preview_url из первого изображения
+    // Для модулей добавляем preview_url из первого изображения и данные о цветах
     if (entity.route === "modules" && Array.isArray(data)) {
       const { query } = require("../config/db");
       for (const item of data) {
+        // Добавляем preview_url
         const { rows: imageRows } = await query(
           `SELECT url FROM images 
            WHERE entity_type = 'modules' AND entity_id = $1 
@@ -28,6 +29,79 @@ const createCrudController = (entity) => {
         if (imageRows[0]) {
           item.preview_url = imageRows[0].url;
         }
+        
+        // Добавляем данные о цветах
+        if (item.primary_color_id) {
+          const { rows: primaryColorRows } = await query(
+            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+            [item.primary_color_id]
+          );
+          if (primaryColorRows[0]) {
+            item.primary_color = primaryColorRows[0];
+          }
+        }
+        
+        if (item.secondary_color_id) {
+          const { rows: secondaryColorRows } = await query(
+            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+            [item.secondary_color_id]
+          );
+          if (secondaryColorRows[0]) {
+            item.secondary_color = secondaryColorRows[0];
+          }
+        }
+      }
+    }
+    
+    // Для готовых решений добавляем данные о цветах
+    if (entity.route === "kit-solutions" && Array.isArray(data)) {
+      const { query } = require("../config/db");
+      for (const item of data) {
+        if (item.primary_color_id) {
+          const { rows: primaryColorRows } = await query(
+            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+            [item.primary_color_id]
+          );
+          if (primaryColorRows[0]) {
+            item.primary_color = primaryColorRows[0];
+          }
+        }
+        
+        if (item.secondary_color_id) {
+          const { rows: secondaryColorRows } = await query(
+            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+            [item.secondary_color_id]
+          );
+          if (secondaryColorRows[0]) {
+            item.secondary_color = secondaryColorRows[0];
+          }
+        }
+      }
+    }
+    
+    // Для фурнитуры добавляем данные о цветах
+    if (entity.route === "hardware-extended" && Array.isArray(data)) {
+      const { query } = require("../config/db");
+      for (const item of data) {
+        if (item.primary_color_id) {
+          const { rows: primaryColorRows } = await query(
+            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+            [item.primary_color_id]
+          );
+          if (primaryColorRows[0]) {
+            item.primary_color = primaryColorRows[0];
+          }
+        }
+        
+        if (item.secondary_color_id) {
+          const { rows: secondaryColorRows } = await query(
+            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+            [item.secondary_color_id]
+          );
+          if (secondaryColorRows[0]) {
+            item.secondary_color = secondaryColorRows[0];
+          }
+        }
       }
     }
     
@@ -36,10 +110,10 @@ const createCrudController = (entity) => {
 
   const getById = async (req, res) => {
     const data = await crudService.getById(entity, req.params.id);
+    const { query } = require("../config/db");
     
-    // Для модулей добавляем preview_url из первого изображения
+    // Для модулей добавляем preview_url из первого изображения и данные о цветах
     if (entity.route === "modules") {
-      const { query } = require("../config/db");
       const { rows: imageRows } = await query(
         `SELECT url FROM images 
          WHERE entity_type = 'modules' AND entity_id = $1 
@@ -48,6 +122,73 @@ const createCrudController = (entity) => {
       );
       if (imageRows[0]) {
         data.preview_url = imageRows[0].url;
+      }
+      
+      // Добавляем данные о цветах
+      if (data.primary_color_id) {
+        const { rows: primaryColorRows } = await query(
+          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          [data.primary_color_id]
+        );
+        if (primaryColorRows[0]) {
+          data.primary_color = primaryColorRows[0];
+        }
+      }
+      
+      if (data.secondary_color_id) {
+        const { rows: secondaryColorRows } = await query(
+          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          [data.secondary_color_id]
+        );
+        if (secondaryColorRows[0]) {
+          data.secondary_color = secondaryColorRows[0];
+        }
+      }
+    }
+    
+    // Для готовых решений добавляем данные о цветах
+    if (entity.route === "kit-solutions") {
+      if (data.primary_color_id) {
+        const { rows: primaryColorRows } = await query(
+          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          [data.primary_color_id]
+        );
+        if (primaryColorRows[0]) {
+          data.primary_color = primaryColorRows[0];
+        }
+      }
+      
+      if (data.secondary_color_id) {
+        const { rows: secondaryColorRows } = await query(
+          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          [data.secondary_color_id]
+        );
+        if (secondaryColorRows[0]) {
+          data.secondary_color = secondaryColorRows[0];
+        }
+      }
+    }
+    
+    // Для фурнитуры добавляем данные о цветах
+    if (entity.route === "hardware-extended") {
+      if (data.primary_color_id) {
+        const { rows: primaryColorRows } = await query(
+          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          [data.primary_color_id]
+        );
+        if (primaryColorRows[0]) {
+          data.primary_color = primaryColorRows[0];
+        }
+      }
+      
+      if (data.secondary_color_id) {
+        const { rows: secondaryColorRows } = await query(
+          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          [data.secondary_color_id]
+        );
+        if (secondaryColorRows[0]) {
+          data.secondary_color = secondaryColorRows[0];
+        }
       }
     }
     

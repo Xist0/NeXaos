@@ -93,8 +93,23 @@ const optionalAuth = async (req, res, next) => {
   return next();
 };
 
+// Middleware для проверки роли (только для админов и менеджеров)
+const requireAdminOrManager = (req, res, next) => {
+  if (!req.user) {
+    return next(ApiError.unauthorized("Требуется авторизация"));
+  }
+
+  const allowedRoles = ['admin', 'manager'];
+  if (!allowedRoles.includes(req.user.roleName)) {
+    return next(ApiError.forbidden("Недостаточно прав для выполнения операции"));
+  }
+
+  return next();
+};
+
 module.exports = {
   authGuard,
   optionalAuth,
+  requireAdminOrManager,
 };
 

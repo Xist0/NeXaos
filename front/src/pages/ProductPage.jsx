@@ -109,37 +109,13 @@ const ProductPage = () => {
         console.log("Запрос товара начат", { id, currentId, requestId });
         const productResponse = await getRef.current(`/modules/${id}`);
         console.log("Ответ получен", { productResponse, requestId, currentRequestId: requestIdRef.current });
-        
-        // useApi.get() возвращает response.data, который уже является { data: {...} }
-        // Проверяем структуру ответа
+
+        // useApi.get() возвращает axios response.
+        // useApi нормализует обертку { data: ... }, поэтому productResponse.data = объект товара.
         let productData = null;
-        
-        if (productResponse && typeof productResponse === 'object') {
-          // Если ответ имеет структуру { data: { id: ..., ... } }
-          if ('data' in productResponse && productResponse.data && typeof productResponse.data === 'object') {
-            // Проверяем, есть ли id в data (валидные данные)
-            if (productResponse.data.id) {
-              productData = productResponse.data;
-              console.log("Данные извлечены из data", productData);
-            } else {
-              // Пустой объект data без id - это ошибка
-              console.error("Получен пустой объект data:", productResponse);
-              throw new Error("Товар не найден");
-            }
-          } 
-          // Если данные пришли напрямую (без обертки data)
-          else if (productResponse.id) {
-            productData = productResponse;
-            console.log("Данные пришли напрямую", productData);
-          }
-          // Если данные пришли как массив
-          else if (Array.isArray(productResponse)) {
-            if (productResponse.length === 0) {
-              throw new Error("Товар не найден");
-            }
-            productData = productResponse[0];
-            console.log("Данные из массива", productData);
-          }
+        const payload = productResponse?.data;
+        if (payload && typeof payload === "object" && payload.id) {
+          productData = payload;
         }
         
         // Проверяем, что данные валидны
@@ -198,7 +174,7 @@ const ProductPage = () => {
         // Теперь загружаем изображения (это не критично, можно пропустить)
         const imagesResponse = await getRef.current(`/images/modules/${id}`).catch((err) => {
           console.warn("Не удалось загрузить изображения:", err);
-          return { data: [] };
+          return { data: { data: [] } };
         });
         
         // Проверяем ID еще раз после загрузки изображений (только ID, не abortController)
@@ -207,16 +183,11 @@ const ProductPage = () => {
           return;
         }
         
-        // Обрабатываем изображения - useApi.get() возвращает response.data
-        // API возвращает { data: [...] }, поэтому imagesResponse уже массив или { data: [...] }
+        // Обрабатываем изображения - useApi.get() возвращает axios response.
+        // useApi нормализует обертку { data: [...] }, поэтому imagesResponse.data = массив.
         let imageList = [];
-        if (imagesResponse) {
-          if (Array.isArray(imagesResponse)) {
-            imageList = imagesResponse;
-          } else if (imagesResponse.data && Array.isArray(imagesResponse.data)) {
-            imageList = imagesResponse.data;
-          }
-        }
+        const imagesPayload = imagesResponse?.data;
+        if (Array.isArray(imagesPayload)) imageList = imagesPayload;
         
         setImages(imageList);
         setSelectedImageIndex(0);
@@ -273,6 +244,48 @@ const ProductPage = () => {
     if (product) {
       addItem(product, 1);
     }
+  };
+
+  const handleFindSimilar = () => {
+    if (!product) return;
+    
+    // Формируем параметры для поиска похожих товаров
+    const params = new URLSearchParams();
+    
+    // Указываем, что переход со страницы товара
+    params.set("fromProduct", "1");
+    
+    // Если это модуль, используем его параметры
+    if (product.module_category_id) {
+      const categoryCode = product.category_code || 
+        (product.module_category_id === 1 ? "bottom" :
+         product.module_category_id === 2 ? "top" :
+         product.module_category_id === 3 ? "tall" :
+         product.module_category_id === 4 ? "filler" :
+         product.module_category_id === 5 ? "accessory" : "");
+      if (categoryCode) params.set("category", categoryCode);
+    }
+    
+    // Добавляем фильтры по цветам
+    if (product.primary_color_id) {
+      params.set("primaryColorId", product.primary_color_id);
+    } else if (product.facade_color) {
+      params.set("facadeColor", product.facade_color);
+    }
+    
+    if (product.secondary_color_id) {
+      params.set("secondaryColorId", product.secondary_color_id);
+    } else if (product.corpus_color) {
+      params.set("corpusColor", product.corpus_color);
+    }
+    
+    // Фильтр по основе артикула
+    if (product.base_sku) {
+      params.set("baseSku", product.base_sku);
+    }
+    
+    // Переходим в каталог с фильтрами
+    navigate(`/catalog?${params.toString()}`);
   };
 
   if (loading) {
@@ -431,12 +444,21 @@ const ProductPage = () => {
                 {formatCurrency(product.final_price || product.price || 0)}
               </span>
             </div>
-            <SecureButton
-              onClick={handleAddToCart}
-              className="w-full justify-center py-4 text-lg font-semibold"
-            >
-              В корзину
-            </SecureButton>
+            <div className="space-y-3">
+              <SecureButton
+                onClick={handleAddToCart}
+                className="w-full justify-center py-4 text-lg font-semibold"
+              >
+                В корзину
+              </SecureButton>
+              <SecureButton
+                onClick={handleFindSimilar}
+                variant="outline"
+                className="w-full justify-center py-3 text-base"
+              >
+                Похожие товары
+              </SecureButton>
+            </div>
           </div>
 
           {/* Quick Info */}

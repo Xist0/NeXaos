@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Link } from "react-router-dom";
 import SecureButton from "./SecureButton";
 import { formatCurrency } from "../../utils/format";
@@ -6,7 +7,7 @@ import ColorBadge from "./ColorBadge";
 const placeholderImage =
   "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=600&q=80";
 
-const ProductCard = ({ product, onAdd }) => {
+const ProductCard = memo(({ product, onAdd }) => {
   // Формируем URL изображения с учетом относительных путей
   const getImageUrl = (url) => {
     if (!url) return placeholderImage;
@@ -47,10 +48,12 @@ const ProductCard = ({ product, onAdd }) => {
     onAdd?.(product);
   };
 
+  const href = product?.__type === "kitSolution" ? `/catalog/kit/${product.id}` : `/catalog/${product.id}`;
+
   return (
     <article className="glass-card flex flex-col overflow-hidden transition hover:-translate-y-1 hover:shadow-2xl">
       <Link 
-        to={`/catalog/${product.id}`}
+        to={href}
         className="relative aspect-[4/3] overflow-hidden bg-night-100 block"
       >
         <img 
@@ -73,7 +76,7 @@ const ProductCard = ({ product, onAdd }) => {
       </Link>
       <div className="flex flex-1 flex-col gap-4 p-5">
         <div>
-          <Link to={`/catalog/${product.id}`} className="block">
+          <Link to={href} className="block">
             <h3 className="text-lg font-semibold text-night-900 hover:text-accent transition">
               {product.name}
             </h3>
@@ -90,15 +93,27 @@ const ProductCard = ({ product, onAdd }) => {
             <p className="text-2xl font-bold text-accent">
               {formatCurrency(product.final_price || product.price || 0)}
             </p>
-            {(product.facade_color || product.corpus_color) && (
-              <div className="flex flex-wrap gap-1 text-xs">
-                {product.facade_color && (
+            {(product.primary_color || product.secondary_color || product.facade_color || product.corpus_color) && (
+              <div className="flex flex-wrap gap-2 text-xs">
+                {product.primary_color && (
+                  <ColorBadge
+                    colorData={product.primary_color}
+                    labelPrefix="Основной:"
+                  />
+                )}
+                {product.secondary_color && (
+                  <ColorBadge
+                    colorData={product.secondary_color}
+                    labelPrefix="Доп.:"
+                  />
+                )}
+                {product.facade_color && !product.primary_color && (
                   <ColorBadge
                     value={product.facade_color}
                     labelPrefix="Фасад:"
                   />
                 )}
-                {product.corpus_color && (
+                {product.corpus_color && !product.secondary_color && (
                   <ColorBadge
                     value={product.corpus_color}
                     labelPrefix="Корпус:"
@@ -117,7 +132,9 @@ const ProductCard = ({ product, onAdd }) => {
       </div>
     </article>
   );
-};
+});
+
+ProductCard.displayName = "ProductCard";
 
 export default ProductCard;
 

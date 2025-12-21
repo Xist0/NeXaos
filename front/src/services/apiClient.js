@@ -9,6 +9,7 @@ const rawClient = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,
   timeout: 15000,
+  validateStatus: (status) => (status >= 200 && status < 300) || status === 304,
 });
 
 let isRefreshing = false;

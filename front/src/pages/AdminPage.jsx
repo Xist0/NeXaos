@@ -2,36 +2,211 @@ import { useState } from "react";
 import SecureButton from "../components/ui/SecureButton";
 import OrdersTable from "../components/admin/OrdersTable";
 import EntityManager from "../components/admin/EntityManager";
+import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight } from "react-icons/fa";
 
-const tabs = [
-  { id: "orders", label: "Заказы" },
-  { id: "modules", label: "Модули" },
-  { id: "materials", label: "Материалы" },
-  { id: "hardware", label: "Фурнитура" },
-  { id: "materialPrices", label: "Цены материалов" },
-  { id: "hiddenSpecs", label: "Скрытые параметры" },
+// Структура разделов админ панели
+const adminSections = [
+  {
+    id: "orders",
+    label: "Заказы",
+    icon: FaShoppingCart,
+    items: [
+      { id: "orders", label: "Список заказов", component: "orders" },
+    ],
+  },
+  {
+    id: "materials",
+    label: "Материал",
+    icon: FaBox,
+    items: [
+      { id: "sheetMaterials", label: "Листовой материал", endpoint: "/sheet-materials" },
+      { id: "materialClasses", label: "Классы материалов", endpoint: "/material-classes" },
+      { id: "materials", label: "Материалы", endpoint: "/materials" },
+      { id: "linearMaterials", label: "Погонный материал", endpoint: "/linear-materials" },
+    ],
+  },
+  {
+    id: "catalog",
+    label: "Каталог",
+    icon: FaBook,
+    items: [
+      { id: "kitSolutions", label: "Готовые решения", endpoint: "/kit-solutions" },
+      { id: "modules", label: "Модули", endpoint: "/modules" },
+      { id: "hardwareExtended", label: "Фурнитура", endpoint: "/hardware-extended" },
+    ],
+  },
+  {
+    id: "other",
+    label: "Прочее",
+    icon: FaCog,
+    items: [
+      { id: "calculationParameters", label: "Параметры расчета", endpoint: "/calculation-parameters" },
+      { id: "materialPrices", label: "Цена материалов", endpoint: "/material-prices" },
+      { id: "moduleTypes", label: "Типы модулей", endpoint: "/module-types" },
+      { id: "moduleDescriptions", label: "Подтипы модулей (основа артикула)", endpoint: "/module-descriptions" },
+      { id: "kitchenTypes", label: "Тип кухни", endpoint: "/kitchen-types" },
+      { id: "sizeTemplates", label: "Шаблоны размеров", endpoint: "/size-templates" },
+      { id: "colors", label: "Цвета", endpoint: "/colors" },
+    ],
+  },
 ];
 
 const entityConfigs = {
-  modules: {
-    title: "Каталог модулей",
-    endpoint: "/modules",
+  colors: {
+    title: "Цвета",
+    endpoint: "/colors",
+    fields: [
+      { name: "name", label: "Название цвета", required: true },
+      { name: "sku", label: "Артикул" },
+      { name: "image_url", label: "Фотография", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  moduleTypes: {
+    title: "Типы модулей",
+    endpoint: "/module-types",
+    fields: [
+      { name: "code", label: "Код", required: true },
+      { name: "name", label: "Название", required: true },
+      { name: "description", label: "Описание" },
+    ],
+  },
+  moduleDescriptions: {
+    title: "Подтипы модулей (основа артикула)",
+    endpoint: "/module-descriptions",
+    fields: [
+      { name: "base_sku", label: "Основа артикула", required: true },
+      { name: "name", label: "Название", required: true },
+      { name: "description", label: "Описание" },
+      { name: "characteristics", label: "Характеристики (JSON)" },
+    ],
+  },
+  sizeTemplates: {
+    title: "Шаблоны размеров",
+    endpoint: "/size-templates",
+    fields: [
+      { name: "name", label: "Название шаблона", required: true },
+      { name: "sizes", label: "Размеры (JSON)", required: true },
+    ],
+  },
+  kitchenTypes: {
+    title: "Тип кухни",
+    endpoint: "/kitchen-types",
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "description", label: "Описание" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  kitSolutions: {
+    title: "Готовые решения",
+    endpoint: "/kit-solutions",
     fields: [
       { name: "name", label: "Название", required: true },
       { name: "sku", label: "Артикул" },
-      {
-        name: "preview_url",
-        label: "Изображение (превью)",
-        inputType: "image",
-      },
-      { name: "final_price", label: "Цена", type: "number", required: true },
-      { name: "facade_color", label: "Цвет фасада" },
-      { name: "corpus_color", label: "Цвет корпуса" },
-      { name: "shelf_count", label: "Полок", type: "number" },
-      { name: "front_count", label: "Фасадов", type: "number" },
-      { name: "supports_count", label: "Опор", type: "number" },
-      { name: "hinges_count", label: "Петель", type: "number" },
-      { name: "clips_count", label: "Клипс", type: "number" },
+      { name: "description", label: "Описание" },
+      { name: "kitchen_type_id", label: "Тип кухни (ID)", type: "number" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "total_length_mm", label: "Общая длина (мм)", type: "number" },
+      { name: "total_depth_mm", label: "Общая глубина (мм)", type: "number" },
+      { name: "total_height_mm", label: "Общая высота (мм)", type: "number" },
+      { name: "countertop_length_mm", label: "Длина столешницы (мм)", type: "number" },
+      { name: "countertop_depth_mm", label: "Глубина столешницы (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+    ],
+  },
+  modules: {
+    title: "Модули",
+    endpoint: "/modules",
+    fields: [
+      // Видимые поля (для клиента)
+      { name: "sku", label: "Артикул", required: true, section: "visible" },
+      { name: "name", label: "Название", required: true, section: "visible" },
+      { name: "short_desc", label: "Короткое описание", section: "visible" },
+      { name: "description_id", label: "Подтип (описание)", section: "visible" },
+      { name: "length_mm", label: "Длина (мм)", type: "number", section: "visible" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number", section: "visible" },
+      { name: "height_mm", label: "Высота (мм)", type: "number", section: "visible" },
+      { name: "facade_color", label: "Цвет фасада", section: "visible" },
+      { name: "corpus_color", label: "Цвет корпуса", section: "visible" },
+      { name: "module_type_id", label: "Тип модуля (ID)", type: "number", section: "visible" },
+      { name: "module_category_id", label: "Категория (ID)", type: "number", section: "visible" },
+      { name: "final_price", label: "Итоговая цена", type: "number", required: true, section: "visible" },
+      { name: "preview_url", label: "Превью", inputType: "image", section: "visible" },
+    ],
+  },
+  sheetMaterials: {
+    title: "Листовой материал",
+    endpoint: "/sheet-materials",
+    fields: [
+      { name: "name", label: "Наименование", required: true },
+      { name: "sku", label: "Артикул" },
+      { name: "unit_id", label: "Ед.изм. (ID)", type: "number" },
+      { name: "material_class_id", label: "Класс материала (ID)", type: "number" },
+      { name: "price_per_m2", label: "Цена за м²", type: "number" },
+      { name: "edge_price_per_m", label: "Цена кромки за м.п.", type: "number" },
+      { name: "purpose", label: "Назначение материала" },
+      { name: "hardware_color", label: "Цвет фурнитуры" },
+      { name: "texture_url", label: "Текстура (картинка)", inputType: "image" },
+      { name: "comment", label: "Комментарий" },
+      { name: "sheet_length_mm", label: "Длина листа (мм)", type: "number" },
+      { name: "sheet_width_mm", label: "Ширина листа (мм)", type: "number" },
+      { name: "price_per_sheet", label: "Цена за лист", type: "number" },
+      { name: "coefficient", label: "Коэф-т", type: "number" },
+    ],
+  },
+  linearMaterials: {
+    title: "Погонный материал",
+    endpoint: "/linear-materials",
+    fields: [
+      { name: "name", label: "Наименование", required: true },
+      { name: "sku", label: "Артикул" },
+      { name: "unit_id", label: "Ед.изм. (ID)", type: "number" },
+      { name: "material_class_id", label: "Класс материала (ID)", type: "number" },
+      { name: "price_per_unit", label: "Цена за ед.", type: "number" },
+      { name: "edge_price_per_m", label: "Цена кромки за м.п.", type: "number" },
+      { name: "purpose", label: "Назначение материала" },
+      { name: "comment", label: "Комментарий" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "width_mm", label: "Ширина (мм)", type: "number" },
+      { name: "price_per_piece", label: "Цена за единицу", type: "number" },
+    ],
+  },
+  hardwareExtended: {
+    title: "Фурнитура",
+    endpoint: "/hardware-extended",
+    fields: [
+      { name: "name", label: "Наименование", required: true },
+      { name: "sku", label: "Артикул" },
+      { name: "unit_id", label: "Ед.изм. (ID)", type: "number" },
+      { name: "material_class_id", label: "Класс материала (ID)", type: "number" },
+      { name: "price_per_unit", label: "Цена за ед.", type: "number" },
+      { name: "comment", label: "Комментарий" },
+      { name: "module_type_id", label: "Тип модуля (ID)", type: "number" },
+      { name: "base_sku", label: "Основа артикула" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+    ],
+  },
+  materialClasses: {
+    title: "Классы материалов",
+    endpoint: "/material-classes",
+    fields: [
+      { name: "code", label: "Код", required: true },
+      { name: "name", label: "Наименование", required: true },
+    ],
+  },
+  calculationParameters: {
+    title: "Параметры расчета",
+    endpoint: "/calculation-parameters",
+    fields: [
+      { name: "name", label: "Наименование параметра", required: true },
+      { name: "value", label: "Значение (текст)" },
+      { name: "numeric_value", label: "Значение (число)", type: "number" },
+      { name: "comment", label: "Комментарий" },
     ],
   },
   materials: {
@@ -51,16 +226,6 @@ const entityConfigs = {
       { name: "width_mm", label: "Ширина, мм", type: "number" },
     ],
   },
-  hardware: {
-    title: "Фурнитура",
-    endpoint: "/hardware-items",
-    fields: [
-      { name: "name", label: "Название", required: true },
-      { name: "sku", label: "Артикул" },
-      { name: "unit_id", label: "ID единицы", type: "number" },
-      { name: "price", label: "Цена", type: "number" },
-    ],
-  },
   materialPrices: {
     title: "Цены материалов",
     endpoint: "/material-prices",
@@ -72,25 +237,32 @@ const entityConfigs = {
       { name: "unit_id", label: "ID единицы", type: "number" },
     ],
   },
-  hiddenSpecs: {
-    title: "Скрытые параметры модулей",
-    endpoint: "/module-specs",
-    fields: [
-      { name: "module_id", label: "ID модуля", type: "number", required: true },
-      {
-        name: "key",
-        label: "Название параметра (например, Полка, Фасад и т.д.)",
-        required: true,
-      },
-      { name: "value", label: "Текстовое значение" },
-      { name: "value_num", label: "Числовое значение", type: "number" },
-      { name: "unit_id", label: "ID единицы", type: "number" },
-    ],
-  },
 };
 
 const AdminPage = () => {
+  const [activeSection, setActiveSection] = useState("orders");
   const [activeTab, setActiveTab] = useState("orders");
+  const [expandedSections, setExpandedSections] = useState({
+    orders: true,
+    materials: false,
+    catalog: false,
+    other: false,
+  });
+
+  const toggleSection = (sectionId) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }));
+  };
+
+  const handleTabClick = (tabId, item) => {
+    setActiveTab(tabId);
+    setActiveSection(item?.sectionId || tabId);
+  };
+
+  const currentSection = adminSections.find((s) => s.id === activeSection);
+  const currentItem = currentSection?.items.find((item) => item.id === activeTab);
   const entityConfig = entityConfigs[activeTab];
 
   return (
@@ -107,25 +279,68 @@ const AdminPage = () => {
             </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          {tabs.map((tab) => (
-            <SecureButton
-              key={tab.id}
-              variant={tab.id === activeTab ? "primary" : "outline"}
-              className="px-5 py-2 text-sm"
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </SecureButton>
-          ))}
-        </div>
       </header>
 
-      {activeTab === "orders" && <OrdersTable />}
-      {entityConfig && <EntityManager {...entityConfig} />}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Боковая панель с разделами */}
+        <div className="lg:col-span-1">
+          <div className="glass-card p-4 space-y-2">
+            {adminSections.map((section) => {
+              const Icon = section.icon;
+              const isExpanded = expandedSections[section.id];
+              const hasActiveTab = section.items.some((item) => item.id === activeTab);
+
+              return (
+                <div key={section.id} className="space-y-1">
+                  <button
+                    onClick={() => toggleSection(section.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition ${
+                      hasActiveTab
+                        ? "bg-accent/10 text-accent font-semibold"
+                        : "text-night-700 hover:bg-night-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className="text-lg" />
+                      <span>{section.label}</span>
+                    </div>
+                    {isExpanded ? (
+                      <FaChevronDown className="text-xs" />
+                    ) : (
+                      <FaChevronRight className="text-xs" />
+                    )}
+                  </button>
+                  {isExpanded && (
+                    <div className="ml-8 space-y-1">
+                      {section.items.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => handleTabClick(item.id, { sectionId: section.id })}
+                          className={`w-full text-left px-4 py-2 rounded-lg transition ${
+                            activeTab === item.id
+                              ? "bg-accent text-white font-semibold"
+                              : "text-night-600 hover:bg-night-50"
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Основной контент */}
+        <div className="lg:col-span-3">
+          {activeTab === "orders" && <OrdersTable />}
+          {entityConfig && <EntityManager key={entityConfig.endpoint} {...entityConfig} />}
+        </div>
+      </div>
     </div>
   );
 };
 
 export default AdminPage;
-

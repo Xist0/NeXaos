@@ -1,5 +1,26 @@
 import { API_BASE_URL } from "../utils/constants";
 
+let lastBeaconAt = 0;
+let lastBeaconKey = "";
+
+const shouldSendBeacon = (payload) => {
+  const now = Date.now();
+  const key = `${payload.level}|${payload.message}`;
+
+  // Не отправляем info-логи на сервер, чтобы не спамить /logs
+  if (payload.level === "info") return false;
+
+  // Дедупликация одинаковых сообщений
+  if (key === lastBeaconKey && now - lastBeaconAt < 3000) return false;
+
+  // Глобальный rate-limit
+  if (now - lastBeaconAt < 500) return false;
+
+  lastBeaconKey = key;
+  lastBeaconAt = now;
+  return true;
+};
+
 const emit = (level, message, meta = {}) => {
   // Убеждаемся, что message всегда строка
   const safeMessage = typeof message === "string" && message.trim() ? message : "Лог без сообщения";
@@ -21,8 +42,10 @@ const emit = (level, message, meta = {}) => {
   }
 
   try {
-    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
-    navigator.sendBeacon?.(`${API_BASE_URL}/logs`, blob);
+    if (navigator.sendBeacon && shouldSendBeacon(payload)) {
+      const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+      navigator.sendBeacon(`${API_BASE_URL}/logs`, blob);
+    }
   } catch (err) {
     // swallow telemetry errors
   }

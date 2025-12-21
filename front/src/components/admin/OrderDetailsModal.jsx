@@ -24,9 +24,14 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
     setLoading(true);
     try {
       const response = await get(`/orders/${orderId}`);
-      setOrder(response?.data || response);
+      const orderData = response?.data || response;
+      // Убеждаемся, что notes всегда массив
+      if (orderData && !Array.isArray(orderData.notes)) {
+        orderData.notes = [];
+      }
+      setOrder(orderData);
     } catch (error) {
-      logger.error("Не удалось загрузить заказ");
+      logger.error("Не удалось загрузить заказ", error);
     } finally {
       setLoading(false);
     }
@@ -37,18 +42,33 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
 
     setSavingNote(true);
     try {
-      await post("/order-notes", {
+      const response = await post("/order-notes", {
         order_id: orderId,
         note: newNote.trim(),
         is_private: isPrivate,
       });
+      
+      // Добавляем новую заметку сразу в состояние, если она есть в ответе
+      if (response?.data) {
+        const newNoteData = {
+          ...response.data,
+          author_name: "Вы", // Временно, пока не загрузим обновленные данные
+        };
+        setOrder((prevOrder) => ({
+          ...prevOrder,
+          notes: [newNoteData, ...(prevOrder?.notes || [])],
+        }));
+      }
+      
       setNewNote("");
       setIsPrivate(false);
-      await fetchOrderDetails(); // Обновляем заказ для получения новых заметок
+      
+      // Обновляем заказ для получения полных данных (с author_name)
+      await fetchOrderDetails();
       if (onUpdate) onUpdate();
       logger.info("Заметка добавлена");
     } catch (error) {
-      logger.error("Не удалось добавить заметку");
+      logger.error("Не удалось добавить заметку", error);
     } finally {
       setSavingNote(false);
     }
@@ -89,14 +109,27 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
     return colorMap[status] || "bg-gray-100 text-gray-800";
   };
 
+  const handleBackdropClick = (e) => {
+    // Закрываем только если клик был по фону, а не по содержимому модального окна
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur flex items-center justify-center p-4">
-      <div className="glass-card w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 relative">
+    <div 
+      className="fixed inset-0 z-[1000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={handleBackdropClick}
+    >
+      <div 
+        className="glass-card w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 relative shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           aria-label="Закрыть"
-          className="absolute right-4 top-4 text-night-400 hover:text-night-700 text-xl"
+          className="absolute right-4 top-4 text-night-400 hover:text-night-700 text-xl font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-night-100 transition-colors"
           onClick={onClose}
         >
           ✕
@@ -249,7 +282,13 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
                 )}
               </div>
 
-              <div className="border border-night-200 rounded-lg p-4 bg-night-50">
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleAddNote();
+                }}
+                className="border border-night-200 rounded-lg p-4 bg-night-50"
+              >
                 <div className="space-y-3">
                   <SecureInput
                     value={newNote}
@@ -268,7 +307,7 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
                       Приватная заметка (только для администраторов)
                     </label>
                     <SecureButton
-                      onClick={handleAddNote}
+                      type="submit"
                       disabled={!newNote.trim() || savingNote}
                       className="ml-auto"
                     >
@@ -276,7 +315,7 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
                     </SecureButton>
                   </div>
                 </div>
-              </div>
+              </form>
             </div>
           </div>
         ) : (

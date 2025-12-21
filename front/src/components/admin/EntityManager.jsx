@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
+import { FaEdit, FaTrash, FaPlus, FaSave, FaTimes } from "react-icons/fa";
 
 const defaultField = (field) => ({
   type: "text",
@@ -20,8 +21,72 @@ const EntityManager = ({ title, endpoint, fields }) => {
   const [form, setForm] = useState({});
   const [search, setSearch] = useState("");
   const [uploadingField, setUploadingField] = useState(null);
+  const [activeSection, setActiveSection] = useState("visible");
+  const [filterBaseSku, setFilterBaseSku] = useState("");
+  const [colors, setColors] = useState([]);
+  const colorsLoadedRef = useRef(false);
+  const [sizePresetTabByField, setSizePresetTabByField] = useState({});
+  const [sizePresetsByField, setSizePresetsByField] = useState({});
+
+  const [availableModules, setAvailableModules] = useState([]);
+  const modulesLoadedRef = useRef(false);
+  const [kitSelectedBottomIds, setKitSelectedBottomIds] = useState([]);
+  const [kitSelectedTopIds, setKitSelectedTopIds] = useState([]);
+  const [kitCalc, setKitCalc] = useState(null);
+  const [kitCompat, setKitCompat] = useState(null);
+  const kitCalcInFlightRef = useRef(false);
+
+  const [availableMaterials, setAvailableMaterials] = useState([]);
+  const materialsLoadedRef = useRef(false);
+
+  const [availableKitchenTypes, setAvailableKitchenTypes] = useState([]);
+  const kitchenTypesLoadedRef = useRef(false);
+
+  const [availableModuleDescriptions, setAvailableModuleDescriptions] = useState([]);
+  const moduleDescriptionsLoadedRef = useRef(false);
 
   const normalizedFields = useMemo(() => fields.map(defaultField), [fields]);
+
+  const getSizePresetStorageKey = (fieldName) => `nexaos_size_presets_${fieldName}`;
+
+  const getPresetsForField = useMemo(() => {
+    const map = {};
+    normalizedFields.forEach((f) => {
+      if (f.type === "number" && typeof f.name === "string" && f.name.endsWith("_mm")) {
+        try {
+          const raw = localStorage.getItem(getSizePresetStorageKey(f.name));
+          const parsed = raw ? JSON.parse(raw) : [];
+          map[f.name] = Array.isArray(parsed) ? parsed.filter((v) => Number.isFinite(Number(v))) : [];
+        } catch {
+          map[f.name] = [];
+        }
+      }
+    });
+    return map;
+  }, [normalizedFields]);
+
+  useEffect(() => {
+    setSizePresetsByField(getPresetsForField);
+  }, [getPresetsForField]);
+  
+  // Группируем поля по секциям для модулей
+  const fieldsBySection = useMemo(() => {
+    if (endpoint === "/modules") {
+      return {
+        visible: normalizedFields.filter(f => !f.section || f.section === "visible"),
+        price: normalizedFields.filter(f => f.section === "price"),
+      };
+    }
+    
+    return { all: normalizedFields };
+  }, [normalizedFields, endpoint]);
+  
+  const currentFields = useMemo(() => {
+    if (endpoint === "/modules") {
+      return fieldsBySection[activeSection] || [];
+    }
+    return normalizedFields;
+  }, [endpoint, normalizedFields, fieldsBySection, activeSection]);
 
   const fetchItems = async () => {
     if (!endpoint) return;
@@ -39,7 +104,161 @@ const EntityManager = ({ title, endpoint, fields }) => {
     }
   };
 
+  const runKitCalculations = async () => {
+    if (endpoint !== "/kit-solutions") return;
+    if (kitCalcInFlightRef.current) return;
+
+    const bottomIds = kitSelectedBottomIds
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v));
+    const topIds = kitSelectedTopIds
+      .map((v) => Number(v))
+      .filter((v) => Number.isFinite(v));
+
+    if (bottomIds.length === 0) {
+      logger.error("Выберите хотя бы один нижний модуль");
+      return;
+    }
+
+    kitCalcInFlightRef.current = true;
+    try {
+      const [countertopRes, compatRes] = await Promise.all([
+        post("/modules/calculate-countertop", { moduleIds: bottomIds }),
+        post("/modules/check-compatibility", { bottomModuleIds: bottomIds, topModuleIds: topIds }),
+      ]);
+
+      const countertop = countertopRes?.data || countertopRes;
+      const compat = compatRes?.data || compatRes;
+
+      const nextCalc = {
+        bottomTotalLength: countertop?.totalLengthMm,
+        topTotalLength: undefined,
+        maxDepth: countertop?.maxDepthMm,
+        countertopLength: countertop?.totalLengthMm,
+        countertopDepth: countertop?.maxDepthMm,
+      };
+
+      setKitCalc(nextCalc);
+      setKitCompat(compat);
+
+      // также обновим поля формы
+      setForm((prev) => ({
+        ...prev,
+        countertop_length_mm: countertop?.totalLengthMm,
+        countertop_depth_mm: countertop?.maxDepthMm,
+        total_length_mm: countertop?.totalLengthMm,
+        total_depth_mm: countertop?.maxDepthMm,
+      }));
+    } catch (e) {
+      logger.error("Не удалось выполнить расчет комплекта", e);
+    } finally {
+      kitCalcInFlightRef.current = false;
+    }
+  };
+
+  // Загружаем цвета, если есть поля типа "color"
   useEffect(() => {
+    const hasColorFields = normalizedFields.some(f => f.type === "color");
+    if (hasColorFields && !colorsLoadedRef.current) {
+      const loadColors = async () => {
+        try {
+          const response = await get("/colors");
+          setColors(response?.data || []);
+          colorsLoadedRef.current = true;
+        } catch (error) {
+          logger.error("Не удалось загрузить цвета", error);
+          setColors([]);
+        }
+      };
+      loadColors();
+    }
+  }, [normalizedFields, get]);
+
+  // Загружаем модули для комплекта (готовых решений)
+  useEffect(() => {
+    if (endpoint !== "/kit-solutions") return;
+    if (modulesLoadedRef.current) return;
+
+    const loadModules = async () => {
+      try {
+        const response = await get("/modules", { limit: 500, isActive: true });
+        setAvailableModules(Array.isArray(response?.data) ? response.data : []);
+        modulesLoadedRef.current = true;
+      } catch (error) {
+        logger.error("Не удалось загрузить список модулей", error);
+        setAvailableModules([]);
+      }
+    };
+
+    loadModules();
+  }, [endpoint, get]);
+
+  // Загружаем подтипы/описания модулей для выбора description_id в модулях
+  useEffect(() => {
+    if (endpoint !== "/modules") return;
+    if (moduleDescriptionsLoadedRef.current) return;
+
+    const loadDescriptions = async () => {
+      try {
+        const res = await get("/module-descriptions", { limit: 500 });
+        setAvailableModuleDescriptions(Array.isArray(res?.data) ? res.data : []);
+        moduleDescriptionsLoadedRef.current = true;
+      } catch (e) {
+        logger.error("Не удалось загрузить подтипы модулей", e);
+        setAvailableModuleDescriptions([]);
+      }
+    };
+
+    loadDescriptions();
+  }, [endpoint, get]);
+
+  // Загружаем материалы для комплекта (готовых решений)
+  useEffect(() => {
+    if (endpoint !== "/kit-solutions") return;
+    if (materialsLoadedRef.current) return;
+
+    const loadMaterials = async () => {
+      try {
+        const res = await get("/materials", { limit: 500, isActive: true });
+        setAvailableMaterials(Array.isArray(res?.data) ? res.data : []);
+        materialsLoadedRef.current = true;
+      } catch (e) {
+        logger.error("Не удалось загрузить список материалов", e);
+        setAvailableMaterials([]);
+      }
+    };
+
+    loadMaterials();
+  }, [endpoint, get]);
+
+  // Загружаем типы кухни
+  useEffect(() => {
+    if (endpoint !== "/kit-solutions") return;
+    if (kitchenTypesLoadedRef.current) return;
+
+    const loadKitchenTypes = async () => {
+      try {
+        const res = await get("/kitchen-types", { limit: 500, isActive: true });
+        setAvailableKitchenTypes(Array.isArray(res?.data) ? res.data : []);
+        kitchenTypesLoadedRef.current = true;
+      } catch (e) {
+        logger.error("Не удалось загрузить типы кухни", e);
+        setAvailableKitchenTypes([]);
+      }
+    };
+
+    loadKitchenTypes();
+  }, [endpoint, get]);
+
+  useEffect(() => {
+    // Очищаем список и форму при смене endpoint
+    setItems([]);
+    setForm({});
+    setEditingId(null);
+    setSearch("");
+    setFilterBaseSku("");
+    setActiveSection("visible");
+    
     let active = true;
 
     const load = async () => {
@@ -78,7 +297,33 @@ const EntityManager = ({ title, endpoint, fields }) => {
       return;
     }
     setEditingId(item.id);
-    setForm(item);
+
+    // Для готовых решений подгружаем полный состав модулей
+    if (endpoint === "/kit-solutions") {
+      setLoading(true);
+      get(`${endpoint}/${item.id}`)
+        .then((res) => {
+          const data = res?.data || {};
+          setForm(data);
+          const bottom = Array.isArray(data?.modules?.bottom)
+            ? data.modules.bottom.map((m) => m.id).filter(Boolean)
+            : [];
+          const top = Array.isArray(data?.modules?.top)
+            ? data.modules.top.map((m) => m.id).filter(Boolean)
+            : [];
+          setKitSelectedBottomIds(bottom);
+          setKitSelectedTopIds(top);
+          setKitCalc(data?.calculatedDimensions || null);
+          setKitCompat(null);
+        })
+        .catch((e) => {
+          logger.error("Не удалось загрузить состав готового решения", e);
+          setForm(item);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setForm(item);
+    }
     // Обновляем изображения после начала редактирования
     setTimeout(() => {
       if (endpoint === "/modules") {
@@ -143,8 +388,12 @@ const EntityManager = ({ title, endpoint, fields }) => {
   const handleSubmit = async (event) => {
     event.preventDefault();
     
-    // Собираем payload, исключая пустые значения
-    const payload = normalizedFields.reduce((acc, field) => {
+    // Собираем payload из всех полей (включая все секции для модулей)
+    const allFields = endpoint === "/modules" 
+      ? normalizedFields 
+      : normalizedFields;
+    
+    const payload = allFields.reduce((acc, field) => {
       const rawValue = form[field.name];
       // Пропускаем undefined и пустые строки, но сохраняем 0 для чисел
       if (rawValue === undefined || rawValue === "") return acc;
@@ -153,8 +402,49 @@ const EntityManager = ({ title, endpoint, fields }) => {
       return acc;
     }, {});
 
+    // Готовые решения: добавляем состав модулей и автозаполняем размеры
+    if (endpoint === "/kit-solutions") {
+      const moduleIds = [...kitSelectedBottomIds, ...kitSelectedTopIds]
+        .map((v) => Number(v))
+        .filter((v) => Number.isFinite(v));
+
+      // Материал: приводим к числу или null
+      if (payload.material_id !== undefined) {
+        const mid = Number(payload.material_id);
+        payload.material_id = Number.isFinite(mid) && mid > 0 ? mid : null;
+      }
+
+      // Тип кухни: приводим к числу или null
+      if (payload.kitchen_type_id !== undefined) {
+        const kt = Number(payload.kitchen_type_id);
+        payload.kitchen_type_id = Number.isFinite(kt) && kt > 0 ? kt : null;
+      }
+
+      // Автоподсчет габаритов (без лишних запросов):
+      // total_length_mm = сумма длин нижних модулей
+      // total_depth_mm = max глубина нижних
+      // total_height_mm = max высота нижних + max высота верхних
+      const byId = new Map(availableModules.map((m) => [Number(m.id), m]));
+      const bottomMods = kitSelectedBottomIds.map((id) => byId.get(Number(id))).filter(Boolean);
+      const topMods = kitSelectedTopIds.map((id) => byId.get(Number(id))).filter(Boolean);
+      const bottomTotal = bottomMods.reduce((s, m) => s + (Number(m.length_mm) || 0), 0);
+      const bottomMaxDepth = Math.max(0, ...bottomMods.map((m) => Number(m.depth_mm) || 0));
+      const bottomMaxHeight = Math.max(0, ...bottomMods.map((m) => Number(m.height_mm) || 0));
+      const topMaxHeight = Math.max(0, ...topMods.map((m) => Number(m.height_mm) || 0));
+
+      payload.total_length_mm = bottomTotal;
+      payload.total_depth_mm = bottomMaxDepth;
+      payload.total_height_mm = bottomMaxHeight + topMaxHeight;
+
+      // Столешница: если есть рассчитанное значение — используем, иначе берем bottomTotal
+      payload.countertop_length_mm = Number(kitCalc?.countertopLength ?? bottomTotal);
+      payload.countertop_depth_mm = Number(kitCalc?.countertopDepth ?? bottomMaxDepth);
+
+      payload.moduleIds = moduleIds;
+    }
+
     // Валидация: проверяем обязательные поля
-    const requiredFields = normalizedFields.filter(f => f.required);
+    const requiredFields = allFields.filter(f => f.required);
     const missingFields = requiredFields.filter(field => {
       const value = payload[field.name];
       return value === undefined || value === "" || (field.type === "number" && isNaN(value));
@@ -209,15 +499,33 @@ const EntityManager = ({ title, endpoint, fields }) => {
     }
   };
 
+  // Получаем уникальные подтипы модулей для фильтра
+  const availableBaseSkus = useMemo(() => {
+    if (endpoint !== "/modules") return [];
+    const skus = [...new Set(items.map((item) => item.base_sku).filter(Boolean))];
+    return skus.sort();
+  }, [items, endpoint]);
+
   const filteredItems = useMemo(() => {
-    if (!search) return items;
-    return items.filter((item) =>
-      Object.values(item)
-        .join(" ")
-        .toLowerCase()
-        .includes(search.toLowerCase())
-    );
-  }, [items, search]);
+    let filtered = items;
+    
+    // Фильтрация по подтипу модуля
+    if (endpoint === "/modules" && filterBaseSku) {
+      filtered = filtered.filter((item) => item.base_sku === filterBaseSku);
+    }
+    
+    // Поиск по тексту
+    if (search) {
+      filtered = filtered.filter((item) =>
+        Object.values(item)
+          .join(" ")
+          .toLowerCase()
+          .includes(search.toLowerCase())
+      );
+    }
+    
+    return filtered;
+  }, [items, search, filterBaseSku, endpoint]);
 
   return (
     <section className="glass-card p-6 space-y-4">
@@ -236,8 +544,209 @@ const EntityManager = ({ title, endpoint, fields }) => {
         />
       </div>
 
+      {/* Фильтр по подтипу модуля */}
+      {endpoint === "/modules" && availableBaseSkus.length > 0 && (
+        <div className="flex gap-4 items-center border-b border-night-200 pb-4">
+          <label className="text-sm font-semibold text-night-700">Фильтр по подтипу:</label>
+          <select
+            value={filterBaseSku}
+            onChange={(e) => setFilterBaseSku(e.target.value)}
+            className="px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+          >
+            <option value="">Все подтипы</option>
+            {availableBaseSkus.map((sku) => (
+              <option key={sku} value={sku}>
+                {sku}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Вкладки для модулей */}
+      {endpoint === "/modules" && (
+        <div className="flex gap-2 border-b border-night-200 pb-2">
+          <SecureButton
+            variant={activeSection === "visible" ? "primary" : "outline"}
+            className="px-4 py-2 text-sm"
+            onClick={() => setActiveSection("visible")}
+            type="button"
+          >
+            Видимые параметры
+          </SecureButton>
+          <SecureButton
+            variant={activeSection === "price" ? "primary" : "outline"}
+            className="px-4 py-2 text-sm"
+            onClick={() => setActiveSection("price")}
+            type="button"
+          >
+            ЦЕНА модуля
+          </SecureButton>
+        </div>
+      )}
+
+
       <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
-        {normalizedFields.map((field) => (
+        {endpoint === "/kit-solutions" && (
+          <div className="md:col-span-2 space-y-3 border border-night-200 rounded-lg p-4 bg-white">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-night-900">Состав кухни</p>
+                <p className="text-xs text-night-500">Выберите нижние и верхние модули для готового решения</p>
+              </div>
+              <SecureButton type="button" variant="outline" className="px-4 py-2 text-xs" onClick={runKitCalculations}>
+                Рассчитать столешницу / совместимость
+              </SecureButton>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-night-700">Тип кухни</p>
+                <select
+                  value={form.kitchen_type_id ?? ""}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      kitchen_type_id: e.target.value ? Number(e.target.value) : "",
+                    }))
+                  }
+                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+                >
+                  <option value="">Не выбран</option>
+                  {availableKitchenTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      #{t.id} {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-night-700">Материал</p>
+                <select
+                  value={form.material_id ?? ""}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      material_id: e.target.value ? Number(e.target.value) : "",
+                    }))
+                  }
+                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+                >
+                  <option value="">Не выбран</option>
+                  {availableMaterials.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      #{m.id} {m.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-night-700">Нижние модули</p>
+                <select
+                  value={""}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (!v) return;
+                    setKitSelectedBottomIds((prev) => (prev.includes(v) ? prev : [...prev, v]));
+                  }}
+                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+                >
+                  <option value="">+ Добавить нижний модуль...</option>
+                  {availableModules
+                    .filter((m) => String(m.base_sku || "").startsWith("Н") || String(m.module_category_id || ""))
+                    .map((m) => (
+                      <option key={`bottom-${m.id}`} value={m.id}>
+                        #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
+                      </option>
+                    ))}
+                </select>
+
+                <div className="flex flex-wrap gap-2">
+                  {kitSelectedBottomIds.map((id) => {
+                    const m = availableModules.find((x) => Number(x.id) === Number(id));
+                    return (
+                      <div key={`b-${id}`} className="flex items-center gap-2 border border-night-200 rounded-lg px-2 py-1">
+                        <span className="text-xs text-night-900">{m ? m.name : `#${id}`}</span>
+                        <button
+                          type="button"
+                          className="text-xs text-red-600"
+                          onClick={() => setKitSelectedBottomIds((prev) => prev.filter((x) => Number(x) !== Number(id)))}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-night-700">Верхние модули</p>
+                <select
+                  value={""}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (!v) return;
+                    setKitSelectedTopIds((prev) => (prev.includes(v) ? prev : [...prev, v]));
+                  }}
+                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+                >
+                  <option value="">+ Добавить верхний модуль...</option>
+                  {availableModules
+                    .filter((m) => String(m.base_sku || "").startsWith("В") || String(m.module_category_id || ""))
+                    .map((m) => (
+                      <option key={`top-${m.id}`} value={m.id}>
+                        #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
+                      </option>
+                    ))}
+                </select>
+
+                <div className="flex flex-wrap gap-2">
+                  {kitSelectedTopIds.map((id) => {
+                    const m = availableModules.find((x) => Number(x.id) === Number(id));
+                    return (
+                      <div key={`t-${id}`} className="flex items-center gap-2 border border-night-200 rounded-lg px-2 py-1">
+                        <span className="text-xs text-night-900">{m ? m.name : `#${id}`}</span>
+                        <button
+                          type="button"
+                          className="text-xs text-red-600"
+                          onClick={() => setKitSelectedTopIds((prev) => prev.filter((x) => Number(x) !== Number(id)))}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {kitCalc && (
+              <div className="text-xs text-night-700">
+                <div>Столешница: {kitCalc.countertopLength} мм × {kitCalc.countertopDepth} мм</div>
+              </div>
+            )}
+            {kitCompat && (
+              <div className="text-xs">
+                <div className={kitCompat.compatible ? "text-green-700" : "text-red-700"}>
+                  {kitCompat.compatible ? "Совместимость OK" : "Есть несоответствия"}
+                </div>
+                {!kitCompat.compatible && Array.isArray(kitCompat.warnings) && kitCompat.warnings.length > 0 && (
+                  <div className="mt-2 space-y-1 text-red-700">
+                    {kitCompat.warnings.map((w, idx) => (
+                      <div key={idx}>{w.message || JSON.stringify(w)}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {currentFields.map((field) => (
           <label key={field.name} className="text-sm text-night-700 space-y-1">
             <span>{field.label}</span>
             {field.inputType === "image" ? (
@@ -268,22 +777,248 @@ const EntityManager = ({ title, endpoint, fields }) => {
                   <p className="text-xs text-night-400">Загружаем файл...</p>
                 )}
               </div>
-            ) : (
-              <SecureInput
-                type={field.type}
+            ) : field.type === "select" ? (
+              <select
                 value={form[field.name] ?? ""}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, [field.name]: value }))
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, [field.name]: e.target.value }))
                 }
-                placeholder={field.placeholder}
+                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
                 required={field.required}
-              />
+              >
+                <option value="">Выберите...</option>
+                {field.options?.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : field.type === "color" ? (
+              <div className="space-y-2">
+                <select
+                  value={form[field.name] ?? ""}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, [field.name]: e.target.value ? Number(e.target.value) : "" }))
+                  }
+                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                  required={field.required}
+                >
+                  <option value="">Выберите цвет...</option>
+                  {colors.map((color) => (
+                    <option key={color.id} value={color.id}>
+                      {color.name}
+                    </option>
+                  ))}
+                </select>
+                {form[field.name] && (() => {
+                  const selectedColor = colors.find(c => c.id === Number(form[field.name]));
+                  if (selectedColor && selectedColor.image_url) {
+                    const imageUrl = selectedColor.image_url.startsWith('/uploads/')
+                      ? (import.meta.env.DEV ? `http://localhost:5000${selectedColor.image_url}` : selectedColor.image_url)
+                      : selectedColor.image_url;
+                    return (
+                      <div className="flex items-center gap-3 p-2 border border-night-200 rounded-lg bg-night-50">
+                        <img
+                          src={imageUrl}
+                          alt={selectedColor.name}
+                          className="h-12 w-12 rounded object-cover border border-night-200"
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-night-900">{selectedColor.name}</p>
+                          {selectedColor.sku && (
+                            <p className="text-xs text-night-500">Артикул: {selectedColor.sku}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+            ) : endpoint === "/modules" && field.name === "description_id" ? (
+              <select
+                value={form[field.name] ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    [field.name]: e.target.value ? Number(e.target.value) : "",
+                  }))
+                }
+                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              >
+                <option value="">Не выбран</option>
+                {availableModuleDescriptions.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    #{d.id} {d.base_sku} — {d.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              (() => {
+                const isMmNumberField =
+                  field.type === "number" &&
+                  typeof field.name === "string" &&
+                  field.name.endsWith("_mm");
+
+                if (!isMmNumberField) {
+                  return (
+                    <SecureInput
+                      type={field.type}
+                      value={form[field.name] ?? ""}
+                      onChange={(value) =>
+                        setForm((prev) => ({ ...prev, [field.name]: value }))
+                      }
+                      placeholder={field.placeholder}
+                      required={field.required}
+                    />
+                  );
+                }
+
+                const activeTab = sizePresetTabByField[field.name] || "input";
+                const presets = sizePresetsByField[field.name] || [];
+                const currentValue = form[field.name] ?? "";
+                const numericValue = Number(currentValue);
+                const canSave = Number.isFinite(numericValue) && numericValue > 0;
+
+                const savePreset = () => {
+                  if (!canSave) return;
+                  const next = Array.from(new Set([numericValue, ...presets])).sort((a, b) => a - b);
+                  setSizePresetsByField((prev) => ({ ...prev, [field.name]: next }));
+                  try {
+                    localStorage.setItem(getSizePresetStorageKey(field.name), JSON.stringify(next));
+                  } catch {
+                    // ignore
+                  }
+                };
+
+                const removePreset = (valueToRemove) => {
+                  const next = presets.filter((v) => Number(v) !== Number(valueToRemove));
+                  setSizePresetsByField((prev) => ({ ...prev, [field.name]: next }));
+                  try {
+                    localStorage.setItem(getSizePresetStorageKey(field.name), JSON.stringify(next));
+                  } catch {
+                    // ignore
+                  }
+                };
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <SecureButton
+                        type="button"
+                        variant={activeTab === "input" ? "primary" : "outline"}
+                        className="px-3 py-2 text-xs"
+                        onClick={() =>
+                          setSizePresetTabByField((prev) => ({ ...prev, [field.name]: "input" }))
+                        }
+                      >
+                        Ввод
+                      </SecureButton>
+                      <SecureButton
+                        type="button"
+                        variant={activeTab === "presets" ? "primary" : "outline"}
+                        className="px-3 py-2 text-xs"
+                        onClick={() =>
+                          setSizePresetTabByField((prev) => ({ ...prev, [field.name]: "presets" }))
+                        }
+                      >
+                        Шаблоны
+                      </SecureButton>
+                    </div>
+
+                    {activeTab === "input" ? (
+                      <div className="space-y-2">
+                        <SecureInput
+                          type={field.type}
+                          value={currentValue}
+                          onChange={(value) =>
+                            setForm((prev) => ({ ...prev, [field.name]: value }))
+                          }
+                          placeholder={field.placeholder}
+                          required={field.required}
+                        />
+                        <SecureButton
+                          type="button"
+                          variant="outline"
+                          disabled={!canSave}
+                          className="px-3 py-2 text-xs"
+                          onClick={savePreset}
+                        >
+                          Сохранить как шаблон
+                        </SecureButton>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (!v) return;
+                            setForm((prev) => ({ ...prev, [field.name]: Number(v) }));
+                          }}
+                          className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                        >
+                          <option value="">Выберите размер...</option>
+                          {presets.map((v) => (
+                            <option key={v} value={v}>
+                              {v} мм
+                            </option>
+                          ))}
+                        </select>
+
+                        {presets.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {presets.map((v) => (
+                              <div
+                                key={`preset-${field.name}-${v}`}
+                                className="flex items-center gap-1 border border-night-200 rounded-lg px-2 py-1 bg-white"
+                              >
+                                <button
+                                  type="button"
+                                  className="text-xs text-night-900"
+                                  onClick={() =>
+                                    setForm((prev) => ({ ...prev, [field.name]: Number(v) }))
+                                  }
+                                >
+                                  {v} мм
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-xs text-red-600"
+                                  onClick={() => removePreset(v)}
+                                  aria-label="Удалить шаблон"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
             )}
           </label>
         ))}
         <div className="md:col-span-2 flex gap-3">
-          <SecureButton type="submit" className="px-6 py-3">
-            {editingId ? "Сохранить изменения" : "Добавить запись"}
+          <SecureButton type="submit" className="px-6 py-3 flex items-center gap-2">
+            {editingId ? (
+              <>
+                <FaSave />
+                Сохранить изменения
+              </>
+            ) : (
+              <>
+                <FaPlus />
+                Добавить запись
+              </>
+            )}
           </SecureButton>
           {editingId && (
             <SecureButton
@@ -293,7 +1028,9 @@ const EntityManager = ({ title, endpoint, fields }) => {
                 setEditingId(null);
                 setForm({});
               }}
+              className="flex items-center gap-2"
             >
+              <FaTimes />
               Отмена
             </SecureButton>
           )}
@@ -352,26 +1089,59 @@ const EntityManager = ({ title, endpoint, fields }) => {
                           e.target.style.display = 'none';
                         }}
                       />
+                    ) : field.type === "color" && item[field.name] ? (
+                      (() => {
+                        const colorId = Number(item[field.name]);
+                        const color = colors.find(c => c.id === colorId);
+                        if (color) {
+                          const imageUrl = color.image_url?.startsWith('/uploads/')
+                            ? (import.meta.env.DEV ? `http://localhost:5000${color.image_url}` : color.image_url)
+                            : color.image_url;
+                          return (
+                            <div className="flex items-center gap-2">
+                              {imageUrl && (
+                                <img
+                                  src={imageUrl}
+                                  alt={color.name}
+                                  className="h-8 w-8 rounded object-cover border border-night-200"
+                                  crossOrigin="anonymous"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <span className="text-sm text-night-900">{color.name}</span>
+                            </div>
+                          );
+                        }
+                        return item[field.name] ?? "—";
+                      })()
                     ) : (
                       item[field.name] ?? "—"
                     )}
                   </td>
                 ))}
-                <td className="py-3 pr-4 flex gap-2">
-                  <SecureButton
-                    variant="outline"
-                    className="px-3 py-1 text-xs"
-                    onClick={() => handleEdit(item)}
-                  >
-                    Редактировать
-                  </SecureButton>
-                  <SecureButton
-                    variant="ghost"
-                    className="px-3 py-1 text-xs"
-                    onClick={() => handleDelete(item.id, item)}
-                  >
-                    Удалить
-                  </SecureButton>
+                <td className="py-3 pr-4">
+                  <div className="flex gap-2">
+                    <SecureButton
+                      variant="outline"
+                      className="px-3 py-2 text-xs flex items-center gap-1.5"
+                      onClick={() => handleEdit(item)}
+                      title="Редактировать"
+                    >
+                      <FaEdit />
+                      Редактировать
+                    </SecureButton>
+                    <SecureButton
+                      variant="ghost"
+                      className="px-3 py-2 text-xs flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => handleDelete(item.id, item)}
+                      title="Удалить"
+                    >
+                      <FaTrash />
+                      Удалить
+                    </SecureButton>
+                  </div>
                 </td>
               </tr>
             ))}
