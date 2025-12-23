@@ -20,6 +20,7 @@ const CatalogPage = () => {
   const fromProduct = searchParams.get("fromProduct") === "1";
   const isInitialMount = useRef(true);
   const isFirstDebounce = useRef(true);
+  const isQueryInitialized = useRef(false);
   
   // Инициализируем состояние с учетом того, пришли ли мы со страницы товара
   const [activeCategory, setActiveCategory] = useState(() => {
@@ -82,6 +83,13 @@ const CatalogPage = () => {
     }
   }, [fromProduct, setSearchParams]);
 
+  useEffect(() => {
+    if (isQueryInitialized.current) return;
+    const urlQuery = searchParams.get("search") || "";
+    setQuery(urlQuery);
+    isQueryInitialized.current = true;
+  }, [searchParams]);
+
   // Загружаем категории и типы модулей
   useEffect(() => {
     const loadCategories = async () => {
@@ -125,11 +133,12 @@ const CatalogPage = () => {
     const params = new URLSearchParams();
     if (activeCategory !== "all") params.set("category", activeCategory);
     if (activeSubCategory) params.set("subCategory", activeSubCategory);
+    if (debouncedQuery) params.set("search", debouncedQuery);
     Object.entries(debouncedFilters).forEach(([key, value]) => {
       if (value) params.set(key, value);
     });
     setSearchParams(params, { replace: true });
-  }, [activeCategory, activeSubCategory, debouncedFilters, setSearchParams]);
+  }, [activeCategory, activeSubCategory, debouncedFilters, debouncedQuery, setSearchParams]);
 
   // Оптимизированный эффект загрузки данных с использованием debounced фильтров
   useEffect(() => {
@@ -266,217 +275,146 @@ const CatalogPage = () => {
     addItem(product);
   }, [addItem]);
 
+  const renderCategoryLink = (code, label, subCategories = []) => {
+    const isActive = activeCategory === code;
+    return (
+      <div key={code}>
+        <button
+          onClick={() => {
+            setActiveCategory(code);
+            setActiveSubCategory(null);
+          }}
+          className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition ${
+            isActive ? "bg-night-100 text-night-900" : "text-night-600 hover:bg-night-50"
+          }`}
+        >
+          {label}
+        </button>
+        {isActive && subCategories.length > 0 && (
+          <div className="pl-4 mt-2 space-y-1 border-l-2 border-night-200 ml-3">
+            {subCategories.map((sub) => (
+              <button
+                key={sub.code}
+                onClick={() => setActiveSubCategory(sub.code)}
+                className={`w-full text-left px-3 py-1.5 rounded-md text-xs transition ${
+                  activeSubCategory === sub.code
+                    ? "bg-accent/20 text-accent-dark font-semibold"
+                    : "text-night-500 hover:bg-night-50"
+                }`}
+              >
+                {sub.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="shop-container space-y-10 py-12">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="shop-container py-12">
+      <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-night-400">Каталог</p>
           <h1 className="text-3xl font-semibold text-night-900">Каталог мебели</h1>
-          <p className="text-sm text-night-500">
-            Найдите мебель под стиль Stolplit: кухни, гостиные, спальни и модули хранения.
-          </p>
         </div>
         <SecureInput
           value={query}
           onChange={setQuery}
           placeholder="Поиск по названию или артикулу"
-          className="min-w-[260px]"
+          className="min-w-[280px]"
         />
       </div>
 
-      {/* Выбор категории */}
-      <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <SecureButton
-            variant={activeCategory === "all" ? "primary" : "outline"}
-            onClick={() => {
-              setActiveCategory("all");
-              setActiveSubCategory(null);
-            }}
-          >
-            Все
-          </SecureButton>
-          <SecureButton
-            variant={activeCategory === "kitSolutions" ? "primary" : "outline"}
-            onClick={() => {
-              setActiveCategory("kitSolutions");
-              setActiveSubCategory(null);
-            }}
-          >
-            Готовые решения
-          </SecureButton>
-          <SecureButton
-            variant={activeCategory === "bottom" ? "primary" : "outline"}
-            onClick={() => {
-              setActiveCategory("bottom");
-              setActiveSubCategory(null);
-            }}
-          >
-            Нижние модули
-          </SecureButton>
-          <SecureButton
-            variant={activeCategory === "top" ? "primary" : "outline"}
-            onClick={() => {
-              setActiveCategory("top");
-              setActiveSubCategory(null);
-            }}
-          >
-            Верхние модули
-          </SecureButton>
-          <SecureButton
-            variant={activeCategory === "tall" ? "primary" : "outline"}
-            onClick={() => {
-              setActiveCategory("tall");
-              setActiveSubCategory(null);
-            }}
-          >
-            Пеналы
-          </SecureButton>
-          <SecureButton
-            variant={activeCategory === "filler" ? "primary" : "outline"}
-            onClick={() => {
-              setActiveCategory("filler");
-              setActiveSubCategory(null);
-            }}
-          >
-            Доборные элементы
-          </SecureButton>
-          <SecureButton
-            variant={activeCategory === "accessory" ? "primary" : "outline"}
-            onClick={() => {
-              setActiveCategory("accessory");
-              setActiveSubCategory(null);
-            }}
-          >
-            Аксессуары
-          </SecureButton>
-        </div>
+      <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
+        <aside className="space-y-6">
+          <div className="glass-card p-4">
+            <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide px-3">Категории</h3>
+            <nav className="mt-3 space-y-1">
+              {renderCategoryLink("all", "Все")}
+              {renderCategoryLink("kitSolutions", "Готовые решения")}
+              {renderCategoryLink("bottom", "Нижние модули", bottomSubCategories)}
+              {renderCategoryLink("top", "Верхние модули", topSubCategories)}
+              {renderCategoryLink("tall", "Пеналы")}
+              {renderCategoryLink("filler", "Доборные элементы")}
+              {renderCategoryLink("accessory", "Аксессуары")}
+            </nav>
+          </div>
 
-        {/* Подкатегории для нижних модулей */}
-        {bottomSubCategories.length > 0 && (
-          <div className="flex flex-wrap gap-2 pl-4 border-l-2 border-night-200">
-            {bottomSubCategories.map((sub) => (
+          <div className="glass-card p-5">
+            <div className="flex items-center justify-between gap-4">
+              <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide">Фильтры</h3>
               <SecureButton
-                key={sub.code}
-                variant={activeSubCategory === sub.code ? "primary" : "outline"}
-                className="text-sm"
-                onClick={() => setActiveSubCategory(sub.code)}
+                variant="outline"
+                className="px-4 py-2 text-xs"
+                onClick={() => {
+                  setFilters({
+                    facadeColor: "", corpusColor: "",
+                    priceFrom: "", priceTo: "",
+                    lengthFrom: "", lengthTo: "",
+                    categoryId: "", baseSku: "",
+                  });
+                }}
               >
-                {sub.label}
+                Сброс
               </SecureButton>
-            ))}
-          </div>
-        )}
+            </div>
 
-        {/* Подкатегории для верхних модулей */}
-        {topSubCategories.length > 0 && (
-          <div className="flex flex-wrap gap-2 pl-4 border-l-2 border-night-200">
-            {topSubCategories.map((sub) => (
-              <SecureButton
-                key={sub.code}
-                variant={activeSubCategory === sub.code ? "primary" : "outline"}
-                className="text-sm"
-                onClick={() => setActiveSubCategory(sub.code)}
-              >
-                {sub.label}
-              </SecureButton>
-            ))}
+            <div className="mt-4 space-y-5">
+              <div>
+                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Цвета</div>
+                <div className="mt-3 space-y-3">
+                  <SecureInput value={filters.facadeColor} onChange={(v) => setFilters({ ...filters, facadeColor: v })} placeholder="Цвет фасада" />
+                  <SecureInput value={filters.corpusColor} onChange={(v) => setFilters({ ...filters, corpusColor: v })} placeholder="Цвет корпуса" />
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Цена</div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <SecureInput type="number" value={filters.priceFrom} onChange={(v) => setFilters({ ...filters, priceFrom: v })} placeholder="От" />
+                  <SecureInput type="number" value={filters.priceTo} onChange={(v) => setFilters({ ...filters, priceTo: v })} placeholder="До" />
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Размер (длина, мм)</div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <SecureInput type="number" value={filters.lengthFrom} onChange={(v) => setFilters({ ...filters, lengthFrom: v })} placeholder="От" />
+                  <SecureInput type="number" value={filters.lengthTo} onChange={(v) => setFilters({ ...filters, lengthTo: v })} placeholder="До" />
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        </aside>
 
-      {/* Фильтры */}
-      <div className="glass-card p-4 grid gap-4 md:grid-cols-4">
-        <SecureInput
-          value={filters.facadeColor}
-          onChange={(value) => setFilters({ ...filters, facadeColor: value })}
-          placeholder="Цвет фасада"
-        />
-        <SecureInput
-          value={filters.corpusColor}
-          onChange={(value) => setFilters({ ...filters, corpusColor: value })}
-          placeholder="Цвет корпуса"
-        />
-        <SecureInput
-          type="number"
-          value={filters.priceFrom}
-          onChange={(value) => setFilters({ ...filters, priceFrom: value })}
-          placeholder="Цена от"
-        />
-        <SecureInput
-          type="number"
-          value={filters.priceTo}
-          onChange={(value) => setFilters({ ...filters, priceTo: value })}
-          placeholder="Цена до"
-        />
-        <SecureInput
-          type="number"
-          value={filters.lengthFrom}
-          onChange={(value) => setFilters({ ...filters, lengthFrom: value })}
-          placeholder="Длина от (мм)"
-        />
-        <SecureInput
-          type="number"
-          value={filters.lengthTo}
-          onChange={(value) => setFilters({ ...filters, lengthTo: value })}
-          placeholder="Длина до (мм)"
-        />
-        <div className="md:col-span-2 flex gap-2">
-          <SecureButton
-            variant="outline"
-            onClick={() => {
-              setFilters({
-                facadeColor: "",
-                corpusColor: "",
-                priceFrom: "",
-                priceTo: "",
-                lengthFrom: "",
-                lengthTo: "",
-                categoryId: "",
-                baseSku: "",
-              });
-            }}
-          >
-            Сбросить фильтры
-          </SecureButton>
+        <div className="min-w-0">
+          {loading ? (
+            <div className="glass-card p-6 text-night-500">Загружаем товары...</div>
+          ) : (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-night-900">
+                  {activeItems.length} позици{activeItems.length !== 1 ? "й" : "я"}
+                </h2>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 items-stretch">
+                {activeItems.map((product, index) => (
+                  <ProductCard
+                    key={product.id ? `product-${product.id}` : `product-${index}-${product.sku || product.name}`}
+                    product={product}
+                    onAdd={handleAddToCart}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {!loading && activeItems.length === 0 && (
+            <div className="glass-card p-6 text-night-500">
+              Мы не нашли таких товаров. Попробуйте другой запрос или измените фильтры.
+            </div>
+          )}
         </div>
       </div>
-
-      {loading ? (
-        <div className="glass-card p-6 text-night-500">Загружаем товары...</div>
-      ) : (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-night-900">
-              {activeCategory === "kitSolutions" ? "Готовые решения" :
-               activeCategory === "bottom" ? "Нижние модули" :
-               activeCategory === "top" ? "Верхние модули" :
-               activeCategory === "tall" ? "Пеналы" :
-               activeCategory === "filler" ? "Доборные элементы" :
-               activeCategory === "accessory" ? "Аксессуары" :
-               "Все товары"}
-            </h2>
-            <span className="text-sm text-night-400">
-              {activeItems.length} позици{activeItems.length > 1 ? "й" : "я"}
-            </span>
-          </div>
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {activeItems.map((product, index) => (
-              <ProductCard 
-                key={product.id ? `product-${product.id}` : `product-${index}-${product.sku || product.name}`} 
-                product={product} 
-                onAdd={handleAddToCart} 
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {!loading && activeItems.length === 0 && (
-        <div className="glass-card p-6 text-night-500">
-          Мы не нашли таких товаров. Попробуйте другой запрос или измените фильтры.
-        </div>
-      )}
     </div>
   );
 };

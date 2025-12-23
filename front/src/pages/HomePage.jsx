@@ -56,12 +56,15 @@ const HomePage = () => {
               цвета и конфигурацию онлайн, а мы соберём и доставим.
             </p>
             <div className="flex flex-wrap gap-4">
-              <Link to="/catalog" className="secure-button">
+              <Link
+                to="/catalog"
+                className="inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-[#21262d] shadow-md bg-[#e3e161] hover:bg-[#d6d04d] transition"
+              >
                 Каталог мебели
               </Link>
               <Link
                 to="/cart"
-                className="rounded-full border border-night-200 px-6 py-3 text-sm font-semibold text-night-700 transition hover:border-night-400"
+                className="rounded-full border border-night-200 px-6 py-3 text-sm font-semibold text-night-700 transition hover:border-night-400 hover:bg-night-50"
               >
                 Перейти в корзину
               </Link>
@@ -85,7 +88,7 @@ const HomePage = () => {
                 <p className="text-sm text-night-500">{category.description}</p>
                 <Link
                   to="/catalog"
-                  className="mt-4 inline-flex text-sm font-semibold text-accent"
+                  className="mt-4 inline-flex text-sm font-semibold text-night-600 hover:text-night-900"
                 >
                   Смотреть →
                 </Link>
@@ -101,7 +104,7 @@ const HomePage = () => {
             <h2 className="text-2xl font-semibold text-night-900">Популярные наборы</h2>
             <p className="text-sm text-night-500">Выбор покупателей, вдохновлённый Stolplit</p>
           </div>
-          <Link to="/catalog" className="text-sm font-semibold text-accent">
+          <Link to="/catalog" className="text-sm font-semibold text-night-600 hover:text-night-900">
             Весь каталог →
           </Link>
         </div>

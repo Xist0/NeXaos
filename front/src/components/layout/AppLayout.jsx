@@ -7,6 +7,7 @@ import { ROLES } from "../../utils/constants";
 const navLinks = [
   { label: "Главная", to: "/" },
   { label: "Каталог", to: "/catalog" },
+  { label: "Избранное", to: "/favorites" },
   { label: "Корзина", to: "/cart" },
 ];
 
@@ -24,7 +25,7 @@ const AppLayout = () => {
         </div>
       </div>
 
-      <header className="bg-white/95 shadow-sm">
+      <header className="bg-white border-b border-night-100">
         <div className="shop-container flex h-20 items-center justify-between gap-6">
           <Link to="/" className="text-2xl font-semibold text-night-900">
             NeXaos

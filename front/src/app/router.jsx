@@ -5,6 +5,7 @@ import HomePage from "../pages/HomePage";
 import CatalogPage from "../pages/CatalogPage";
 import ProductPage from "../pages/ProductPage";
 import KitSolutionPage from "../pages/KitSolutionPage";
+import FavoritesPage from "../pages/FavoritesPage";
 import CartPage from "../pages/CartPage";
 import AccountPage from "../pages/AccountPage";
 import AdminPage from "../pages/AdminPage";
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
       { path: "catalog", element: <CatalogPage /> },
       { path: "catalog/:id", element: <ProductPage /> },
       { path: "catalog/kit/:id", element: <KitSolutionPage /> },
+      { path: "favorites", element: <FavoritesPage /> },
       { path: "cart", element: <CartPage /> },
       {
         element: <ProtectedRoute />,

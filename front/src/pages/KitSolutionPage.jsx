@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import useApi from "../hooks/useApi";
 import useCart from "../hooks/useCart";
 import SecureButton from "../components/ui/SecureButton";
+import ProductCard from "../components/ui/ProductCard";
 import { formatCurrency } from "../utils/format";
 import ColorBadge from "../components/ui/ColorBadge";
+import FavoriteButton from "../components/ui/FavoriteButton";
 import useLogger from "../hooks/useLogger";
 
 const placeholderImage =
@@ -22,26 +24,20 @@ const getImageUrl = (url) => {
 const KitSolutionPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { get, post } = useApi();
+  const { get } = useApi();
   const { addItem } = useCart();
   const logger = useLogger();
 
   const [kit, setKit] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("modules");
-  const [similar, setSimilar] = useState([]);
-  const [similarLoading, setSimilarLoading] = useState(false);
 
   const getRef = useRef(get);
   const loggerRef = useRef(logger);
 
   useEffect(() => {
     getRef.current = get;
-  }, [get]);
-
-  useEffect(() => {
     loggerRef.current = logger;
-  }, [logger]);
+  }, [get, logger]);
 
   useEffect(() => {
     if (!id || id === "undefined") {
@@ -55,14 +51,8 @@ const KitSolutionPage = () => {
     const fetchKit = async () => {
       setLoading(true);
       try {
-        const res = await getRef.current(`/kit-solutions/${id}`, undefined, {
-          signal: abortController.signal,
-        });
-        const data = res?.data;
-        if (active) {
-          setKit(data || null);
-          setLoading(false);
-        }
+        const res = await getRef.current(`/kit-solutions/${id}`, undefined, { signal: abortController.signal });
+        if (active) setKit(res?.data || null);
       } catch (e) {
         if (active && !abortController.signal.aborted) {
           loggerRef.current?.error("Не удалось загрузить готовое решение");
@@ -81,62 +71,57 @@ const KitSolutionPage = () => {
     };
   }, [id, navigate]);
 
-  const image = useMemo(() => getImageUrl(kit?.preview_url), [kit?.preview_url]);
+  const mainImage = useMemo(() => getImageUrl(kit?.preview_url), [kit?.preview_url]);
 
   const handleAddToCart = () => {
     if (!kit) return;
     addItem({ ...kit, __type: "kitSolution" }, 1);
   };
 
-  const handleFindSimilar = async () => {
-    if (!kit?.id) return;
-    if (similarLoading) return;
-    setSimilarLoading(true);
-    try {
-      const res = await post(`/kit-solutions/${kit.id}/similar`, { limit: 12 });
-      setSimilar(Array.isArray(res?.data) ? res.data : []);
-    } catch (e) {
-      logger.error("Не удалось найти похожие кухни", e);
-      setSimilar([]);
-    } finally {
-      setSimilarLoading(false);
-    }
-  };
-
   const modulesByType = kit?.modules || {};
 
-  const renderModulesTable = (title, list) => {
-    if (!Array.isArray(list) || list.length === 0) return null;
-    return (
-      <div className="glass-card p-4 space-y-3">
-        <h3 className="text-lg font-semibold text-night-900">{title}</h3>
-        <div className="overflow-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-night-500">
-                <th className="text-left py-2 pr-4">Модуль</th>
-                <th className="text-left py-2 pr-4">Артикул</th>
-                <th className="text-left py-2 pr-4">Размеры (мм)</th>
-                <th className="text-left py-2 pr-4">Цена</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((m) => (
-                <tr key={m.id} className="border-t border-night-100">
-                  <td className="py-2 pr-4">
-                    <Link className="hover:text-accent" to={`/catalog/${m.id}`}>{m.name}</Link>
-                  </td>
-                  <td className="py-2 pr-4 text-night-500">{m.sku || "—"}</td>
-                  <td className="py-2 pr-4 text-night-500">{m.lengthMm}×{m.depthMm}×{m.heightMm}</td>
-                  <td className="py-2 pr-4 font-semibold text-night-900">{formatCurrency(m.finalPrice || 0)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
+  const compositionSections = useMemo(() => (
+    [
+      { key: "bottom", title: "Нижние модули" },
+      { key: "top", title: "Верхние модули" },
+      { key: "tall", title: "Пеналы" },
+      { key: "filler", title: "Доборные элементы" },
+      { key: "accessory", title: "Аксессуары" },
+    ]
+      .map(({ key, title }) => ({ title, items: Array.isArray(modulesByType[key]) ? modulesByType[key] : [] }))
+      .filter((section) => section.items.length > 0)
+  ), [modulesByType]);
+
+  const componentModules = useMemo(() => {
+    const typeTitle = {
+      bottom: "Нижние модули",
+      top: "Верхние модули",
+      tall: "Пеналы",
+      filler: "Доборные элементы",
+      accessory: "Аксессуары",
+    };
+    const result = [];
+    if (!modulesByType) return [];
+    Object.entries(modulesByType).forEach(([type, list]) => {
+      if (!Array.isArray(list) || list.length === 0) return;
+      list.forEach((m) => {
+        if (!m?.id) return;
+        result.push({
+          id: m.id,
+          name: m.name,
+          sku: m.sku,
+          short_desc: typeTitle[type] ? `Категория: ${typeTitle[type]}` : undefined,
+          final_price: m.finalPrice,
+          price: m.finalPrice,
+          image: m.preview_url || m.previewUrl,
+          image_url: m.preview_url || m.previewUrl,
+          preview_url: m.preview_url || m.previewUrl,
+          is_active: true,
+        });
+      });
+    });
+    return result;
+  }, [modulesByType]);
 
   if (loading) {
     return <div className="shop-container py-12"><div className="glass-card p-6 text-night-500">Загружаем...</div></div>;
@@ -147,141 +132,129 @@ const KitSolutionPage = () => {
   }
 
   return (
-    <div className="shop-container space-y-8 py-12">
-      <div className="flex flex-wrap items-start justify-between gap-6">
-        <div className="space-y-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-night-400">Готовое решение</p>
-          <h1 className="text-3xl font-semibold text-night-900">{kit.name}</h1>
-          {kit.sku && <p className="text-sm text-night-500">Артикул: {kit.sku}</p>}
-          {kit.kitchen_type_name && <p className="text-sm text-night-500">Тип кухни: {kit.kitchen_type_name}</p>}
-          <div className="flex flex-wrap gap-2 text-xs">
-            {kit.primary_color_name && (
-              <ColorBadge
-                value={kit.primary_color_name}
-                labelPrefix="Основной:"
-              />
-            )}
-            {kit.secondary_color_name && (
-              <ColorBadge
-                value={kit.secondary_color_name}
-                labelPrefix="Доп.:"
-              />
-            )}
+    <div className="shop-container py-8">
+      <nav className="text-sm text-night-500 mb-6">
+        <Link to="/" className="hover:text-accent transition">Главная</Link>{" / "}
+        <Link to="/catalog" className="hover:text-accent transition">Каталог</Link>{" / "}
+        <span className="text-night-900">{kit.name}</span>
+      </nav>
+
+      <div className="grid gap-8 lg:grid-cols-2 mb-12">
+        <div className="space-y-4">
+          <div className="relative aspect-square bg-night-50 rounded-xl overflow-hidden border border-night-200 group">
+            <img
+              src={mainImage}
+              alt={kit.name}
+              className="h-full w-full object-contain p-4"
+              crossOrigin="anonymous"
+              onError={(e) => { if (e.target.src !== placeholderImage) e.target.src = placeholderImage; }}
+              loading="lazy"
+              decoding="async"
+            />
           </div>
         </div>
 
-        <div className="flex gap-3">
-          <SecureButton variant="outline" onClick={handleFindSimilar}>
-            {similarLoading ? "Ищем..." : "Похожие"}
-          </SecureButton>
-          <SecureButton onClick={handleAddToCart}>В корзину</SecureButton>
+        <div className="space-y-6">
+          <div>
+            <div className="flex items-start justify-between gap-4">
+              <h1 className="text-4xl font-bold text-night-900 mb-3 leading-tight">{kit.name}</h1>
+              <FavoriteButton product={{ ...kit, __type: 'kitSolution' }} className="flex-shrink-0 mt-2" />
+            </div>
+            {kit.sku && <p className="text-sm text-night-500">Артикул: <span className="font-medium text-night-700">{kit.sku}</span></p>}
+          </div>
+
+          {kit.description && <div className="text-night-700 leading-relaxed text-lg">{kit.description}</div>}
+
+          <div className="bg-night-50 rounded-lg p-4 border border-night-200">
+            <div className="flex items-baseline gap-3 mb-3">
+              <span className="text-4xl font-bold text-night-900">{formatCurrency(kit.final_price || 0)}</span>
+            </div>
+            <div className="space-y-2">
+              <SecureButton onClick={handleAddToCart} className="w-full justify-center py-3 text-base font-semibold bg-accent text-night-900 hover:bg-accent-dark">В корзину</SecureButton>
+            </div>
+          </div>
+
+          <div className="space-y-4 border-t border-night-200 pt-6">
+            {(kit.total_length_mm || kit.total_depth_mm || kit.total_height_mm) && (
+              <div>
+                <h3 className="text-sm font-semibold text-night-900 mb-3 uppercase tracking-wide">Габариты</h3>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="bg-night-50 rounded p-3"><span className="text-night-500 block text-xs mb-1">Длина</span><span className="font-semibold text-night-900 text-lg">{kit.total_length_mm || "-"} мм</span></div>
+                  <div className="bg-night-50 rounded p-3"><span className="text-night-500 block text-xs mb-1">Глубина</span><span className="font-semibold text-night-900 text-lg">{kit.total_depth_mm || "-"} мм</span></div>
+                  <div className="bg-night-50 rounded p-3"><span className="text-night-500 block text-xs mb-1">Высота</span><span className="font-semibold text-night-900 text-lg">{kit.total_height_mm || "-"} мм</span></div>
+                </div>
+              </div>
+            )}
+            {(kit.primary_color_name || kit.secondary_color_name) && (
+              <div>
+                <h3 className="text-sm font-semibold text-night-900 mb-3 uppercase tracking-wide">Цвета</h3>
+                <div className="flex flex-wrap gap-3">
+                  {kit.primary_color_name && <ColorBadge value={kit.primary_color_name} labelPrefix="Основной:" />}
+                  {kit.secondary_color_name && <ColorBadge value={kit.secondary_color_name} labelPrefix="Доп.:" />}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[420px_1fr]">
-        <div className="glass-card overflow-hidden">
-          <img
-            src={image}
-            alt={kit.name}
-            className="w-full aspect-[4/3] object-cover"
-            crossOrigin={image.startsWith("http://localhost:5000") ? "anonymous" : undefined}
-          />
-        </div>
-
-        <div className="space-y-4">
-          <div className="glass-card p-5 space-y-3">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-night-400">Стоимость</p>
-                <p className="text-3xl font-bold text-accent">{formatCurrency(kit.final_price || 0)}</p>
-              </div>
-              {kit.material_name && (
-                <div className="text-sm text-night-500">Материал: {kit.material_name}</div>
-              )}
-            </div>
-
-            {kit.description && <p className="text-sm text-night-600">{kit.description}</p>}
-
-            <div className="grid gap-2 sm:grid-cols-3 text-sm">
-              <div className="p-3 rounded-lg bg-night-50">
-                <div className="text-xs text-night-400">Длина</div>
-                <div className="font-semibold text-night-900">{kit.total_length_mm || kit.calculatedDimensions?.bottomTotalLength || "—"} мм</div>
-              </div>
-              <div className="p-3 rounded-lg bg-night-50">
-                <div className="text-xs text-night-400">Глубина</div>
-                <div className="font-semibold text-night-900">{kit.total_depth_mm || kit.calculatedDimensions?.maxDepth || "—"} мм</div>
-              </div>
-              <div className="p-3 rounded-lg bg-night-50">
-                <div className="text-xs text-night-400">Высота</div>
-                <div className="font-semibold text-night-900">{kit.total_height_mm || "—"} мм</div>
-              </div>
-            </div>
-
-            <div className="text-sm text-night-600">
-              Столешница: {kit.countertop_length_mm || kit.calculatedDimensions?.countertopLength || "—"} мм × {kit.countertop_depth_mm || kit.calculatedDimensions?.countertopDepth || "—"} мм
+      <div className="space-y-6 mb-12">
+        <div className="glass-card p-8">
+          <h3 className="font-bold text-night-900 mb-4 text-lg">Параметры</h3>
+          <div className="grid gap-8 md:grid-cols-3 text-sm">
+            <div className="space-y-2">
+              <div className="flex justify-between py-2 border-b border-night-100"><span className="text-night-500">Тип кухни</span><span className="font-semibold text-night-900">{kit.kitchen_type_name || "—"}</span></div>
+              <div className="flex justify-between py-2 border-b border-night-100"><span className="text-night-500">Материал</span><span className="font-semibold text-night-900">{kit.material_name || "—"}</span></div>
+              <div className="flex justify-between py-2 border-b border-night-100"><span className="text-night-500">Кол-во модулей</span><span className="font-semibold text-night-900">{kit.modules_count || "—"}</span></div>
             </div>
           </div>
+        </div>
 
-          <div className="flex flex-wrap gap-2">
-            <SecureButton
-              variant={activeTab === "modules" ? "primary" : "outline"}
-              onClick={() => setActiveTab("modules")}
-            >
-              Состав
-            </SecureButton>
-            <SecureButton
-              variant={activeTab === "details" ? "primary" : "outline"}
-              onClick={() => setActiveTab("details")}
-            >
-              Параметры
-            </SecureButton>
-            {similar.length > 0 && (
-              <SecureButton
-                variant={activeTab === "similar" ? "primary" : "outline"}
-                onClick={() => setActiveTab("similar")}
-              >
-                Похожие ({similar.length})
-              </SecureButton>
-            )}
-          </div>
-
-          {activeTab === "modules" && (
-            <div className="space-y-4">
-              {renderModulesTable("Нижние модули", modulesByType.bottom)}
-              {renderModulesTable("Верхние модули", modulesByType.top)}
-              {renderModulesTable("Пеналы", modulesByType.tall)}
-              {renderModulesTable("Доборные элементы", modulesByType.filler)}
-              {renderModulesTable("Аксессуары", modulesByType.accessory)}
-            </div>
-          )}
-
-          {activeTab === "details" && (
-            <div className="glass-card p-5 space-y-2 text-sm text-night-600">
-              <div><span className="text-night-400">ID:</span> {kit.id}</div>
-              <div><span className="text-night-400">Артикул:</span> {kit.sku || "—"}</div>
-              <div><span className="text-night-400">Тип кухни:</span> {kit.kitchen_type_name || "—"}</div>
-              <div><span className="text-night-400">Основной цвет:</span> {kit.primary_color_name || "—"}</div>
-              <div><span className="text-night-400">Доп. цвет:</span> {kit.secondary_color_name || "—"}</div>
-              <div><span className="text-night-400">Материал:</span> {kit.material_name || "—"}</div>
-              <div><span className="text-night-400">Количество модулей:</span> {kit.modules_count || kit.modulesCount?.bottom + kit.modulesCount?.top || "—"}</div>
-            </div>
-          )}
-
-          {activeTab === "similar" && (
-            <div className="glass-card p-5 space-y-3">
-              <h3 className="text-lg font-semibold text-night-900">Похожие кухни</h3>
-              <div className="grid gap-4 md:grid-cols-2">
-                {similar.map((s) => (
-                  <Link key={s.id} to={`/catalog/kit/${s.id}`} className="border border-night-200 rounded-lg p-3 hover:border-accent transition">
-                    <div className="text-sm font-semibold text-night-900">{s.name}</div>
-                    <div className="text-xs text-night-500">{s.sku || "—"}</div>
-                    <div className="text-xs text-night-500">Цена: {formatCurrency(s.final_price || 0)}</div>
-                  </Link>
-                ))}
+        <div className="glass-card p-8 space-y-6">
+          <h3 className="font-bold text-night-900 text-lg">Состав готового решения</h3>
+          {compositionSections.length === 0 ? (
+            <p className="text-sm text-night-500">Состав не указан.</p>
+          ) : (
+            compositionSections.map(({ title, items }) => (
+              <div key={title} className="space-y-3">
+                <h4 className="text-sm font-semibold text-night-700 uppercase tracking-wide">{title}</h4>
+                <div className="space-y-2">
+                  {items.map((module) => (
+                    <Link
+                      key={module.id}
+                      to={`/catalog/${module.id}`}
+                      className="flex items-start justify-between gap-4 rounded-lg border border-night-100 p-3 hover:border-accent transition"
+                    >
+                      <div className="space-y-1 text-sm">
+                        <p className="font-semibold text-night-900">{module.name}</p>
+                        {module.sku && <p className="text-night-500">Артикул: {module.sku}</p>}
+                        {(module.lengthMm || module.depthMm || module.heightMm) && (
+                          <p className="text-night-500 text-xs">
+                            {module.lengthMm || "—"}×{module.depthMm || "—"}×{module.heightMm || "—"} мм
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold text-night-900 whitespace-nowrap">
+                        {formatCurrency(module.finalPrice || 0)}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
               </div>
-            </div>
+            ))
           )}
         </div>
+
+        {componentModules.length > 0 && (
+          <div className="glass-card p-8">
+            <h3 className="font-bold text-night-900 mb-4 text-lg">Компоненты ({componentModules.length})</h3>
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {componentModules.map((module) => (
+                <ProductCard key={module.id} product={module} onAdd={(item) => addItem(item, 1)} />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

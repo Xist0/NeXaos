@@ -3,8 +3,10 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import useApi from "../hooks/useApi";
 import useCart from "../hooks/useCart";
 import SecureButton from "../components/ui/SecureButton";
+import ProductCard from "../components/ui/ProductCard";
 import { formatCurrency } from "../utils/format";
 import ColorBadge from "../components/ui/ColorBadge";
+import FavoriteButton from "../components/ui/FavoriteButton";
 import useLogger from "../hooks/useLogger";
 
 const placeholderImage =
@@ -20,7 +22,8 @@ const ProductPage = () => {
   const [images, setImages] = useState([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("characteristics");
+  const [variants, setVariants] = useState([]);
+  const [variantsLoading, setVariantsLoading] = useState(false);
   const getRef = useRef(get);
   const isFetchingRef = useRef(false);
   const lastIdRef = useRef(null);
@@ -266,17 +269,23 @@ const ProductPage = () => {
       if (categoryCode) params.set("category", categoryCode);
     }
     
-    // Добавляем фильтры по цветам
-    if (product.primary_color_id) {
-      params.set("primaryColorId", product.primary_color_id);
-    } else if (product.facade_color) {
+    // Добавляем фильтры по цветам (каталог понимает facadeColor/corpusColor)
+    if (product.facade_color) {
       params.set("facadeColor", product.facade_color);
     }
-    
-    if (product.secondary_color_id) {
-      params.set("secondaryColorId", product.secondary_color_id);
-    } else if (product.corpus_color) {
+    if (product.corpus_color) {
       params.set("corpusColor", product.corpus_color);
+    }
+
+    // Поиск по совпадениям в названии
+    if (product.name) {
+      params.set("search", product.name);
+    }
+
+    // Размер (каталог сейчас поддерживает lengthFrom/lengthTo)
+    if (product.length_mm) {
+      params.set("lengthFrom", String(product.length_mm));
+      params.set("lengthTo", String(product.length_mm));
     }
     
     // Фильтр по основе артикула
@@ -287,6 +296,56 @@ const ProductPage = () => {
     // Переходим в каталог с фильтрами
     navigate(`/catalog?${params.toString()}`);
   };
+
+  useEffect(() => {
+    if (!product?.id) return;
+    if (!product?.name) {
+      setVariants([]);
+      return;
+    }
+
+    let active = true;
+    const abortController = new AbortController();
+
+    const fetchVariants = async () => {
+      setVariantsLoading(true);
+      try {
+        const queryParams = {
+          search: product.name,
+        };
+
+        if (product.facade_color) queryParams.facadeColor = product.facade_color;
+        if (product.corpus_color) queryParams.corpusColor = product.corpus_color;
+        if (product.length_mm) {
+          queryParams.lengthFrom = product.length_mm;
+          queryParams.lengthTo = product.length_mm;
+        }
+
+        const res = await getRef.current("/modules", queryParams, {
+          signal: abortController.signal,
+        });
+        const list = Array.isArray(res?.data) ? res.data : [];
+
+        if (!active || abortController.signal.aborted) return;
+
+        const filtered = list.filter((x) => x && x.id && x.id !== product.id && x.is_active);
+        setVariants(filtered.slice(0, 12));
+      } catch (e) {
+        if (active && !abortController.signal.aborted) {
+          setVariants([]);
+        }
+      } finally {
+        if (active) setVariantsLoading(false);
+      }
+    };
+
+    fetchVariants();
+
+    return () => {
+      active = false;
+      abortController.abort();
+    };
+  }, [product?.id, product?.name, product?.facade_color, product?.corpus_color, product?.length_mm]);
 
   if (loading) {
     return (
@@ -421,9 +480,12 @@ const ProductPage = () => {
         {/* Product Info */}
         <div className="space-y-6">
           <div>
-            <h1 className="text-4xl font-bold text-night-900 mb-3 leading-tight">
-              {product.name}
-            </h1>
+            <div className="flex items-start justify-between gap-4">
+              <h1 className="text-4xl font-bold text-night-900 mb-3 leading-tight">
+                {product.name}
+              </h1>
+              <FavoriteButton product={product} className="flex-shrink-0 mt-2" />
+            </div>
             {product.sku && (
               <p className="text-sm text-night-500">
                 Артикул: <span className="font-medium text-night-700">{product.sku}</span>
@@ -438,23 +500,23 @@ const ProductPage = () => {
           )}
 
           {/* Price Section */}
-          <div className="bg-night-50 rounded-lg p-6 border border-night-200">
-            <div className="flex items-baseline gap-4 mb-4">
-              <span className="text-5xl font-bold text-accent">
+          <div className="bg-night-50 rounded-lg p-4 border border-night-200">
+            <div className="flex items-baseline gap-3 mb-3">
+              <span className="text-4xl font-bold text-accent">
                 {formatCurrency(product.final_price || product.price || 0)}
               </span>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2">
               <SecureButton
                 onClick={handleAddToCart}
-                className="w-full justify-center py-4 text-lg font-semibold"
+                className="w-full justify-center py-3 text-base font-semibold"
               >
                 В корзину
               </SecureButton>
               <SecureButton
                 onClick={handleFindSimilar}
                 variant="outline"
-                className="w-full justify-center py-3 text-base"
+                className="w-full justify-center py-2 text-sm"
               >
                 Похожие товары
               </SecureButton>
@@ -550,8 +612,8 @@ const ProductPage = () => {
           </div>
 
           {/* Delivery Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-900">
+          <div className="bg-night-50 border border-night-200 rounded-lg p-4">
+            <p className="text-sm text-night-900">
               <span className="font-semibold">Доставка:</span> По всей России. 
               Сроки и стоимость доставки уточняйте при оформлении заказа.
             </p>
@@ -559,39 +621,8 @@ const ProductPage = () => {
         </div>
       </div>
 
-      {/* Tabs Section */}
-      <div className="mb-8">
-        <div className="border-b border-night-200">
-          <div className="flex gap-8">
-            <button
-              onClick={() => setActiveTab("characteristics")}
-              className={`pb-4 px-1 font-semibold text-sm uppercase tracking-wide transition ${
-                activeTab === "characteristics"
-                  ? "text-night-900 border-b-2 border-accent"
-                  : "text-night-500 hover:text-night-700"
-              }`}
-            >
-              Характеристики
-            </button>
-            {product.notes && (
-              <button
-                onClick={() => setActiveTab("description")}
-                className={`pb-4 px-1 font-semibold text-sm uppercase tracking-wide transition ${
-                  activeTab === "description"
-                    ? "text-night-900 border-b-2 border-accent"
-                    : "text-night-500 hover:text-night-700"
-                }`}
-              >
-                Описание
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Content */}
-      <div className="glass-card p-8 mb-12">
-        {activeTab === "characteristics" && (
+      <div className="space-y-6 mb-12">
+        <div className="glass-card p-8">
           <div className="grid gap-8 md:grid-cols-3">
             <div>
               <h3 className="font-bold text-night-900 mb-4 text-lg">Основные характеристики</h3>
@@ -677,15 +708,49 @@ const ProductPage = () => {
               </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {activeTab === "description" && product.notes && (
-          <div className="prose max-w-none">
-            <div className="text-night-700 leading-relaxed whitespace-pre-line text-base">
-              {product.notes}
+        {product.notes && (
+          <div className="glass-card p-8">
+            <h3 className="font-bold text-night-900 mb-4 text-lg">Описание</h3>
+            <div className="prose max-w-none">
+              <div className="text-night-700 leading-relaxed whitespace-pre-line text-base">
+                {product.notes}
+              </div>
             </div>
           </div>
         )}
+
+        <div className="glass-card p-8">
+          <div className="flex items-center justify-between gap-4">
+            <h3 className="font-bold text-night-900 text-lg">Варианты</h3>
+            <SecureButton
+              variant="outline"
+              onClick={handleFindSimilar}
+              className="text-sm"
+            >
+              Показать в каталоге
+            </SecureButton>
+          </div>
+
+          <div className="mt-4">
+            {variantsLoading ? (
+              <div className="text-night-500">Загружаем варианты...</div>
+            ) : variants.length === 0 ? (
+              <div className="text-night-500">Варианты не найдены</div>
+            ) : (
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {variants.map((v) => (
+                  <ProductCard
+                    key={v.id}
+                    product={v}
+                    onAdd={(p) => addItem(p, 1)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

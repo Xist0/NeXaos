@@ -81,12 +81,13 @@ const SecureButton = ({
       type={type}
       data-safe-click
       className={clsx(
-        "secure-button",
-        variant === "ghost" &&
-          "bg-transparent text-night-900 shadow-none border border-night-200 hover:border-night-400 hover:text-night-600",
-        variant === "outline" &&
-          "bg-white text-night-900 border border-night-200 shadow-sm hover:border-night-400",
-        busy && "is-busy",
+        "relative inline-flex items-center justify-center rounded-full px-6 py-3 font-semibold tracking-wide transition-transform duration-200 shadow-md",
+        variant === "ghost"
+          ? "bg-transparent text-night-900 shadow-none border border-transparent hover:bg-night-100"
+          : variant === "outline"
+          ? "bg-white text-night-900 border border-night-200 shadow-sm hover:border-night-400 hover:bg-night-50"
+          : "bg-[#e3e161] text-[#21262d] hover:bg-[#d6d04d]",
+        busy && "opacity-60 cursor-not-allowed",
         className
       )}
       aria-busy={busy}

@@ -30,8 +30,12 @@ const EntityManager = ({ title, endpoint, fields }) => {
 
   const [availableModules, setAvailableModules] = useState([]);
   const modulesLoadedRef = useRef(false);
-  const [kitSelectedBottomIds, setKitSelectedBottomIds] = useState([]);
-  const [kitSelectedTopIds, setKitSelectedTopIds] = useState([]);
+  // Store modules with their quantities
+  const [kitSelectedBottomModules, setKitSelectedBottomModules] = useState([]);
+  const [kitSelectedTopModules, setKitSelectedTopModules] = useState([]);
+  
+  // Generate unique IDs for each module instance
+  const generateModuleId = useRef(0);
   const [kitCalc, setKitCalc] = useState(null);
   const [kitCompat, setKitCompat] = useState(null);
   const kitCalcInFlightRef = useRef(false);
@@ -306,13 +310,23 @@ const EntityManager = ({ title, endpoint, fields }) => {
           const data = res?.data || {};
           setForm(data);
           const bottom = Array.isArray(data?.modules?.bottom)
-            ? data.modules.bottom.map((m) => m.id).filter(Boolean)
+            ? data.modules.bottom.map(m => ({
+                id: generateModuleId.current++,
+                moduleId: m.id,
+                moduleData: m,
+                quantity: 1
+              }))
             : [];
           const top = Array.isArray(data?.modules?.top)
-            ? data.modules.top.map((m) => m.id).filter(Boolean)
+            ? data.modules.top.map(m => ({
+                id: generateModuleId.current++,
+                moduleId: m.id,
+                moduleData: m,
+                quantity: 1
+              }))
             : [];
-          setKitSelectedBottomIds(bottom);
-          setKitSelectedTopIds(top);
+          setKitSelectedBottomModules(bottom);
+          setKitSelectedTopModules(top);
           setKitCalc(data?.calculatedDimensions || null);
           setKitCompat(null);
         })
@@ -404,9 +418,15 @@ const EntityManager = ({ title, endpoint, fields }) => {
 
     // Готовые решения: добавляем состав модулей и автозаполняем размеры
     if (endpoint === "/kit-solutions") {
-      const moduleIds = [...kitSelectedBottomIds, ...kitSelectedTopIds]
-        .map((v) => Number(v))
-        .filter((v) => Number.isFinite(v));
+      // Flatten modules with quantities
+      const moduleIds = [
+        ...kitSelectedBottomModules.flatMap(m => 
+          Array(m.quantity).fill(Number(m.moduleId))
+        ),
+        ...kitSelectedTopModules.flatMap(m => 
+          Array(m.quantity).fill(Number(m.moduleId))
+        )
+      ].filter(Boolean);
 
       // Материал: приводим к числу или null
       if (payload.material_id !== undefined) {
@@ -425,8 +445,12 @@ const EntityManager = ({ title, endpoint, fields }) => {
       // total_depth_mm = max глубина нижних
       // total_height_mm = max высота нижних + max высота верхних
       const byId = new Map(availableModules.map((m) => [Number(m.id), m]));
-      const bottomMods = kitSelectedBottomIds.map((id) => byId.get(Number(id))).filter(Boolean);
-      const topMods = kitSelectedTopIds.map((id) => byId.get(Number(id))).filter(Boolean);
+      const bottomMods = kitSelectedBottomModules.flatMap(({moduleId, quantity}) => 
+        Array(quantity).fill(byId.get(Number(moduleId))).filter(Boolean)
+      );
+      const topMods = kitSelectedTopModules.flatMap(({moduleId, quantity}) => 
+        Array(quantity).fill(byId.get(Number(moduleId))).filter(Boolean)
+      );
       const bottomTotal = bottomMods.reduce((s, m) => s + (Number(m.length_mm) || 0), 0);
       const bottomMaxDepth = Math.max(0, ...bottomMods.map((m) => Number(m.depth_mm) || 0));
       const bottomMaxHeight = Math.max(0, ...bottomMods.map((m) => Number(m.height_mm) || 0));
@@ -443,6 +467,17 @@ const EntityManager = ({ title, endpoint, fields }) => {
       payload.moduleIds = moduleIds;
     }
 
+    // Проверка уникальности SKU для kit-solutions
+    if (endpoint === "/kit-solutions" && payload.sku && !editingId) {
+      const existingSku = items.find(item => 
+        item.sku && item.sku.toLowerCase() === payload.sku.toLowerCase()
+      );
+      if (existingSku) {
+        logger.error(`Готовое решение с артикулом "${payload.sku}" уже существует (ID: ${existingSku.id})`);
+        return;
+      }
+    }
+    
     // Валидация: проверяем обязательные поля
     const requiredFields = allFields.filter(f => f.required);
     const missingFields = requiredFields.filter(field => {
@@ -648,15 +683,28 @@ const EntityManager = ({ title, endpoint, fields }) => {
                 <select
                   value={""}
                   onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (!v) return;
-                    setKitSelectedBottomIds((prev) => (prev.includes(v) ? prev : [...prev, v]));
+                    const moduleId = Number(e.target.value);
+                    if (!moduleId) return;
+                    
+                    const moduleData = availableModules.find(m => m.id === moduleId);
+                    if (!moduleData) return;
+
+                    setKitSelectedBottomModules(prev => [
+                      ...prev,
+                      {
+                        id: generateModuleId.current++,
+                        moduleId,
+                        moduleData,
+                        quantity: 1
+                      }
+                    ]);
                   }}
                   className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
                 >
                   <option value="">+ Добавить нижний модуль...</option>
                   {availableModules
-                    .filter((m) => String(m.base_sku || "").startsWith("Н") || String(m.module_category_id || ""))
+                    .filter((m) => String(m.base_sku || "").startsWith("Н") || 
+                             (m.module_category_id && m.module_category_id.toString().includes('bottom')))
                     .map((m) => (
                       <option key={`bottom-${m.id}`} value={m.id}>
                         #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
@@ -664,19 +712,63 @@ const EntityManager = ({ title, endpoint, fields }) => {
                     ))}
                 </select>
 
-                <div className="flex flex-wrap gap-2">
-                  {kitSelectedBottomIds.map((id) => {
-                    const m = availableModules.find((x) => Number(x.id) === Number(id));
+                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {kitSelectedBottomModules.map(({id, moduleId, moduleData, quantity}) => {
+                    const moduleInfo = moduleData || availableModules.find(m => m.id === moduleId);
                     return (
-                      <div key={`b-${id}`} className="flex items-center gap-2 border border-night-200 rounded-lg px-2 py-1">
-                        <span className="text-xs text-night-900">{m ? m.name : `#${id}`}</span>
-                        <button
-                          type="button"
-                          className="text-xs text-red-600"
-                          onClick={() => setKitSelectedBottomIds((prev) => prev.filter((x) => Number(x) !== Number(id)))}
-                        >
-                          ×
-                        </button>
+                      <div key={`b-${id}`} className="flex flex-col border border-night-200 rounded-lg p-2 bg-white">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-night-900 truncate">
+                              {moduleInfo?.name || `Модуль #${moduleId}`}
+                            </p>
+                            {moduleInfo && (
+                              <p className="text-xs text-night-500">
+                                {moduleInfo.length_mm}×{moduleInfo.depth_mm}×{moduleInfo.height_mm} мм
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 ml-2">
+                            <button
+                              type="button"
+                              className="w-6 h-6 flex items-center justify-center border border-night-200 rounded-full text-xs"
+                              onClick={() => setKitSelectedBottomModules(prev => 
+                                prev.map(m => m.id === id ? {...m, quantity: Math.max(1, m.quantity - 1)} : m)
+                              )}
+                            >
+                              -
+                            </button>
+                            <span className="text-sm w-4 text-center">{quantity}</span>
+                            <button
+                              type="button"
+                              className="w-6 h-6 flex items-center justify-center border border-night-200 rounded-full text-xs"
+                              onClick={() => setKitSelectedBottomModules(prev => 
+                                prev.map(m => m.id === id ? {...m, quantity: m.quantity + 1} : m)
+                              )}
+                            >
+                              +
+                            </button>
+                            <button
+                              type="button"
+                              className="text-red-600 hover:text-red-800 ml-1"
+                              onClick={() => setKitSelectedBottomModules(prev => 
+                                prev.filter(m => m.id !== id)
+                              )}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                        {moduleInfo?.preview_url && (
+                          <img 
+                            src={moduleInfo.preview_url} 
+                            alt={moduleInfo.name}
+                            className="mt-2 h-16 w-full object-contain rounded"
+                            onError={(e) => {
+                              if (e.target) e.target.style.display = 'none';
+                            }}
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -688,15 +780,28 @@ const EntityManager = ({ title, endpoint, fields }) => {
                 <select
                   value={""}
                   onChange={(e) => {
-                    const v = Number(e.target.value);
-                    if (!v) return;
-                    setKitSelectedTopIds((prev) => (prev.includes(v) ? prev : [...prev, v]));
+                    const moduleId = Number(e.target.value);
+                    if (!moduleId) return;
+                    
+                    const moduleData = availableModules.find(m => m.id === moduleId);
+                    if (!moduleData) return;
+
+                    setKitSelectedTopModules(prev => [
+                      ...prev,
+                      {
+                        id: generateModuleId.current++,
+                        moduleId,
+                        moduleData,
+                        quantity: 1
+                      }
+                    ]);
                   }}
                   className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
                 >
                   <option value="">+ Добавить верхний модуль...</option>
                   {availableModules
-                    .filter((m) => String(m.base_sku || "").startsWith("В") || String(m.module_category_id || ""))
+                    .filter((m) => String(m.base_sku || "").startsWith("В") || 
+                             (m.module_category_id && m.module_category_id.toString().includes('top')))
                     .map((m) => (
                       <option key={`top-${m.id}`} value={m.id}>
                         #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
@@ -704,19 +809,63 @@ const EntityManager = ({ title, endpoint, fields }) => {
                     ))}
                 </select>
 
-                <div className="flex flex-wrap gap-2">
-                  {kitSelectedTopIds.map((id) => {
-                    const m = availableModules.find((x) => Number(x.id) === Number(id));
+                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {kitSelectedTopModules.map(({id, moduleId, moduleData, quantity}) => {
+                    const moduleInfo = moduleData || availableModules.find(m => m.id === moduleId);
                     return (
-                      <div key={`t-${id}`} className="flex items-center gap-2 border border-night-200 rounded-lg px-2 py-1">
-                        <span className="text-xs text-night-900">{m ? m.name : `#${id}`}</span>
-                        <button
-                          type="button"
-                          className="text-xs text-red-600"
-                          onClick={() => setKitSelectedTopIds((prev) => prev.filter((x) => Number(x) !== Number(id)))}
-                        >
-                          ×
-                        </button>
+                      <div key={`t-${id}`} className="flex flex-col border border-night-200 rounded-lg p-2 bg-white">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-night-900 truncate">
+                              {moduleInfo?.name || `Модуль #${moduleId}`}
+                            </p>
+                            {moduleInfo && (
+                              <p className="text-xs text-night-500">
+                                {moduleInfo.length_mm}×{moduleInfo.depth_mm}×{moduleInfo.height_mm} мм
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 ml-2">
+                            <button
+                              type="button"
+                              className="w-6 h-6 flex items-center justify-center border border-night-200 rounded-full text-xs"
+                              onClick={() => setKitSelectedTopModules(prev => 
+                                prev.map(m => m.id === id ? {...m, quantity: Math.max(1, m.quantity - 1)} : m)
+                              )}
+                            >
+                              -
+                            </button>
+                            <span className="text-sm w-4 text-center">{quantity}</span>
+                            <button
+                              type="button"
+                              className="w-6 h-6 flex items-center justify-center border border-night-200 rounded-full text-xs"
+                              onClick={() => setKitSelectedTopModules(prev => 
+                                prev.map(m => m.id === id ? {...m, quantity: m.quantity + 1} : m)
+                              )}
+                            >
+                              +
+                            </button>
+                            <button
+                              type="button"
+                              className="text-red-600 hover:text-red-800 ml-1"
+                              onClick={() => setKitSelectedTopModules(prev => 
+                                prev.filter(m => m.id !== id)
+                              )}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        </div>
+                        {moduleInfo?.preview_url && (
+                          <img 
+                            src={moduleInfo.preview_url} 
+                            alt={moduleInfo.name}
+                            className="mt-2 h-16 w-full object-contain rounded"
+                            onError={(e) => {
+                              if (e.target) e.target.style.display = 'none';
+                            }}
+                          />
+                        )}
                       </div>
                     );
                   })}
