@@ -15,13 +15,13 @@ const CatalogPage = () => {
   const [items, setItems] = useState([]);
   const [kitSolutions, setKitSolutions] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Проверяем, пришли ли мы со страницы товара
   const fromProduct = searchParams.get("fromProduct") === "1";
   const isInitialMount = useRef(true);
   const isFirstDebounce = useRef(true);
   const isQueryInitialized = useRef(false);
-  
+
   // Инициализируем состояние с учетом того, пришли ли мы со страницы товара
   const [activeCategory, setActiveCategory] = useState(() => {
     if (!fromProduct) return "all";
@@ -31,7 +31,7 @@ const CatalogPage = () => {
     if (!fromProduct) return null;
     return searchParams.get("subCategory") || null;
   });
-  
+
   // Инициализируем фильтры - сбрасываем если не пришли со страницы товара
   const [filters, setFilters] = useState(() => {
     if (!fromProduct) {
@@ -57,10 +57,10 @@ const CatalogPage = () => {
       baseSku: searchParams.get("baseSku") || "",
     };
   });
-  
+
   // Debounced фильтры для оптимизации запросов
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
-  
+
   const [moduleCategories, setModuleCategories] = useState([]);
   const [moduleTypes, setModuleTypes] = useState([]);
   const getRef = useRef(get);
@@ -75,7 +75,6 @@ const CatalogPage = () => {
   useEffect(() => {
     if (isInitialMount.current && !fromProduct) {
       isInitialMount.current = false;
-      // Очищаем параметр fromProduct из URL если он был
       const params = new URLSearchParams();
       setSearchParams(params, { replace: true });
     } else {
@@ -115,13 +114,12 @@ const CatalogPage = () => {
 
   // Debounce для фильтров (оптимизация запросов)
   useEffect(() => {
-    // При первом рендере сразу устанавливаем debouncedFilters без задержки
     if (isFirstDebounce.current) {
       isFirstDebounce.current = false;
       setDebouncedFilters(filters);
       return;
     }
-    
+
     const timer = setTimeout(() => {
       setDebouncedFilters(filters);
     }, 500);
@@ -138,33 +136,33 @@ const CatalogPage = () => {
       if (value) params.set(key, value);
     });
     setSearchParams(params, { replace: true });
-  }, [activeCategory, activeSubCategory, debouncedFilters, debouncedQuery, setSearchParams]);
+  }, [
+    activeCategory,
+    activeSubCategory,
+    debouncedFilters,
+    debouncedQuery,
+    setSearchParams,
+  ]);
 
   // Оптимизированный эффект загрузки данных с использованием debounced фильтров
   useEffect(() => {
     let active = true;
     const abortController = new AbortController();
-    
+
     const fetchItems = async () => {
-      // Проверяем, не идет ли уже запрос
-      if (isFetchingRef.current) {
-        return;
-      }
-      
+      if (isFetchingRef.current) return;
+
       isFetchingRef.current = true;
       setLoading(true);
-      
+
       try {
-        // Формируем параметры запроса
         const queryParams = {};
         if (debouncedQuery) queryParams.search = debouncedQuery;
-        
-        // Добавляем debounced фильтры
+
         Object.entries(debouncedFilters).forEach(([key, value]) => {
           if (value) queryParams[key] = value;
         });
-        
-        // Загружаем данные в зависимости от выбранной категории
+
         if (activeCategory === "kitSolutions") {
           const response = await getRef.current("/kit-solutions", queryParams);
           if (active && !abortController.signal.aborted) {
@@ -194,20 +192,18 @@ const CatalogPage = () => {
             isFetchingRef.current = false;
           }
         } else {
-          // Для модулей добавляем фильтр по категории
           if (activeCategory !== "all") {
-            const category = moduleCategories.find(c => c.code === activeCategory);
-            if (category) {
-              queryParams.categoryId = category.id;
-            }
+            const category = moduleCategories.find((c) => c.code === activeCategory);
+            if (category) queryParams.categoryId = category.id;
           }
-          
-          // Фильтр по основе артикула для подкатегорий
-          if (activeSubCategory) {
-            queryParams.baseSku = activeSubCategory;
-          }
-          
-          const response = await getRef.current("/modules", Object.keys(queryParams).length > 0 ? queryParams : undefined);
+
+          if (activeSubCategory) queryParams.baseSku = activeSubCategory;
+
+          const response = await getRef.current(
+            "/modules",
+            Object.keys(queryParams).length > 0 ? queryParams : undefined
+          );
+
           if (active && !abortController.signal.aborted) {
             setItems(response?.data || []);
             setKitSolutions([]);
@@ -225,10 +221,9 @@ const CatalogPage = () => {
         }
       }
     };
-    
-    // Вызываем загрузку сразу
+
     fetchItems();
-    
+
     return () => {
       active = false;
       abortController.abort();
@@ -236,7 +231,7 @@ const CatalogPage = () => {
     };
   }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, moduleCategories]);
 
-  // Получаем подкатегории для нижних и верхних модулей
+  // Подкатегории
   const bottomSubCategories = useMemo(() => {
     if (activeCategory !== "bottom") return [];
     return [
@@ -265,15 +260,16 @@ const CatalogPage = () => {
     return items;
   }, [activeCategory, kitSolutions, items]);
 
-  // Оптимизированная фильтрация активных товаров с useMemo
   const activeItems = useMemo(() => {
     return displayItems.filter((item) => item.is_active);
   }, [displayItems]);
 
-  // Мемоизированная функция для добавления в корзину
-  const handleAddToCart = useCallback((product) => {
-    addItem(product);
-  }, [addItem]);
+  const handleAddToCart = useCallback(
+    (product) => {
+      addItem(product);
+    },
+    [addItem]
+  );
 
   const renderCategoryLink = (code, label, subCategories = []) => {
     const isActive = activeCategory === code;
@@ -326,10 +322,12 @@ const CatalogPage = () => {
         />
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[280px_1fr]">
+      <div className="grid gap-8 lg:grid-cols-[350px_1fr]">
         <aside className="space-y-6">
           <div className="glass-card p-4">
-            <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide px-3">Категории</h3>
+            <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide px-3">
+              Категории
+            </h3>
             <nav className="mt-3 space-y-1">
               {renderCategoryLink("all", "Все")}
               {renderCategoryLink("kitSolutions", "Готовые решения")}
@@ -343,16 +341,22 @@ const CatalogPage = () => {
 
           <div className="glass-card p-5">
             <div className="flex items-center justify-between gap-4">
-              <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide">Фильтры</h3>
+              <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide">
+                Фильтры
+              </h3>
               <SecureButton
                 variant="outline"
                 className="px-4 py-2 text-xs"
                 onClick={() => {
                   setFilters({
-                    facadeColor: "", corpusColor: "",
-                    priceFrom: "", priceTo: "",
-                    lengthFrom: "", lengthTo: "",
-                    categoryId: "", baseSku: "",
+                    facadeColor: "",
+                    corpusColor: "",
+                    priceFrom: "",
+                    priceTo: "",
+                    lengthFrom: "",
+                    lengthTo: "",
+                    categoryId: "",
+                    baseSku: "",
                   });
                 }}
               >
@@ -362,24 +366,60 @@ const CatalogPage = () => {
 
             <div className="mt-4 space-y-5">
               <div>
-                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Цвета</div>
+                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">
+                  Цвета
+                </div>
                 <div className="mt-3 space-y-3">
-                  <SecureInput value={filters.facadeColor} onChange={(v) => setFilters({ ...filters, facadeColor: v })} placeholder="Цвет фасада" />
-                  <SecureInput value={filters.corpusColor} onChange={(v) => setFilters({ ...filters, corpusColor: v })} placeholder="Цвет корпуса" />
+                  <SecureInput
+                    value={filters.facadeColor}
+                    onChange={(v) => setFilters({ ...filters, facadeColor: v })}
+                    placeholder="Цвет фасада"
+                  />
+                  <SecureInput
+                    value={filters.corpusColor}
+                    onChange={(v) => setFilters({ ...filters, corpusColor: v })}
+                    placeholder="Цвет корпуса"
+                  />
                 </div>
               </div>
+
               <div>
-                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Цена</div>
+                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">
+                  Цена
+                </div>
                 <div className="mt-3 grid grid-cols-2 gap-3">
-                  <SecureInput type="number" value={filters.priceFrom} onChange={(v) => setFilters({ ...filters, priceFrom: v })} placeholder="От" />
-                  <SecureInput type="number" value={filters.priceTo} onChange={(v) => setFilters({ ...filters, priceTo: v })} placeholder="До" />
+                  <SecureInput
+                    type="number"
+                    value={filters.priceFrom}
+                    onChange={(v) => setFilters({ ...filters, priceFrom: v })}
+                    placeholder="От"
+                  />
+                  <SecureInput
+                    type="number"
+                    value={filters.priceTo}
+                    onChange={(v) => setFilters({ ...filters, priceTo: v })}
+                    placeholder="До"
+                  />
                 </div>
               </div>
+
               <div>
-                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Размер (длина, мм)</div>
+                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">
+                  Размер (длина, мм)
+                </div>
                 <div className="mt-3 grid grid-cols-2 gap-3">
-                  <SecureInput type="number" value={filters.lengthFrom} onChange={(v) => setFilters({ ...filters, lengthFrom: v })} placeholder="От" />
-                  <SecureInput type="number" value={filters.lengthTo} onChange={(v) => setFilters({ ...filters, lengthTo: v })} placeholder="До" />
+                  <SecureInput
+                    type="number"
+                    value={filters.lengthFrom}
+                    onChange={(v) => setFilters({ ...filters, lengthFrom: v })}
+                    placeholder="От"
+                  />
+                  <SecureInput
+                    type="number"
+                    value={filters.lengthTo}
+                    onChange={(v) => setFilters({ ...filters, lengthTo: v })}
+                    placeholder="До"
+                  />
                 </div>
               </div>
             </div>
@@ -390,16 +430,22 @@ const CatalogPage = () => {
           {loading ? (
             <div className="glass-card p-6 text-night-500">Загружаем товары...</div>
           ) : (
-            <section className="space-y-4">
+            <section className="space-y-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-night-900">
                   {activeItems.length} позици{activeItems.length !== 1 ? "й" : "я"}
                 </h2>
               </div>
-              <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 items-stretch">
+
+              {/* ФИКС 300px + gap 40px + перенос строк */}
+              <div className="grid gap-10 justify-center [grid-template-columns:repeat(auto-fit,300px)]">
                 {activeItems.map((product, index) => (
                   <ProductCard
-                    key={product.id ? `product-${product.id}` : `product-${index}-${product.sku || product.name}`}
+                    key={
+                      product.id
+                        ? `product-${product.id}`
+                        : `product-${index}-${product.sku || product.name}`
+                    }
                     product={product}
                     onAdd={handleAddToCart}
                   />
@@ -420,4 +466,3 @@ const CatalogPage = () => {
 };
 
 export default CatalogPage;
-
