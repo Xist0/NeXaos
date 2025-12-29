@@ -2,6 +2,7 @@ import { useState } from "react";
 import SecureButton from "../components/ui/SecureButton";
 import OrdersTable from "../components/admin/OrdersTable";
 import EntityManager from "../components/admin/EntityManager";
+import ModuleCreator from "../components/admin/ModuleCreator";
 import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight } from "react-icons/fa";
 
 // Структура разделов админ панели
@@ -31,7 +32,7 @@ const adminSections = [
     icon: FaBook,
     items: [
       { id: "kitSolutions", label: "Готовые решения", endpoint: "/kit-solutions" },
-      { id: "modules", label: "Модули", endpoint: "/modules" },
+      { id: "modules", label: "Модули", endpoint: "/modules", special: "moduleCreator" },
       { id: "hardwareExtended", label: "Фурнитура", endpoint: "/hardware-extended" },
     ],
   },
@@ -51,17 +52,23 @@ const adminSections = [
   },
 ];
 
+// Полные конфигурации для EntityManager (ВСЕ БЕЗ ИЗМЕНЕНИЙ)
 const entityConfigs = {
-  colors: {
-    title: "Цвета",
-    endpoint: "/colors",
-    fields: [
-      { name: "name", label: "Название цвета", required: true },
-      { name: "sku", label: "Артикул" },
-      { name: "image_url", label: "Фотография", inputType: "image" },
-      { name: "is_active", label: "Активен", type: "checkbox" },
-    ],
-  },
+ colors: {
+  title: "Цвета",
+  endpoint: "/colors",
+  fields: [
+    { name: "name", label: "Название цвета", required: true },
+    { name: "sku", label: "Артикул" },
+    { name: "type", label: "Тип цвета", type: "select", options: [
+      { value: "facade", label: "Фасад (основной)" },
+      { value: "corpus", label: "Корпус (дополнительный)" },
+      { value: "", label: "Универсальный" }
+    ]},
+    { name: "image_url", label: "Фотография", inputType: "image" },
+    { name: "is_active", label: "Активен", type: "checkbox" },
+  ],
+},
   moduleTypes: {
     title: "Типы модулей",
     endpoint: "/module-types",
@@ -116,26 +123,6 @@ const entityConfigs = {
       { name: "base_price", label: "Базовая цена", type: "number" },
       { name: "final_price", label: "Итоговая цена", type: "number" },
       { name: "preview_url", label: "Превью", inputType: "image" },
-    ],
-  },
-  modules: {
-    title: "Модули",
-    endpoint: "/modules",
-    fields: [
-      // Видимые поля (для клиента)
-      { name: "sku", label: "Артикул", required: true, section: "visible" },
-      { name: "name", label: "Название", required: true, section: "visible" },
-      { name: "short_desc", label: "Короткое описание", section: "visible" },
-      { name: "description_id", label: "Подтип (описание)", section: "visible" },
-      { name: "length_mm", label: "Длина (мм)", type: "number", section: "visible" },
-      { name: "depth_mm", label: "Глубина (мм)", type: "number", section: "visible" },
-      { name: "height_mm", label: "Высота (мм)", type: "number", section: "visible" },
-      { name: "facade_color", label: "Цвет фасада", section: "visible" },
-      { name: "corpus_color", label: "Цвет корпуса", section: "visible" },
-      { name: "module_type_id", label: "Тип модуля (ID)", type: "number", section: "visible" },
-      { name: "module_category_id", label: "Категория (ID)", type: "number", section: "visible" },
-      { name: "final_price", label: "Итоговая цена", type: "number", required: true, section: "visible" },
-      { name: "preview_url", label: "Превью", inputType: "image", section: "visible" },
     ],
   },
   sheetMaterials: {
@@ -264,6 +251,7 @@ const AdminPage = () => {
   const currentSection = adminSections.find((s) => s.id === activeSection);
   const currentItem = currentSection?.items.find((item) => item.id === activeTab);
   const entityConfig = entityConfigs[activeTab];
+  const isModuleCreator = currentItem?.special === "moduleCreator";
 
   return (
     <div className="shop-container py-12 space-y-6">
@@ -294,10 +282,10 @@ const AdminPage = () => {
                 <div key={section.id} className="space-y-1">
                   <button
                     onClick={() => toggleSection(section.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition ${
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${
                       hasActiveTab
-                        ? "bg-accent/10 text-accent font-semibold"
-                        : "text-night-700 hover:bg-night-50"
+                        ? "bg-accent/10 text-accent font-semibold border border-accent/20 shadow-md"
+                        : "text-night-700 hover:bg-night-50 hover:shadow-sm"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -305,21 +293,21 @@ const AdminPage = () => {
                       <span>{section.label}</span>
                     </div>
                     {isExpanded ? (
-                      <FaChevronDown className="text-xs" />
+                      <FaChevronDown className="text-xs transition-transform rotate-180" />
                     ) : (
                       <FaChevronRight className="text-xs" />
                     )}
                   </button>
                   {isExpanded && (
-                    <div className="ml-8 space-y-1">
+                    <div className="ml-8 space-y-1 animate-in slide-in-from-left duration-300">
                       {section.items.map((item) => (
                         <button
                           key={item.id}
                           onClick={() => handleTabClick(item.id, { sectionId: section.id })}
-                          className={`w-full text-left px-4 py-2 rounded-lg transition ${
+                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
                             activeTab === item.id
-                              ? "bg-accent text-white font-semibold"
-                              : "text-night-600 hover:bg-night-50"
+                              ? "bg-accent text-white font-semibold shadow-md scale-[1.02] translate-y-[-1px]"
+                              : "text-night-600 hover:bg-night-50 hover:shadow-sm hover:translate-x-1"
                           }`}
                         >
                           {item.label}
@@ -335,8 +323,16 @@ const AdminPage = () => {
 
         {/* Основной контент */}
         <div className="lg:col-span-3">
+          {/* Заказы */}
           {activeTab === "orders" && <OrdersTable />}
-          {entityConfig && <EntityManager key={entityConfig.endpoint} {...entityConfig} />}
+          
+          {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ МОДУЛЕЙ */}
+          {isModuleCreator && <ModuleCreator />}
+          
+          {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
+          {entityConfig && !isModuleCreator && (
+            <EntityManager key={entityConfig.endpoint} {...entityConfig} />
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
+import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
 import useApi from "../hooks/useApi";
 import useCart from "../hooks/useCart";
 import SecureButton from "../components/ui/SecureButton";
@@ -9,32 +9,40 @@ import ColorBadge from "../components/ui/ColorBadge";
 import FavoriteButton from "../components/ui/FavoriteButton";
 import useLogger from "../hooks/useLogger";
 
-const placeholderImage =
-  "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=600&q=80";
+const placeholderImage = "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=600&q=80";
+
+const getImageUrl = (url) => {
+  if (!url) return placeholderImage;
+  if (url.startsWith('/uploads/')) {
+    return import.meta.env.DEV ? `http://localhost:5000${url}` : url;
+  }
+  return url;
+};
 
 const ProductPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { get } = useApi();
   const { addItem } = useCart();
   const logger = useLogger();
-  const [product, setProduct] = useState(null);
+
+  const [item, setItem] = useState(null); // module ИЛИ kitSolution
   const [images, setImages] = useState([]);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [variants, setVariants] = useState([]);
-  const [variantsLoading, setVariantsLoading] = useState(false);
+  const [similarItems, setSimilarItems] = useState([]);
+  const [similarLoading, setSimilarLoading] = useState(false);
+
   const getRef = useRef(get);
   const isFetchingRef = useRef(false);
   const lastIdRef = useRef(null);
-  const loadedProductRef = useRef(null);
-  const abortControllerRef = useRef(null);
-  const requestIdRef = useRef(0);
 
   useEffect(() => {
     getRef.current = get;
   }, [get]);
 
+  // Загрузка товара/комплекта
   useEffect(() => {
     if (!id || id === "undefined") {
       navigate("/catalog");
@@ -42,434 +50,239 @@ const ProductPage = () => {
     }
 
     const currentId = String(id);
-    const requestId = ++requestIdRef.current;
+    if (isFetchingRef.current && lastIdRef.current === currentId) return;
 
-    // Проверяем, есть ли уже загруженные данные для этого товара
-    if (loadedProductRef.current && String(loadedProductRef.current.id) === currentId) {
-      // Данные уже загружены для этого товара, не делаем запрос
-      console.log("Данные уже загружены для товара", currentId);
-      setProduct(loadedProductRef.current);
-      setLoading(false);
-      return;
-    }
-
-    // Если уже идет запрос для этого же товара, не делаем новый и НЕ отменяем старый
-    // Проверяем и isFetchingRef, и lastIdRef, чтобы быть уверенными
-    if ((isFetchingRef.current && lastIdRef.current === currentId) || 
-        (lastIdRef.current === currentId && abortControllerRef.current)) {
-      console.log("Запрос уже выполняется для товара", currentId, "- не создаем новый и не отменяем старый", {
-        isFetching: isFetchingRef.current,
-        lastId: lastIdRef.current,
-        hasAbortController: !!abortControllerRef.current
-      });
-      // Не делаем новый запрос, но проверяем, может данные уже есть
-      if (loadedProductRef.current && String(loadedProductRef.current.id) === currentId) {
-        setProduct(loadedProductRef.current);
-        setLoading(false);
-      }
-      return;
-    }
-
-    // Отменяем предыдущий запрос только если это другой товар
-    if (abortControllerRef.current && lastIdRef.current !== currentId) {
-      console.log("Отменяем предыдущий запрос для другого товара", { 
-        lastId: lastIdRef.current, 
-        currentId 
-      });
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-
-    // Если изменился товар, сбрасываем данные
-    if (lastIdRef.current !== currentId) {
-      isFetchingRef.current = false;
-      setProduct(null);
-      setImages([]);
-      loadedProductRef.current = null;
-    }
-
+    isFetchingRef.current = true;
     lastIdRef.current = currentId;
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    setLoading(true);
+
     let active = true;
+    const abortController = new AbortController();
 
-    const fetchProduct = async () => {
-      // Проверяем, не устарел ли этот запрос
-      if (requestId !== requestIdRef.current || abortController.signal.aborted) {
-        console.log("Запрос отменен на старте", { requestId, currentRequestId: requestIdRef.current, aborted: abortController.signal.aborted });
-        return;
-      }
-      
-      // Если уже идет запрос для этого же товара, не делаем новый
-      if (isFetchingRef.current && lastIdRef.current === currentId) {
-        console.log("Запрос уже выполняется");
-        return;
-      }
-      
-      isFetchingRef.current = true;
-      setLoading(true);
+    const fetchItem = async () => {
       try {
-        console.log("Запрос товара начат", { id, currentId, requestId });
-        const productResponse = await getRef.current(`/modules/${id}`);
-        console.log("Ответ получен", { productResponse, requestId, currentRequestId: requestIdRef.current });
-
-        // useApi.get() возвращает axios response.
-        // useApi нормализует обертку { data: ... }, поэтому productResponse.data = объект товара.
-        let productData = null;
-        const payload = productResponse?.data;
-        if (payload && typeof payload === "object" && payload.id) {
-          productData = payload;
-        }
-        
-        // Проверяем, что данные валидны
-        if (!productData || !productData.id) {
-          console.error("Ошибка обработки товара:", { productResponse, productData, id });
-          throw new Error("Товар не найден или не содержит ID");
-        }
-        
-        // Проверяем, не был ли запрос отменен перед сохранением данных
-        // Важно: если данные валидны и ID совпадает, сохраняем их В ЛЮБОМ СЛУЧАЕ
-        // Даже если запрос был отменен (aborted), если данные валидны - сохраняем их
-        
-        // Проверяем ID перед сохранением - это главная проверка
-        if (lastIdRef.current !== currentId) {
-          console.log("ID изменился, не сохраняем данные", { 
-            lastId: lastIdRef.current, 
-            currentId,
-            productDataId: productData.id 
+        // Пробуем сначала kit-solution
+        try {
+          const kitRes = await getRef.current(`/kit-solutions/${id}`, undefined, { 
+            signal: abortController.signal 
           });
-          setLoading(false);
-          return;
-        }
-        
-        // Проверяем, что productData.id совпадает с currentId
-        if (productData.id !== Number(currentId)) {
-          console.log("ID товара не совпадает с currentId", { 
-            productDataId: productData.id, 
-            currentId 
-          });
-          setLoading(false);
-          return;
-        }
-        
-        // Если мы дошли сюда, данные валидны и ID совпадает - СОХРАНЯЕМ ИХ!
-        // Не проверяем abortController.signal.aborted или active - если данные получены и валидны, сохраняем
-        console.log("✓ Данные валидны и ID совпадает - сохраняем независимо от состояния запроса", {
-          productDataId: productData.id,
-          currentId,
-          aborted: abortController.signal.aborted,
-          active
-        });
-        
-        // Если мы дошли сюда, данные валидны и ID совпадает - СОХРАНЯЕМ ИХ СРАЗУ!
-        // Сохраняем данные ДО загрузки изображений, чтобы они точно сохранились
-        console.log("✓ Сохранение данных товара (до загрузки изображений)", { 
-          productId: productData.id, 
-          productName: productData.name,
-          currentId,
-          lastId: lastIdRef.current
-        });
-        loadedProductRef.current = productData;
-        setProduct(productData);
-        setLoading(false); // Устанавливаем loading = false сразу после сохранения данных
-        console.log("✓ Данные товара установлены в state");
-        
-        // Теперь загружаем изображения (это не критично, можно пропустить)
-        const imagesResponse = await getRef.current(`/images/modules/${id}`).catch((err) => {
-          console.warn("Не удалось загрузить изображения:", err);
-          return { data: { data: [] } };
-        });
-        
-        // Проверяем ID еще раз после загрузки изображений (только ID, не abortController)
-        if (lastIdRef.current !== currentId) {
-          console.log("ID изменился после загрузки изображений, но данные уже сохранены");
-          return;
-        }
-        
-        // Обрабатываем изображения - useApi.get() возвращает axios response.
-        // useApi нормализует обертку { data: [...] }, поэтому imagesResponse.data = массив.
-        let imageList = [];
-        const imagesPayload = imagesResponse?.data;
-        if (Array.isArray(imagesPayload)) imageList = imagesPayload;
-        
-        setImages(imageList);
-        setSelectedImageIndex(0);
-        console.log("Загрузка завершена, устанавливаем loading = false");
-        setLoading(false);
-      } catch (error) {
-        console.error("Ошибка в fetchProduct:", error);
-        if (!abortController.signal.aborted && active && lastIdRef.current === currentId && requestId === requestIdRef.current) {
-          console.error("Ошибка загрузки товара:", error);
-          logger.error("Не удалось загрузить товар. Переходим в каталог.");
-          setLoading(false);
-          navigate("/catalog");
-        } else {
-          // Если запрос был отменен, все равно сбрасываем loading
-          if (active && lastIdRef.current === currentId) {
-            setLoading(false);
+          if (active && kitRes?.data) {
+            setItem({ ...kitRes.data, __type: "kitSolution" });
+            // Для kit нет отдельных изображений
+            setImages([]);
+            setSimilarLoading(false);
+            setSimilarItems([]);
+          } else {
+            // Если kit не найден — модуль
+            const moduleRes = await getRef.current(`/modules/${id}`, undefined, { 
+              signal: abortController.signal 
+            });
+            if (active && moduleRes?.data) {
+              const itemData = moduleRes.data;
+              setItem(itemData);
+              
+              // Загружаем изображения модуля
+              try {
+                const imagesRes = await getRef.current(`/images/modules/${id}`, undefined, { 
+                  signal: abortController.signal 
+                });
+                setImages(imagesRes?.data || []);
+              } catch (imgErr) {
+                console.warn("Изображения не загружены:", imgErr);
+                setImages([]);
+              }
+            }
           }
+        } catch (moduleErr) {
+          console.error("Ошибка загрузки:", moduleErr);
+          navigate("/catalog");
+        }
+      } catch (error) {
+        if (active) {
+          logger.error("Не удалось загрузить товар");
+          navigate("/catalog");
         }
       } finally {
-        if (active && lastIdRef.current === currentId && requestId === requestIdRef.current) {
+        if (active) {
+          setLoading(false);
           isFetchingRef.current = false;
         }
       }
     };
 
-    fetchProduct();
-
-    return () => {
-      active = false;
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-    };
-  }, [id, navigate, logger]);
-
-  // Обработка клавиатуры для слайдера
-  useEffect(() => {
-    if (images.length <= 1) return;
-
-    const handleKeyPress = (e) => {
-      if (e.key === "ArrowLeft") {
-        setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
-      } else if (e.key === "ArrowRight") {
-        setSelectedImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyPress);
-    return () => window.removeEventListener("keydown", handleKeyPress);
-  }, [images.length]);
-
-  const handleAddToCart = () => {
-    if (product) {
-      addItem(product, 1);
-    }
-  };
-
-  const handleFindSimilar = () => {
-    if (!product) return;
-    
-    // Формируем параметры для поиска похожих товаров
-    const params = new URLSearchParams();
-    
-    // Указываем, что переход со страницы товара
-    params.set("fromProduct", "1");
-    
-    // Если это модуль, используем его параметры
-    if (product.module_category_id) {
-      const categoryCode = product.category_code || 
-        (product.module_category_id === 1 ? "bottom" :
-         product.module_category_id === 2 ? "top" :
-         product.module_category_id === 3 ? "tall" :
-         product.module_category_id === 4 ? "filler" :
-         product.module_category_id === 5 ? "accessory" : "");
-      if (categoryCode) params.set("category", categoryCode);
-    }
-    
-    // Добавляем фильтры по цветам (каталог понимает facadeColor/corpusColor)
-    if (product.facade_color) {
-      params.set("facadeColor", product.facade_color);
-    }
-    if (product.corpus_color) {
-      params.set("corpusColor", product.corpus_color);
-    }
-
-    // Поиск по совпадениям в названии
-    if (product.name) {
-      params.set("search", product.name);
-    }
-
-    // Размер (каталог сейчас поддерживает lengthFrom/lengthTo)
-    if (product.length_mm) {
-      params.set("lengthFrom", String(product.length_mm));
-      params.set("lengthTo", String(product.length_mm));
-    }
-    
-    // Фильтр по основе артикула
-    if (product.base_sku) {
-      params.set("baseSku", product.base_sku);
-    }
-    
-    // Переходим в каталог с фильтрами
-    navigate(`/catalog?${params.toString()}`);
-  };
-
-  useEffect(() => {
-    if (!product?.id) return;
-    if (!product?.name) {
-      setVariants([]);
-      return;
-    }
-
-    let active = true;
-    const abortController = new AbortController();
-
-    const fetchVariants = async () => {
-      setVariantsLoading(true);
-      try {
-        const queryParams = {
-          search: product.name,
-        };
-
-        if (product.facade_color) queryParams.facadeColor = product.facade_color;
-        if (product.corpus_color) queryParams.corpusColor = product.corpus_color;
-        if (product.length_mm) {
-          queryParams.lengthFrom = product.length_mm;
-          queryParams.lengthTo = product.length_mm;
-        }
-
-        const res = await getRef.current("/modules", queryParams, {
-          signal: abortController.signal,
-        });
-        const list = Array.isArray(res?.data) ? res.data : [];
-
-        if (!active || abortController.signal.aborted) return;
-
-        const filtered = list.filter((x) => x && x.id && x.id !== product.id && x.is_active);
-        setVariants(filtered.slice(0, 12));
-      } catch (e) {
-        if (active && !abortController.signal.aborted) {
-          setVariants([]);
-        }
-      } finally {
-        if (active) setVariantsLoading(false);
-      }
-    };
-
-    fetchVariants();
+    fetchItem();
 
     return () => {
       active = false;
       abortController.abort();
     };
-  }, [product?.id, product?.name, product?.facade_color, product?.corpus_color, product?.length_mm]);
+  }, [id, navigate, logger]);
+
+  // Похожие товары
+  const loadSimilar = useCallback(async () => {
+    if (!item || similarLoading) return;
+    
+    setSimilarLoading(true);
+    try {
+      const queryParams = {};
+      
+      // Приоритетные фильтры
+      if (item.facade_color) queryParams.facadeColor = item.facade_color; // 1
+      if (item.corpus_color) queryParams.corpusColor = item.corpus_color; // 2
+      if (item.length_mm) {
+        queryParams.lengthFrom = String(item.length_mm - 50);
+        queryParams.lengthTo = String(item.length_mm + 50);
+      }
+      
+      // Категория
+      let category = item.category_code || item.module_category_id;
+      if (item.module_category_id) {
+        category = item.module_category_id === 1 ? "bottom" : 
+                  item.module_category_id === 2 ? "top" :
+                  item.module_category_id === 3 ? "tall" :
+                  item.module_category_id === 4 ? "filler" :
+                  item.module_category_id === 5 ? "accessory" : category;
+      }
+      if (category) queryParams.category = category;
+      
+      if (item.base_sku) queryParams.baseSku = item.base_sku;
+      if (item.name) queryParams.search = item.name;
+
+      const res = await getRef.current("/modules", queryParams);
+      const list = Array.isArray(res?.data) ? res.data : [];
+      const filtered = list.filter(x => x.id !== Number(id) && x.is_active).slice(0, 12);
+      setSimilarItems(filtered);
+    } catch (error) {
+      console.error("Ошибка похожих:", error);
+    } finally {
+      setSimilarLoading(false);
+    }
+  }, [item, id, similarLoading]);
+
+  const handleAddToCart = () => {
+    if (!item) return;
+    addItem(item.__type === "kitSolution" ? { ...item, __type: "kitSolution" } : item, 1);
+  };
+
+  const handleFindSimilar = () => {
+    const params = new URLSearchParams({ fromProduct: "1" });
+    if (item.facade_color) params.set("facadeColor", item.facade_color);
+    if (item.corpus_color) params.set("corpusColor", item.corpus_color);
+    if (item.category_code) params.set("category", item.category_code);
+    navigate(`/catalog?${params.toString()}`);
+  };
+
+  const mainImage = images.length > 0 
+    ? getImageUrl(images[selectedImageIndex]?.url) 
+    : getImageUrl(item?.image || item?.preview_url);
+
+  const isKit = item?.__type === "kitSolution";
+  const modulesByType = isKit ? item.modules || {} : null;
+  const compositionSections = useMemo(() => {
+    if (!isKit) return [];
+    const sections = [
+      { key: "bottom", title: "Нижние модули" },
+      { key: "top", title: "Верхние модули" },
+      { key: "tall", title: "Пеналы" },
+      { key: "filler", title: "Доборные элементы" },
+      { key: "accessory", title: "Аксессуары" }
+    ];
+    return sections
+      .map(({ key, title }) => ({
+        title,
+        items: Array.isArray(modulesByType[key]) ? modulesByType[key] : []
+      }))
+      .filter(section => section.items.length > 0);
+  }, [isKit, modulesByType]);
 
   if (loading) {
     return (
       <div className="shop-container py-12">
-        <div className="glass-card p-8 text-center text-night-500">Загрузка...</div>
+        <div className="glass-card p-8 text-center">
+          <div className="text-night-500">Загружаем товар...</div>
+        </div>
       </div>
     );
   }
 
-  if (!product) {
+  if (!item) {
     return (
       <div className="shop-container py-12">
-        <div className="glass-card p-8 text-center text-night-500">Товар не найден</div>
+        <div className="glass-card p-8 text-center">
+          <div className="text-night-500">Товар не найден</div>
+        </div>
       </div>
     );
   }
-
-  // Формируем URL изображения
-  const getImageUrl = (url) => {
-    if (!url) return placeholderImage;
-    if (url.startsWith('/uploads/')) {
-      if (import.meta.env.DEV) {
-        return `http://localhost:5000${url}`;
-      }
-      return url;
-    }
-    if (url.startsWith('http://') || url.startsWith('https://')) {
-      return url;
-    }
-    return url;
-  };
-
-  const mainImage = images.length > 0 
-    ? getImageUrl(images[selectedImageIndex]?.url)
-    : getImageUrl(product.image || product.image_url || product.preview_url);
 
   return (
     <div className="shop-container py-8">
       {/* Breadcrumbs */}
       <nav className="text-sm text-night-500 mb-6">
-        <Link to="/" className="hover:text-accent transition">
-          Главная
-        </Link>
-        {" / "}
-        <Link to="/catalog" className="hover:text-accent transition">
-          Каталог
-        </Link>
-        {" / "}
-        <span className="text-night-900">{product.name}</span>
+        <Link to="/catalog" className="hover:text-accent transition">Каталог</Link>
+        <span className="text-night-900 mx-2">/</span>
+        <span className="font-medium">{item.name}</span>
       </nav>
 
-      {/* Main Product Section */}
-      <div className="grid gap-8 lg:grid-cols-2 mb-12">
-        {/* Product Image Gallery */}
+      {/* Главный блок */}
+      <div className="grid gap-8 lg:gap-12 lg:grid-cols-2 mb-12">
+        {/* ✅ ГАЛЕРЕЯ ИЗ ОЗОНА */}
         <div className="space-y-4">
-          <div className="relative aspect-square bg-night-50 rounded-xl overflow-hidden border border-night-200 group">
-            <img 
-              src={mainImage} 
-              alt={product.name} 
-              className="w-full h-full object-contain p-4 transition-opacity duration-300"
-              crossOrigin="anonymous"
-              onError={(e) => {
-                if (e.target.src !== placeholderImage) {
-                  e.target.src = placeholderImage;
-                }
-              }}
-              loading="lazy"
+          {/* Большое изображение */}
+          <div className="relative aspect-[4/3] bg-night-50 rounded-2xl overflow-hidden border border-night-200 group shadow-lg">
+            <img
+              src={mainImage}
+              alt={item.name}
+              className="w-full h-full object-contain p-6 transition-all group-hover:p-4 lg:p-8"
+              loading="eager"
             />
-            {product.is_new && (
-              <span className="absolute left-4 top-4 rounded-full bg-accent px-4 py-1.5 text-xs font-semibold text-white shadow-lg z-10">
+            {item.is_new && (
+              <span className="absolute left-4 top-4 z-20 bg-gradient-to-r from-accent to-accent-dark/90 text-white px-3 py-1.5 text-xs font-bold rounded-full shadow-lg">
                 Новинка
               </span>
             )}
-            {/* Навигация слайдера */}
+            {/* Навигация */}
             {images.length > 1 && (
               <>
                 <button
-                  onClick={() => setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1))}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-night-900 rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                  aria-label="Предыдущее фото"
+                  onClick={() => setSelectedImageIndex(prev => prev > 0 ? prev - 1 : images.length - 1)}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white shadow-lg rounded-full p-2 opacity-0 group-hover:opacity-100 transition-all z-20"
+                  aria-label="Предыдущее"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                 </button>
                 <button
-                  onClick={() => setSelectedImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0))}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white text-night-900 rounded-full p-2 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                  aria-label="Следующее фото"
+                  onClick={() => setSelectedImageIndex(prev => prev < images.length - 1 ? prev + 1 : 0)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white shadow-lg rounded-full p-2 opacity-0 group-hover:opacity-100 transition-all z-20"
+                  aria-label="Следующее"
                 >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
-                {/* Индикатор текущего фото */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-white/90 rounded-full px-4 py-1.5 text-xs font-semibold text-night-900 shadow-lg z-10">
-                  {selectedImageIndex + 1} / {images.length}
-                </div>
               </>
             )}
           </div>
+
+          {/* Миниатюры */}
           {images.length > 1 && (
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-5 gap-2 px-1">
               {images.map((img, index) => (
                 <button
                   key={img.id || index}
                   onClick={() => setSelectedImageIndex(index)}
-                  className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${
+                  className={`aspect-square rounded-xl overflow-hidden border-2 transition-all ${
                     selectedImageIndex === index
-                      ? "border-accent shadow-md scale-105"
-                      : "border-night-200 hover:border-night-300"
+                      ? 'border-accent shadow-md ring-2 ring-accent/50 scale-105'
+                      : 'border-night-200 hover:border-night-300 hover:scale-105'
                   }`}
                 >
                   <img
                     src={getImageUrl(img.url)}
-                    alt={`${product.name} - фото ${index + 1}`}
+                    alt={`${item.name} ${index + 1}`}
                     className="w-full h-full object-cover"
-                    crossOrigin="anonymous"
-                    onError={(e) => {
-                      if (e.target.src !== placeholderImage) {
-                        e.target.src = placeholderImage;
-                      }
-                    }}
-                    loading="lazy"
                   />
                 </button>
               ))}
@@ -477,280 +290,161 @@ const ProductPage = () => {
           )}
         </div>
 
-        {/* Product Info */}
-        <div className="space-y-6">
-          <div>
-            <div className="flex items-start justify-between gap-4">
-              <h1 className="text-4xl font-bold text-night-900 mb-3 leading-tight">
-                {product.name}
+        {/* Информация */}
+        <div className="space-y-6 lg:pt-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl lg:text-4xl font-bold text-night-900 leading-tight mb-2">
+                {item.name}
               </h1>
-              <FavoriteButton product={product} className="flex-shrink-0 mt-2" />
+              {item.sku && (
+                <p className="text-sm text-night-500">
+                  Артикул: <span className="font-medium text-night-700">{item.sku}</span>
+                </p>
+              )}
             </div>
-            {product.sku && (
-              <p className="text-sm text-night-500">
-                Артикул: <span className="font-medium text-night-700">{product.sku}</span>
-              </p>
-            )}
+            <FavoriteButton product={item} className="flex-shrink-0 mt-2" />
           </div>
 
-          {product.short_desc && (
-            <div className="text-night-700 leading-relaxed text-lg">
-              {product.short_desc}
-            </div>
+          {item.short_desc && (
+            <p className="text-night-700 leading-relaxed text-lg">{item.short_desc}</p>
           )}
 
-          {/* Price Section */}
-          <div className="bg-night-50 rounded-lg p-4 border border-night-200">
-            <div className="flex items-baseline gap-3 mb-3">
-              <span className="text-4xl font-bold text-accent">
-                {formatCurrency(product.final_price || product.price || 0)}
+          {/* Компактная цена + кнопки */}
+          <div className="space-y-3">
+            <div className="flex items-baseline gap-2 bg-night-50 rounded-xl p-4 border border-night-200">
+              <span className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-accent to-accent-dark bg-clip-text text-transparent">
+                {formatCurrency(item.final_price || item.price || 0)}
               </span>
             </div>
-            <div className="space-y-2">
+            
+            <div className="flex flex-col sm:flex-row gap-3">
               <SecureButton
                 onClick={handleAddToCart}
-                className="w-full justify-center py-3 text-base font-semibold"
+                className="flex-1 h-12 text-base bg-gradient-to-r from-accent to-accent-dark hover:from-accent-dark hover:to-accent text-white font-semibold shadow-lg hover:shadow-xl rounded-xl"
               >
                 В корзину
               </SecureButton>
               <SecureButton
                 onClick={handleFindSimilar}
                 variant="outline"
-                className="w-full justify-center py-2 text-sm"
+                className="flex-1 h-12 text-sm border-night-200 hover:border-accent text-night-700 hover:text-accent rounded-xl"
               >
                 Похожие товары
               </SecureButton>
             </div>
           </div>
-
-          {/* Quick Info */}
-          <div className="space-y-4 border-t border-night-200 pt-6">
-            {(product.length_mm || product.depth_mm || product.height_mm) && (
-              <div>
-                <h3 className="text-sm font-semibold text-night-900 mb-3 uppercase tracking-wide">
-                  Габариты
-                </h3>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  {product.length_mm && (
-                    <div className="bg-night-50 rounded p-3">
-                      <span className="text-night-500 block text-xs mb-1">Ширина</span>
-                      <span className="font-semibold text-night-900 text-lg">
-                        {product.length_mm} мм
-                      </span>
-                    </div>
-                  )}
-                  {product.height_mm && (
-                    <div className="bg-night-50 rounded p-3">
-                      <span className="text-night-500 block text-xs mb-1">Высота</span>
-                      <span className="font-semibold text-night-900 text-lg">
-                        {product.height_mm} мм
-                      </span>
-                    </div>
-                  )}
-                  {product.depth_mm && (
-                    <div className="bg-night-50 rounded p-3">
-                      <span className="text-night-500 block text-xs mb-1">Глубина</span>
-                      <span className="font-semibold text-night-900 text-lg">
-                        {product.depth_mm} мм
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {(product.facade_color || product.corpus_color) && (
-              <div>
-                <h3 className="text-sm font-semibold text-night-900 mb-3 uppercase tracking-wide">
-                  Цвета
-                </h3>
-                <div className="flex flex-wrap gap-3">
-                  {product.facade_color && (
-                    <ColorBadge
-                      value={product.facade_color}
-                      labelPrefix="Фасад:"
-                    />
-                  )}
-                  {product.corpus_color && (
-                    <ColorBadge
-                      value={product.corpus_color}
-                      labelPrefix="Корпус:"
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Additional Info */}
-            {(product.shelf_count || product.front_count || product.supports_count) && (
-              <div>
-                <h3 className="text-sm font-semibold text-night-900 mb-3 uppercase tracking-wide">
-                  Комплектация
-                </h3>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  {product.shelf_count && (
-                    <div>
-                      <span className="text-night-500">Полок:</span>{" "}
-                      <span className="font-semibold text-night-900">{product.shelf_count}</span>
-                    </div>
-                  )}
-                  {product.front_count && (
-                    <div>
-                      <span className="text-night-500">Фасадов:</span>{" "}
-                      <span className="font-semibold text-night-900">{product.front_count}</span>
-                    </div>
-                  )}
-                  {product.supports_count && (
-                    <div>
-                      <span className="text-night-500">Опор:</span>{" "}
-                      <span className="font-semibold text-night-900">{product.supports_count}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Delivery Info */}
-          <div className="bg-night-50 border border-night-200 rounded-lg p-4">
-            <p className="text-sm text-night-900">
-              <span className="font-semibold">Доставка:</span> По всей России. 
-              Сроки и стоимость доставки уточняйте при оформлении заказа.
-            </p>
-          </div>
         </div>
       </div>
 
-      <div className="space-y-6 mb-12">
-        <div className="glass-card p-8">
-          <div className="grid gap-8 md:grid-cols-3">
-            <div>
-              <h3 className="font-bold text-night-900 mb-4 text-lg">Основные характеристики</h3>
-              <div className="space-y-4 text-sm">
-                {product.sku && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Артикул</span>
-                    <span className="font-semibold text-night-900">{product.sku}</span>
-                  </div>
-                )}
-                {product.facade_color && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Цвет фасада</span>
-                    <span className="font-semibold text-night-900">{product.facade_color}</span>
-                  </div>
-                )}
-                {product.corpus_color && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Цвет корпуса</span>
-                    <span className="font-semibold text-night-900">{product.corpus_color}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-bold text-night-900 mb-4 text-lg">Размеры</h3>
-              <div className="space-y-4 text-sm">
-                {product.length_mm && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Ширина</span>
-                    <span className="font-semibold text-night-900">{product.length_mm} мм</span>
-                  </div>
-                )}
-                {product.height_mm && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Высота</span>
-                    <span className="font-semibold text-night-900">{product.height_mm} мм</span>
-                  </div>
-                )}
-                {product.depth_mm && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Глубина</span>
-                    <span className="font-semibold text-night-900">{product.depth_mm} мм</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-bold text-night-900 mb-4 text-lg">Дополнительно</h3>
-              <div className="space-y-4 text-sm">
-                {product.shelf_count && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Полок</span>
-                    <span className="font-semibold text-night-900">{product.shelf_count}</span>
-                  </div>
-                )}
-                {product.front_count && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Фасадов</span>
-                    <span className="font-semibold text-night-900">{product.front_count}</span>
-                  </div>
-                )}
-                {product.supports_count && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Опор</span>
-                    <span className="font-semibold text-night-900">{product.supports_count}</span>
-                  </div>
-                )}
-                {product.hinges_count && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Петель</span>
-                    <span className="font-semibold text-night-900">{product.hinges_count}</span>
-                  </div>
-                )}
-                {product.clips_count && (
-                  <div className="flex justify-between py-2 border-b border-night-100">
-                    <span className="text-night-500">Клипс</span>
-                    <span className="font-semibold text-night-900">{product.clips_count}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {product.notes && (
-          <div className="glass-card p-8">
-            <h3 className="font-bold text-night-900 mb-4 text-lg">Описание</h3>
-            <div className="prose max-w-none">
-              <div className="text-night-700 leading-relaxed whitespace-pre-line text-base">
-                {product.notes}
-              </div>
-            </div>
+      {/* Характеристики (компактно) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+        {(item.length_mm || item.total_length_mm) && (
+          <div className="glass-card p-4">
+            <span className="text-night-500 text-xs block mb-1">Длина</span>
+            <span className="font-semibold text-night-900 text-lg">
+              {item.length_mm || item.total_length_mm} мм
+            </span>
           </div>
         )}
-
-        <div className="glass-card p-8">
-          <div className="flex items-center justify-between gap-4">
-            <h3 className="font-bold text-night-900 text-lg">Варианты</h3>
-            <SecureButton
-              variant="outline"
-              onClick={handleFindSimilar}
-              className="text-sm"
-            >
-              Показать в каталоге
-            </SecureButton>
+        {(item.depth_mm || item.total_depth_mm) && (
+          <div className="glass-card p-4">
+            <span className="text-night-500 text-xs block mb-1">Глубина</span>
+            <span className="font-semibold text-night-900 text-lg">
+              {item.depth_mm || item.total_depth_mm} мм
+            </span>
           </div>
+        )}
+        {(item.height_mm || item.total_height_mm) && (
+          <div className="glass-card p-4">
+            <span className="text-night-500 text-xs block mb-1">Высота</span>
+            <span className="font-semibold text-night-900 text-lg">
+              {item.height_mm || item.total_height_mm} мм
+            </span>
+          </div>
+        )}
+        {item.facade_color && (
+          <div className="glass-card p-4">
+            <span className="text-night-500 text-xs block mb-1">Фасад</span>
+            <ColorBadge value={item.facade_color} />
+          </div>
+        )}
+        {item.corpus_color && (
+          <div className="glass-card p-4">
+            <span className="text-night-500 text-xs block mb-1">Корпус</span>
+            <ColorBadge value={item.corpus_color} />
+          </div>
+        )}
+      </div>
 
-          <div className="mt-4">
-            {variantsLoading ? (
-              <div className="text-night-500">Загружаем варианты...</div>
-            ) : variants.length === 0 ? (
-              <div className="text-night-500">Варианты не найдены</div>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                {variants.map((v) => (
-                  <ProductCard
-                    key={v.id}
-                    product={v}
-                    onAdd={(p) => addItem(p, 1)}
-                  />
-                ))}
+      {/* ✅ СОСТАВ ГОТОВОГО РЕШЕНИЯ (только для kit) */}
+      {isKit && compositionSections.length > 0 && (
+        <div className="glass-card p-8 mb-12">
+          <h3 className="font-bold text-night-900 mb-6 text-2xl">Состав готового решения</h3>
+          <div className="space-y-6">
+            {compositionSections.map(({ title, items }) => (
+              <div key={title} className="space-y-3">
+                <h4 className="text-lg font-semibold text-night-900 uppercase tracking-wide border-b border-night-200 pb-2">
+                  {title} ({items.length})
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {items.map(module => (
+                    <Link
+                      key={module.id}
+                      to={`/product/${module.id}`}
+                      className="glass-card p-4 hover:border-accent transition-all group"
+                    >
+                      <div className="space-y-2">
+                        <div className="aspect-[4/3] bg-night-50 rounded-xl overflow-hidden">
+                          <img
+                            src={getImageUrl(module.preview_url)}
+                            alt={module.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                        </div>
+                        <h5 className="font-semibold text-night-900 text-sm leading-tight line-clamp-2">
+                          {module.name}
+                        </h5>
+                        {module.sku && (
+                          <p className="text-xs text-night-500">{module.sku}</p>
+                        )}
+                        <div className="text-xs text-night-500">
+                          {module.lengthMm || '—'}×{module.depthMm || '—'}×{module.heightMm || '—'} мм
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
               </div>
-            )}
+            ))}
           </div>
         </div>
+      )}
+
+      {/* Похожие товары */}
+      <div className="glass-card p-8">
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <h3 className="font-bold text-night-900 text-2xl">Похожие товары</h3>
+          <SecureButton
+            variant="outline"
+            onClick={loadSimilar}
+            disabled={similarLoading}
+            className="text-sm px-4 py-2"
+          >
+            {similarLoading ? "Загрузка..." : "Показать больше"}
+          </SecureButton>
+        </div>
+        {similarLoading ? (
+          <div className="text-night-500 text-center py-12">Загружаем похожие товары...</div>
+        ) : similarItems.length === 0 ? (
+          <div className="text-night-500 text-center py-12">Похожие товары не найдены</div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            {similarItems.map(product => (
+              <ProductCard key={product.id} product={product} onAdd={addItem} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

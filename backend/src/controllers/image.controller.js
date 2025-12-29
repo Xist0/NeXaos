@@ -33,13 +33,25 @@ const getModuleSku = async (moduleId) => {
  * @returns {string} Путь к папке модуля
  */
 const getModuleUploadPath = (sku) => {
-  const uploadsBase = path.join(__dirname, "..", "public", "uploads");
-  if (!sku) {
-    return uploadsBase;
-  }
-  // Очищаем SKU от недопустимых символов для имени папки
-  const safeSku = sku.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return path.join(uploadsBase, "modules", safeSku);
+  const transliterate = (str) => {
+    const cyrillic = {
+      'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
+      'з': 'z', 'и': 'i', 'й': 'j', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+      'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
+      'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
+      'я': 'ya'
+    };
+    return str
+      .toLowerCase()
+      .split('')
+      .map(char => cyrillic[char] || char)
+      .join('')
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/_+/g, '_');
+  };
+
+  const safeSku = transliterate(sku);
+  return path.join(__dirname, "..", "public", "uploads", "modules", safeSku);
 };
 
 /**
@@ -63,29 +75,33 @@ const sanitizeFilename = (str) => {
  * @returns {string} Имя файла
  */
 const getImageFilename = (moduleData, sortOrder, ext) => {
-  // Если нет данных модуля, используем стандартное имя
-  if (!moduleData || !moduleData.name) {
-    return `image_${Date.now()}${ext}`;
-  }
+  // Транслитерируем кириллицу в латиницу
+  const transliterate = (str) => {
+    const cyrillic = {
+      'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
+      'з': 'z', 'и': 'i', 'й': 'j', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+      'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
+      'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
+      'я': 'ya'
+    };
+    return str
+      .toLowerCase()
+      .split('')
+      .map(char => cyrillic[char] || char)
+      .join('')
+      .replace(/[^a-z0-9_-]/g, '_')  // Только безопасные символы
+      .replace(/_+/g, '_');           // Убираем многократные подчеркивания
+  };
 
-  // Получаем компоненты имени
-  const name = sanitizeFilename(moduleData.name);
-  const sku = sanitizeFilename(moduleData.sku || "");
-  // Используем цвет фасада, если нет - цвет корпуса, если нет - "без_цвета"
-  const color = sanitizeFilename(moduleData.facade_color || moduleData.corpus_color || "без_цвета");
-
-  // Формируем номер изображения (для превью используем 1, остальные по порядку)
-  const imageNumber = sortOrder === 0 ? 1 : sortOrder;
-
-  // Собираем имя файла: Название_Артикул_цвет_номер
-  const parts = [name];
-  if (sku) parts.push(sku);
-  if (color) parts.push(color);
-  parts.push(imageNumber.toString());
-
-  return `${parts.join("_")}${ext}`;
+  const parts = [
+    transliterate(moduleData.name || 'image'),
+    transliterate(moduleData.sku || ''),
+    transliterate(moduleData.facade_color || moduleData.corpus_color || ''),
+    String(sortOrder + 1)
+  ];
+  
+  return parts.filter(Boolean).join('_') + ext;
 };
-
 /**
  * Формирует URL изображения для модуля
  * @param {Object} moduleData - Данные модуля
