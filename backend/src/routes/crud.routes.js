@@ -20,8 +20,7 @@ router.put("/orders/:id", authGuard, asyncHandler(createCrudController(entities.
 entities.forEach((entity) => {
   // Пропускаем orders, так как у них кастомные роуты
   if (entity.route === "orders") return;
-  if (entity.route === "images") return; 
-  if (entity.route === "kit-solutions") return;
+  if (entity.route === "images") return;
 
   const controller = createCrudController(entity);
   const basePath = `/${entity.route}`;

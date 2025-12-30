@@ -50,6 +50,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     baseSku: "",
     description_id: null,
 
+    module_category_id: "",
+
     sku: "",
     name: "",
     short_desc: "",
@@ -69,6 +71,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     baseSkus: [],
     colorsFacade: [],
     colorsCorpus: [],
+    moduleCategories: [],
     isLoaded: false
   });
   const [isLoadingReferences, setIsLoadingReferences] = useState(true);
@@ -99,6 +102,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
           ...prev,
           baseSku: data.base_sku || "",
           description_id: data.description_id ?? null,
+          module_category_id: data.module_category_id ?? "",
           sku: data.sku || "",
           name: data.name || "",
           short_desc: data.short_desc || "",
@@ -129,9 +133,10 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
       if (referenceData.isLoaded) return;
       setIsLoadingReferences(true);
       try {
-        const [descriptionsRes, allColorsRes] = await Promise.all([
+        const [descriptionsRes, allColorsRes, moduleCategoriesRes] = await Promise.all([
           getRef.current("/module-descriptions", { limit: 200 }),
-          getRef.current("/colors", { limit: 500, is_active: true })
+          getRef.current("/colors", { limit: 500, is_active: true }),
+          getRef.current("/module-categories", { limit: 200 })
         ]);
 
         const baseSkus = Array.isArray(descriptionsRes?.data)
@@ -148,7 +153,9 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         const colorsFacade = allColors.filter((c) => c.type === "facade" || !c.type);
         const colorsCorpus = allColors.filter((c) => c.type === "corpus");
 
-        setReferenceData({ baseSkus, colorsFacade, colorsCorpus, isLoaded: true });
+        const moduleCategories = Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [];
+
+        setReferenceData({ baseSkus, colorsFacade, colorsCorpus, moduleCategories, isLoaded: true });
       } catch (e) {
         loggerRef.current?.error("Ошибка загрузки справочников:", e);
       } finally {
@@ -199,7 +206,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     (s) => {
       switch (s) {
         case 1:
-          return !!form.baseSku && !!form.description_id;
+          return !!form.baseSku && !!form.description_id && !!form.module_category_id;
         case 2:
           return !!form.name && Number(form.length_mm) > 0;
         case 3:
@@ -218,10 +225,21 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
 
   const handleTypeSelect = (baseSku) => {
     const initialSku = buildSku({ baseSku: baseSku.code, length_mm: 800 });
+
+    const categories = Array.isArray(referenceData.moduleCategories) ? referenceData.moduleCategories : [];
+    const bottomCategoryId = categories.find((c) => c.code === "bottom")?.id;
+    const topCategoryId = categories.find((c) => c.code === "top")?.id;
+    const inferredCategoryId = /^\s*В/i.test(String(baseSku.code || ""))
+      ? topCategoryId
+      : /^\s*Н/i.test(String(baseSku.code || ""))
+        ? bottomCategoryId
+        : null;
+
     setForm((prev) => ({
       ...prev,
       baseSku: baseSku.code,
       description_id: baseSku.id,
+      module_category_id: prev.module_category_id || inferredCategoryId || prev.module_category_id,
       sku: initialSku,
       name: `${baseSku.name} 800мм`,
       length_mm: "800",
@@ -295,7 +313,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         is_active: false,
 
         // если у тебя это обязательно на UI — оставляем
-        module_category_id: 1
+        module_category_id: form.module_category_id ? Number(form.module_category_id) : null
       };
 
       // При create schema требуются только "name". Остальное опционально. [file:84]
@@ -360,6 +378,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         facade_color: form.facade_color || null,
         corpus_color: form.corpus_color || null,
 
+        module_category_id: form.module_category_id ? Number(form.module_category_id) : null,
+
         final_price: Number(form.final_price),
         price: Number(form.final_price),
         is_active: true,
@@ -374,6 +394,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
       setForm({
         baseSku: "",
         description_id: null,
+        module_category_id: "",
         sku: "",
         name: "",
         short_desc: "",
@@ -401,6 +422,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     setForm({
       baseSku: "",
       description_id: null,
+      module_category_id: "",
       sku: "",
       name: "",
       short_desc: "",
@@ -525,6 +547,27 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
                     className="text-xl"
                   />
                 </div>
+              </div>
+
+              <div className="mt-8">
+                <label className="block text-sm font-semibold text-night-700 mb-3">
+                  Категория модуля <span className="text-accent">*</span>
+                </label>
+                <select
+                  value={form.module_category_id ?? ""}
+                  onChange={(e) => setForm((prev) => ({ ...prev, module_category_id: e.target.value }))}
+                  className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
+                >
+                  <option value="">Выберите категорию…</option>
+                  {(referenceData.moduleCategories || [])
+                    .filter((c) => c.code === "bottom" || c.code === "top")
+                    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+                    .map((c) => (
+                      <option key={c.id} value={String(c.id)}>
+                        {c.name}
+                      </option>
+                    ))}
+                </select>
               </div>
             </div>
 

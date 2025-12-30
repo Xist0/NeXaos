@@ -37,6 +37,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
     materials: [],
     colors: [],
     modules: [],
+    moduleCategories: [],
     isLoaded: false,
   });
 
@@ -91,11 +92,12 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
       if (referenceData.isLoaded) return;
       setLoading(true);
       try {
-        const [kitchenTypesRes, materialsRes, colorsRes, modulesRes] = await Promise.all([
+        const [kitchenTypesRes, materialsRes, colorsRes, modulesRes, moduleCategoriesRes] = await Promise.all([
           getRef.current("/kitchen-types", { limit: 500, isActive: true }),
           getRef.current("/materials", { limit: 500, isActive: true }),
           getRef.current("/colors", { limit: 500, is_active: true }),
           getRef.current("/modules", { limit: 500, isActive: true }),
+          getRef.current("/module-categories", { limit: 200 }),
         ]);
 
         setReferenceData({
@@ -103,11 +105,19 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
           materials: Array.isArray(materialsRes?.data) ? materialsRes.data : [],
           colors: Array.isArray(colorsRes?.data) ? colorsRes.data : [],
           modules: Array.isArray(modulesRes?.data) ? modulesRes.data : [],
+          moduleCategories: Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [],
           isLoaded: true,
         });
       } catch (e) {
         loggerRef.current?.error("Не удалось загрузить справочники", e);
-        setReferenceData({ kitchenTypes: [], materials: [], colors: [], modules: [], isLoaded: true });
+        setReferenceData({
+          kitchenTypes: [],
+          materials: [],
+          colors: [],
+          modules: [],
+          moduleCategories: [],
+          isLoaded: true,
+        });
       } finally {
         setLoading(false);
       }
@@ -274,21 +284,41 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
     return sumForType("bottom") + sumForType("top");
   }, [referenceData.modules, selectedModulesByType]);
 
+  const moduleCategoryIdsByCode = useMemo(() => {
+    const cats = Array.isArray(referenceData.moduleCategories) ? referenceData.moduleCategories : [];
+    const map = new Map();
+    for (const c of cats) {
+      if (!c?.code || !c?.id) continue;
+      map.set(String(c.code), Number(c.id));
+    }
+    return map;
+  }, [referenceData.moduleCategories]);
+
+  const classifyModule = useCallback(
+    (m) => {
+      const baseSku = String(m?.base_sku || "").trim();
+      if (/^\s*В/i.test(baseSku)) return "top";
+      if (/^\s*Н/i.test(baseSku)) return "bottom";
+
+      const catId = Number(m?.module_category_id);
+      const topId = moduleCategoryIdsByCode.get("top");
+      const bottomId = moduleCategoryIdsByCode.get("bottom");
+
+      if (topId && catId === topId) return "top";
+      if (bottomId && catId === bottomId) return "bottom";
+
+      return null;
+    },
+    [moduleCategoryIdsByCode]
+  );
+
   const bottomModulesSelectable = useMemo(() => {
-    return referenceData.modules.filter((m) => {
-      const catId = Number(m.module_category_id);
-      if (catId) return catId === 1;
-      return m.category_code === "bottom";
-    });
-  }, [referenceData.modules]);
+    return referenceData.modules.filter((m) => classifyModule(m) === "bottom");
+  }, [referenceData.modules, classifyModule]);
 
   const topModulesSelectable = useMemo(() => {
-    return referenceData.modules.filter((m) => {
-      const catId = Number(m.module_category_id);
-      if (catId) return catId === 2;
-      return m.category_code === "top";
-    });
-  }, [referenceData.modules]);
+    return referenceData.modules.filter((m) => classifyModule(m) === "top");
+  }, [referenceData.modules, classifyModule]);
 
   const createKitIfNeeded = useCallback(async () => {
     if (kitId) return kitId;
@@ -333,8 +363,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
         countertop_length_mm: Number(form.countertop_length_mm) || null,
         countertop_depth_mm: Number(form.countertop_depth_mm) || null,
 
-        base_price: null,
-        final_price: null,
+        base_price: 0,
+        final_price: 0,
         preview_url: form.preview_url,
         is_active: false,
 
@@ -389,7 +419,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
         countertop_length_mm: Number(form.countertop_length_mm) || null,
         countertop_depth_mm: Number(form.countertop_depth_mm) || null,
 
-        base_price: computedBasePrice,
+        base_price: Number(computedBasePrice) || 0,
         final_price: price,
         preview_url: form.preview_url,
         is_active: true,
