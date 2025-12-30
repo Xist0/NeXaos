@@ -60,7 +60,6 @@ const statements = [
   // Таблица фурнитуры
   `CREATE TABLE IF NOT EXISTS hardware_items_extended (
     id SERIAL PRIMARY KEY,
-    module_type_id INT REFERENCES module_types(id) ON DELETE SET NULL,
     base_sku TEXT,
     name TEXT NOT NULL,
     sku TEXT,
@@ -88,11 +87,9 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS idx_linear_materials_class ON linear_materials(material_class_id);`,
   `CREATE INDEX IF NOT EXISTS idx_sheet_materials_class ON sheet_materials(material_class_id);`,
   `CREATE INDEX IF NOT EXISTS idx_hardware_extended_class ON hardware_items_extended(material_class_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_hardware_extended_type ON hardware_items_extended(module_type_id);`,
 ];
 
 const dropStatements = [
-  `DROP INDEX IF EXISTS idx_hardware_extended_type;`,
   `DROP INDEX IF EXISTS idx_hardware_extended_class;`,
   `DROP INDEX IF EXISTS idx_sheet_materials_class;`,
   `DROP INDEX IF EXISTS idx_linear_materials_class;`,

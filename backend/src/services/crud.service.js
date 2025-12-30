@@ -103,12 +103,6 @@ const list = async (entity, queryParams = {}) => {
       params.push(parseInt(queryParams.categoryId, 10));
     }
     
-    // Фильтр по типу
-    if (queryParams.typeId) {
-      conditions.push(`module_type_id = $${params.length + 1}`);
-      params.push(parseInt(queryParams.typeId, 10));
-    }
-    
     // Фильтр по основе артикула (НМР1, НМР2, НМР.М1 и т.д.)
     if (queryParams.baseSku) {
       conditions.push(`base_sku = $${params.length + 1}`);

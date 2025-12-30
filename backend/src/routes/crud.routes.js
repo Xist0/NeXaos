@@ -21,6 +21,7 @@ entities.forEach((entity) => {
   // Пропускаем orders, так как у них кастомные роуты
   if (entity.route === "orders") return;
   if (entity.route === "images") return;
+  if (entity.route === "kit-solutions") return;
 
   const controller = createCrudController(entity);
   const basePath = `/${entity.route}`;
@@ -175,6 +176,9 @@ router.post("/kit-solutions", authGuard, requireAdminOrManager, asyncHandler(kit
 
 // PUT /api/kit-solutions/:id - обновить готовое решение
 router.put("/kit-solutions/:id", authGuard, requireAdminOrManager, asyncHandler(kitSolutionController.update));
+
+// DELETE /api/kit-solutions/:id - удалить готовое решение
+router.delete("/kit-solutions/:id", authGuard, requireAdminOrManager, asyncHandler(kitSolutionController.remove));
 
 // POST /api/kit-solutions/:id/similar - найти похожие готовые решения
 router.post("/kit-solutions/:id/similar", optionalAuth, asyncHandler(kitSolutionController.findSimilar));

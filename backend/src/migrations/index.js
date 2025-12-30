@@ -12,5 +12,10 @@ module.exports = [
   require("./011_create_size_templates_and_module_type_prices"),
   require("./012_create_kitchen_types"),
   require("./013_backfill_module_descriptions"),
+  require("./014_add_module_category_to_types_and_descriptions"),
+  require("./015_remove_module_types"),
+  require("./016_add_sku_prefix_to_module_categories"),
+  require("./017_backfill_module_descriptions_category_id"),
+  require("./018_add_type_to_colors"),
 ];
 

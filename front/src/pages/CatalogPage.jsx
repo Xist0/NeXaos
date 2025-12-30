@@ -62,7 +62,6 @@ const CatalogPage = () => {
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
 
   const [moduleCategories, setModuleCategories] = useState([]);
-  const [moduleTypes, setModuleTypes] = useState([]);
   const getRef = useRef(get);
   const isFetchingRef = useRef(false);
 
@@ -93,12 +92,10 @@ const CatalogPage = () => {
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        const [categoriesRes, typesRes] = await Promise.all([
+        const [categoriesRes] = await Promise.all([
           get("/module-categories"),
-          get("/module-types"),
         ]);
         setModuleCategories(categoriesRes?.data || []);
-        setModuleTypes(typesRes?.data || []);
       } catch (error) {
         console.error("Ошибка загрузки категорий", error);
       }

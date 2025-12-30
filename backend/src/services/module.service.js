@@ -201,7 +201,6 @@ const findSimilarModules = async (params) => {
   const { rows: sourceModule } = await query(
     `SELECT m.*, 
      mc.code as category_code,
-     mt.code as type_code,
      m.facade_color,
      m.corpus_color,
      m.primary_color_id,
@@ -213,7 +212,6 @@ const findSimilarModules = async (params) => {
      m.height_mm
      FROM modules m
      LEFT JOIN module_categories mc ON m.module_category_id = mc.id
-     LEFT JOIN module_types mt ON m.module_type_id = mt.id
      LEFT JOIN colors c1 ON m.primary_color_id = c1.id
      LEFT JOIN colors c2 ON m.secondary_color_id = c2.id
      WHERE m.id = $1 AND m.is_active = true`,
@@ -229,7 +227,6 @@ const findSimilarModules = async (params) => {
   // Веса параметров по умолчанию (чем выше вес, тем важнее параметр)
   const defaultWeights = {
     category: 30,      // Категория модуля (нижний/верхний)
-    type: 25,         // Тип модуля (распашной/выдвижной)
     facadeColor: 20,  // Цвет фасада
     corpusColor: 15,  // Цвет корпуса
     length: 10,       // Длина (с учетом допустимого отклонения)
@@ -241,12 +238,10 @@ const findSimilarModules = async (params) => {
   const { rows: allModules } = await query(
     `SELECT m.*, 
      mc.code as category_code,
-     mt.code as type_code,
      m.primary_color_id,
      m.secondary_color_id
      FROM modules m
      LEFT JOIN module_categories mc ON m.module_category_id = mc.id
-     LEFT JOIN module_types mt ON m.module_type_id = mt.id
      WHERE m.id != $1 AND m.is_active = true
      ORDER BY m.id`,
     [moduleId]
@@ -261,12 +256,6 @@ const findSimilarModules = async (params) => {
     if (source.category_code === module.category_code) {
       similarityScore += finalWeights.category;
       matches.push("category");
-    }
-
-    // Сравнение типа (25 баллов)
-    if (source.type_code === module.type_code) {
-      similarityScore += finalWeights.type;
-      matches.push("type");
     }
 
     // Сравнение цвета фасада (20 баллов) - сначала по primary_color_id, затем по facade_color
@@ -363,14 +352,11 @@ const getModulesWithDescriptions = async (moduleIds) => {
      m.*,
      mc.code as category_code,
      mc.name as category_name,
-     mt.code as type_code,
-     mt.name as type_name,
      md.base_sku,
      md.description as module_description,
      md.characteristics
      FROM modules m
      LEFT JOIN module_categories mc ON m.module_category_id = mc.id
-     LEFT JOIN module_types mt ON m.module_type_id = mt.id
      LEFT JOIN module_descriptions md ON m.description_id = md.id
      WHERE m.id = ANY($1::int[])
      AND m.is_active = true

@@ -205,25 +205,6 @@
       },
     },
     {
-      route: "module-types",
-      table: "module_types",
-      idColumn: "id",
-      columns: {
-        code: { type: "string", required: true, max: 50 },
-        name: { type: "string", required: true, max: 255 },
-        description: { type: "string", allowNull: true },
-      },
-    },
-    {
-      route: "module-type-prices",
-      table: "module_type_prices",
-      idColumn: "id",
-      columns: {
-        module_type_id: { type: "integer", required: true },
-        price: { type: "number", required: true, precision: 2 },
-      },
-    },
-    {
       route: "size-templates",
       table: "size_templates",
       idColumn: "id",
@@ -240,6 +221,7 @@
         code: { type: "string", required: true, max: 50 },
         name: { type: "string", required: true, max: 255 },
         description: { type: "string", allowNull: true },
+        sku_prefix: { type: "string", max: 20, allowNull: true },
         sort_order: { type: "integer" },
       },
     },
@@ -252,6 +234,7 @@
         name: { type: "string", required: true, max: 255 },
         description: { type: "string", allowNull: true },
         characteristics: { type: "json", allowNull: true },
+        module_category_id: { type: "integer" },
       },
     },
     {
@@ -273,7 +256,6 @@
         name: { type: "string", required: true, max: 255 },
         short_desc: { type: "string", allowNull: true },
         preview_url: { type: "string", allowNull: true },
-        module_type_id: { type: "integer" },
         module_category_id: { type: "integer" },
         base_sku: { type: "string", max: 50 },
         description_id: { type: "integer" },
@@ -517,7 +499,6 @@
       table: "hardware_items_extended",
       idColumn: "id",
       columns: {
-        module_type_id: { type: "integer" },
         base_sku: { type: "string", max: 50 },
         name: { type: "string", required: true, max: 255 },
         sku: { type: "string", max: 255 },
@@ -548,6 +529,7 @@
       columns: {
         name: { type: "string", required: true, max: 255 },
         sku: { type: "string", max: 255 },
+        type: { type: "string", enum: ["facade", "corpus", ""], allowNull: true },
         image_url: { type: "string", allowNull: true },
         is_active: { type: "boolean" },
       },

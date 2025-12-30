@@ -49,7 +49,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     // UI-поля
     baseSku: "",
     description_id: null,
-
     module_category_id: "",
 
     sku: "",
@@ -62,6 +61,9 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
 
     facade_color: "",
     corpus_color: "",
+
+    primary_color_id: "",
+    secondary_color_id: "",
 
     preview_url: null, // ставим из ImageManager
     final_price: ""
@@ -111,6 +113,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
           height_mm: data.height_mm != null ? String(data.height_mm) : prev.height_mm,
           facade_color: data.facade_color || "",
           corpus_color: data.corpus_color || "",
+          primary_color_id: data.primary_color_id != null ? String(data.primary_color_id) : "",
+          secondary_color_id: data.secondary_color_id != null ? String(data.secondary_color_id) : "",
           preview_url: data.preview_url || null,
           final_price: data.final_price != null ? String(data.final_price) : "",
         }));
@@ -144,7 +148,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
               id: d.id,
               code: d.base_sku,
               name: d.name || d.base_sku,
-              description: d.description
+              description: d.description,
+              module_category_id: d.module_category_id ?? null,
             }))
           : [];
 
@@ -154,7 +159,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         const colorsCorpus = allColors.filter((c) => c.type === "corpus");
 
         const moduleCategories = Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [];
-
         setReferenceData({ baseSkus, colorsFacade, colorsCorpus, moduleCategories, isLoaded: true });
       } catch (e) {
         loggerRef.current?.error("Ошибка загрузки справочников:", e);
@@ -208,7 +212,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         case 1:
           return !!form.baseSku && !!form.description_id && !!form.module_category_id;
         case 2:
-          return !!form.name && Number(form.length_mm) > 0;
+          return !!form.name && Number(form.length_mm) > 0 && !!form.module_category_id;
         case 3:
           return !!form.facade_color;
         case 4:
@@ -227,19 +231,24 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     const initialSku = buildSku({ baseSku: baseSku.code, length_mm: 800 });
 
     const categories = Array.isArray(referenceData.moduleCategories) ? referenceData.moduleCategories : [];
-    const bottomCategoryId = categories.find((c) => c.code === "bottom")?.id;
-    const topCategoryId = categories.find((c) => c.code === "top")?.id;
-    const inferredCategoryId = /^\s*В/i.test(String(baseSku.code || ""))
-      ? topCategoryId
-      : /^\s*Н/i.test(String(baseSku.code || ""))
-        ? bottomCategoryId
-        : null;
+    const skuPrefix = String(baseSku.code || "").trim().toUpperCase();
+    const inferredCategoryId = form.module_category_id
+      ? Number(form.module_category_id)
+      : categories.find((c) => {
+          const prefix = String(c?.sku_prefix || "").trim().toUpperCase();
+          if (!prefix) return false;
+          return skuPrefix.startsWith(prefix);
+        })?.id;
 
     setForm((prev) => ({
       ...prev,
       baseSku: baseSku.code,
       description_id: baseSku.id,
-      module_category_id: prev.module_category_id || inferredCategoryId || prev.module_category_id,
+      module_category_id:
+        prev.module_category_id ||
+        inferredCategoryId ||
+        baseSku.module_category_id ||
+        prev.module_category_id,
       sku: initialSku,
       name: `${baseSku.name} 800мм`,
       length_mm: "800",
@@ -262,8 +271,13 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
   };
 
   const handleFacadeColorSelect = (colorCode) => {
+    const found = (referenceData.colorsFacade || []).find((c) => (c.code || c.sku) === colorCode) || null;
     setForm((prev) => {
-      const next = { ...prev, facade_color: colorCode };
+      const next = {
+        ...prev,
+        facade_color: colorCode,
+        primary_color_id: found?.id != null ? String(found.id) : prev.primary_color_id,
+      };
       next.sku = buildSku(next);
       return next;
     });
@@ -271,7 +285,12 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
 
   const handleCorpusColorSelect = (colorCode) => {
     if (!form.facade_color) return;
-    setForm((prev) => ({ ...prev, corpus_color: colorCode }));
+    const found = (referenceData.colorsCorpus || []).find((c) => (c.code || c.sku) === colorCode) || null;
+    setForm((prev) => ({
+      ...prev,
+      corpus_color: colorCode,
+      secondary_color_id: found?.id != null ? String(found.id) : prev.secondary_color_id,
+    }));
   };
 
   // ВАЖНО: создаем модуль сразу перед шагом "Фото", чтобы получить числовой ID для images. [file:84][file:89]
@@ -304,6 +323,9 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
 
         facade_color: form.facade_color || null,
         corpus_color: form.corpus_color || null,
+
+        primary_color_id: form.primary_color_id ? Number(form.primary_color_id) : null,
+        secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
 
         // цена будет установлена позже
         final_price: 0,
@@ -403,6 +425,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         height_mm: "820",
         facade_color: "",
         corpus_color: "",
+        primary_color_id: "",
+        secondary_color_id: "",
         preview_url: null,
         final_price: ""
       });
@@ -431,6 +455,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
       height_mm: "820",
       facade_color: "",
       corpus_color: "",
+      primary_color_id: "",
+      secondary_color_id: "",
       preview_url: null,
       final_price: ""
     });
@@ -496,24 +522,99 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         {/* Step 1 */}
         {step === 1 && (
           <div className="space-y-8">
-            <div className="text-2xl font-bold text-night-900 text-center mb-12">
-              Выберите тип модуля ({referenceData.baseSkus.length})
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-              {referenceData.baseSkus.map((baseSku) => (
-                <div
-                  key={baseSku.id}
-                  className="group glass-card p-8 hover:shadow-2xl hover:scale-[1.02] cursor-pointer transition-all border-2 border-transparent hover:border-accent rounded-3xl"
-                  onClick={() => handleTypeSelect(baseSku)}
-                >
-                  <div className="w-20 h-20 bg-gradient-to-br from-accent/10 to-accent-dark/10 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-accent/20">
-                    <span className="text-2xl font-bold text-accent group-hover:scale-110">{baseSku.code}</span>
-                  </div>
-                  <h3 className="font-bold text-xl text-night-900 mb-2 group-hover:text-accent">{baseSku.name}</h3>
-                  {baseSku.description && <p className="text-night-600 text-sm">{baseSku.description}</p>}
+            {!form.module_category_id ? (
+              <>
+                <div className="text-2xl font-bold text-night-900 text-center mb-8">
+                  Сначала выберите категорию модуля ({(referenceData.moduleCategories || []).length})
                 </div>
-              ))}
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {(referenceData.moduleCategories || [])
+                    .slice()
+                    .sort((a, b) => Number(a.id) - Number(b.id))
+                    .map((c) => (
+                      <div
+                        key={c.id}
+                        className="group glass-card p-8 hover:shadow-2xl hover:scale-[1.02] cursor-pointer transition-all border-2 border-transparent hover:border-accent rounded-3xl"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            module_category_id: String(c.id),
+                            baseSku: "",
+                            description_id: null,
+                            sku: "",
+                            name: "",
+                          }))
+                        }
+                      >
+                        <div className="w-20 h-20 p-2 bg-gradient-to-br from-accent/10 to-accent-dark/10 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-accent/20">
+                          <span className="text-lg font-semibold text-accent group-hover:scale-110 break-words text-center leading-tight">
+                            {c.sku_prefix ? String(c.sku_prefix).toUpperCase() : "?"}
+                          </span>
+                        </div>
+                        <h3 className="font-semibold text-lg text-night-900 mb-1 group-hover:text-accent break-words leading-snug">
+                          {c.name}
+                        </h3>
+                        {c.sku_prefix ? (
+                          <div className="text-night-600 text-sm">Сокращение: {String(c.sku_prefix).toUpperCase()}</div>
+                        ) : (
+                          <div className="text-night-600 text-sm">Сокращение не задано</div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-start gap-4 mb-8">
+                  <button
+                    onClick={() =>
+                      setForm((prev) => ({
+                        ...prev,
+                        module_category_id: "",
+                        baseSku: "",
+                        description_id: null,
+                        sku: "",
+                        name: "",
+                      }))
+                    }
+                    className="flex items-center gap-2 text-night-600 hover:text-night-900 p-3 -m-3 rounded-xl hover:bg-night-100"
+                  >
+                    <FaArrowLeft /> Сменить категорию
+                  </button>
+                  <div className="flex-1 border-b-4 border-accent" />
+                </div>
+
+                <div className="text-2xl font-bold text-night-900 text-center mb-12">
+                  Теперь выберите подтип ({referenceData.baseSkus.length})
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                  {referenceData.baseSkus
+                    .filter((d) =>
+                      d?.module_category_id != null
+                        ? Number(d.module_category_id) === Number(form.module_category_id)
+                        : false
+                    )
+                    .map((baseSku) => (
+                      <div
+                        key={baseSku.id}
+                        className="group glass-card p-8 hover:shadow-2xl hover:scale-[1.02] cursor-pointer transition-all border-2 border-transparent hover:border-accent rounded-3xl"
+                        onClick={() => handleTypeSelect(baseSku)}
+                      >
+                        <div className="w-20 h-20 p-2 bg-gradient-to-br from-accent/10 to-accent-dark/10 rounded-2xl flex items-center justify-center mb-4 group-hover:bg-accent/20">
+                          <span className="text-lg font-semibold text-accent group-hover:scale-110 break-words text-center leading-tight">
+                            {baseSku.code}
+                          </span>
+                        </div>
+                        <h3 className="font-medium text-sm text-night-900 mb-2 group-hover:text-accent break-words leading-snug">
+                          {baseSku.name}
+                        </h3>
+                        {baseSku.description && <p className="text-night-600 text-sm break-words">{baseSku.description}</p>}
+                      </div>
+                    ))}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -555,16 +656,27 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
                 </label>
                 <select
                   value={form.module_category_id ?? ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, module_category_id: e.target.value }))}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setForm((prev) => ({
+                      ...prev,
+                      module_category_id: next,
+                      baseSku: "",
+                      description_id: null,
+                      sku: "",
+                      name: "",
+                    }));
+                    setStep(1);
+                  }}
                   className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
                 >
                   <option value="">Выберите категорию…</option>
                   {(referenceData.moduleCategories || [])
-                    .filter((c) => c.code === "bottom" || c.code === "top")
-                    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0))
+                    .slice()
+                    .sort((a, b) => Number(a.id) - Number(b.id))
                     .map((c) => (
                       <option key={c.id} value={String(c.id)}>
-                        {c.name}
+                        {c.name}{c.sku_prefix ? ` (${String(c.sku_prefix).toUpperCase()})` : ""}
                       </option>
                     ))}
                 </select>

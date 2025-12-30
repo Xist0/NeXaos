@@ -64,17 +64,9 @@ const seedBasicData = async () => {
     const topCategory = await query(
       `SELECT id FROM module_categories WHERE code = 'top' LIMIT 1`
     );
-    const swingType = await query(
-      `SELECT id FROM module_types WHERE code = 'swing' LIMIT 1`
-    );
-    const drawerType = await query(
-      `SELECT id FROM module_types WHERE code = 'drawer' LIMIT 1`
-    );
 
     const bottomCategoryId = bottomCategory.rows?.[0]?.id ?? null;
     const topCategoryId = topCategory.rows?.[0]?.id ?? null;
-    const swingTypeId = swingType.rows?.[0]?.id ?? null;
-    const drawerTypeId = drawerType.rows?.[0]?.id ?? null;
 
     const demoModules = [
       {
@@ -82,7 +74,6 @@ const seedBasicData = async () => {
         base_sku: "НМР1",
         name: "Нижний модуль распашной 600",
         module_category_id: bottomCategoryId,
-        module_type_id: swingTypeId,
         length_mm: 600,
         depth_mm: 560,
         height_mm: 720,
@@ -93,7 +84,6 @@ const seedBasicData = async () => {
         base_sku: "НМР2",
         name: "Нижний модуль распашной 800",
         module_category_id: bottomCategoryId,
-        module_type_id: swingTypeId,
         length_mm: 800,
         depth_mm: 560,
         height_mm: 720,
@@ -104,7 +94,6 @@ const seedBasicData = async () => {
         base_sku: "НМЯ.2",
         name: "Нижний модуль с ящиками 600",
         module_category_id: bottomCategoryId,
-        module_type_id: drawerTypeId,
         length_mm: 600,
         depth_mm: 560,
         height_mm: 720,
@@ -115,7 +104,6 @@ const seedBasicData = async () => {
         base_sku: "ВМР1",
         name: "Верхний модуль распашной 600",
         module_category_id: topCategoryId,
-        module_type_id: swingTypeId,
         length_mm: 600,
         depth_mm: 320,
         height_mm: 720,
@@ -126,7 +114,6 @@ const seedBasicData = async () => {
         base_sku: "ВМР2",
         name: "Верхний модуль распашной 800",
         module_category_id: topCategoryId,
-        module_type_id: swingTypeId,
         length_mm: 800,
         depth_mm: 320,
         height_mm: 720,
@@ -138,18 +125,17 @@ const seedBasicData = async () => {
       await query(
         `INSERT INTO modules (
           sku, name, base_sku,
-          module_category_id, module_type_id,
+          module_category_id,
           length_mm, depth_mm, height_mm,
           final_price,
           is_active
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)
         ON CONFLICT (sku) DO NOTHING`,
         [
           m.sku,
           m.name,
           m.base_sku,
           m.module_category_id,
-          m.module_type_id,
           m.length_mm,
           m.depth_mm,
           m.height_mm,

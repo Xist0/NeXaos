@@ -73,10 +73,10 @@ const ProductCard = memo(({ product, onAdd, className = "" }) => {
             {product.name}
           </h3>
 
-          {/* ✅ АРТИКУЛ — ФИКС 20px */}
-          {product.sku && (
-            <p className="text-xs text-night-500 font-mono truncate h-[20px]">
-              {product.sku}
+          {/* ✅ ОПИСАНИЕ — ФИКС 36px */}
+          {(product.description || product.short_desc) && (
+            <p className="text-xs text-night-500 leading-snug h-[36px] overflow-hidden">
+              {product.description || product.short_desc}
             </p>
           )}
 

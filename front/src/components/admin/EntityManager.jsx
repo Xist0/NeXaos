@@ -23,6 +23,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
   const [uploadingField, setUploadingField] = useState(null);
   const [activeSection, setActiveSection] = useState("visible");
   const [filterBaseSku, setFilterBaseSku] = useState("");
+  const [filterModuleCategoryId, setFilterModuleCategoryId] = useState("");
   const [colors, setColors] = useState([]);
   const colorsLoadedRef = useRef(false);
   const [sizePresetTabByField, setSizePresetTabByField] = useState({});
@@ -48,6 +49,43 @@ const EntityManager = ({ title, endpoint, fields }) => {
 
   const [availableModuleDescriptions, setAvailableModuleDescriptions] = useState([]);
   const moduleDescriptionsLoadedRef = useRef(false);
+
+  const [availableModuleCategories, setAvailableModuleCategories] = useState([]);
+  const moduleCategoriesLoadedRef = useRef(false);
+
+  const slugify = (input) => {
+    const map = {
+      а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y",
+      к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
+      х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+    };
+
+    const s = String(input || "").trim().toLowerCase();
+    const translit = s
+      .split("")
+      .map((ch) => (map[ch] != null ? map[ch] : ch))
+      .join("");
+
+    return translit
+      .replace(/[^a-z0-9\s_-]/g, "")
+      .replace(/[\s_-]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  };
+
+  const selectedModuleCategory = useMemo(() => {
+    if (!filterModuleCategoryId) return null;
+    return availableModuleCategories.find((c) => String(c.id) === String(filterModuleCategoryId)) || null;
+  }, [availableModuleCategories, filterModuleCategoryId]);
+
+  const selectedCategoryPrefix = useMemo(() => {
+    const explicit = selectedModuleCategory?.sku_prefix ? String(selectedModuleCategory.sku_prefix) : "";
+    if (explicit) return explicit.toUpperCase();
+
+    const code = String(selectedModuleCategory?.code || "").toLowerCase();
+    if (code === "bottom") return "НМ";
+    if (code === "top") return "ВМ";
+    return "";
+  }, [selectedModuleCategory]);
 
   const normalizedFields = useMemo(() => fields.map(defaultField), [fields]);
 
@@ -88,6 +126,9 @@ const EntityManager = ({ title, endpoint, fields }) => {
   const currentFields = useMemo(() => {
     if (endpoint === "/modules") {
       return fieldsBySection[activeSection] || [];
+    }
+    if (endpoint === "/module-descriptions") {
+      return normalizedFields.filter((f) => f.name !== "module_category_id");
     }
     return normalizedFields;
   }, [endpoint, normalizedFields, fieldsBySection, activeSection]);
@@ -216,6 +257,27 @@ const EntityManager = ({ title, endpoint, fields }) => {
     loadDescriptions();
   }, [endpoint, get]);
 
+  // Загружаем категории модулей для select полей
+  useEffect(() => {
+    const needsModuleCategories =
+      endpoint === "/kit-solutions" || normalizedFields.some((f) => f.type === "moduleCategory");
+    if (!needsModuleCategories) return;
+    if (moduleCategoriesLoadedRef.current) return;
+
+    const loadCategories = async () => {
+      try {
+        const res = await get("/module-categories", { limit: 500 });
+        setAvailableModuleCategories(Array.isArray(res?.data) ? res.data : []);
+        moduleCategoriesLoadedRef.current = true;
+      } catch (e) {
+        logger.error("Не удалось загрузить категории модулей", e);
+        setAvailableModuleCategories([]);
+      }
+    };
+
+    loadCategories();
+  }, [normalizedFields, get, logger]);
+
   // Загружаем материалы для комплекта (готовых решений)
   useEffect(() => {
     if (endpoint !== "/kit-solutions") return;
@@ -261,6 +323,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
     setEditingId(null);
     setSearch("");
     setFilterBaseSku("");
+    setFilterModuleCategoryId("");
     setActiveSection("visible");
     
     let active = true;
@@ -416,6 +479,57 @@ const EntityManager = ({ title, endpoint, fields }) => {
       return acc;
     }, {});
 
+    if (endpoint === "/module-categories") {
+      if (payload.name != null) {
+        payload.name = String(payload.name).trim();
+      }
+      if (payload.sku_prefix != null) {
+        payload.sku_prefix = String(payload.sku_prefix).trim().toUpperCase();
+      }
+      if (!payload.code) {
+        const slug = slugify(payload.name);
+        payload.code = slug || `cat_${Date.now()}`;
+      }
+    }
+
+    if (endpoint === "/module-descriptions") {
+      if (!filterModuleCategoryId) {
+        logger.error("Сначала выберите категорию");
+        return;
+      }
+      payload.module_category_id = Number(filterModuleCategoryId);
+
+      if (payload.base_sku != null) {
+        payload.base_sku = String(payload.base_sku).trim().toUpperCase();
+      }
+      if (payload.name != null) {
+        payload.name = String(payload.name).trim();
+      }
+
+      if (!payload.base_sku) {
+        logger.error("Заполните основу артикула");
+        return;
+      }
+      if (selectedCategoryPrefix && !String(payload.base_sku).startsWith(selectedCategoryPrefix)) {
+        logger.error(`Основа артикула должна начинаться с "${selectedCategoryPrefix}"`);
+        return;
+      }
+      if (!payload.name) {
+        logger.error("Заполните название");
+        return;
+      }
+
+      if (!editingId) {
+        const existing = items.find(
+          (it) => String(it?.base_sku || "").toLowerCase() === String(payload.base_sku || "").toLowerCase()
+        );
+        if (existing) {
+          logger.error(`Подтип с основой артикула "${payload.base_sku}" уже существует (ID: ${existing.id})`);
+          return;
+        }
+      }
+    }
+
     // Готовые решения: добавляем состав модулей и автозаполняем размеры
     if (endpoint === "/kit-solutions") {
       // Flatten modules with quantities
@@ -543,6 +657,10 @@ const EntityManager = ({ title, endpoint, fields }) => {
 
   const filteredItems = useMemo(() => {
     let filtered = items;
+
+    if (endpoint === "/module-descriptions" && !filterModuleCategoryId) {
+      return [];
+    }
     
     // Фильтрация по подтипу модуля
     if (endpoint === "/modules" && filterBaseSku) {
@@ -558,9 +676,15 @@ const EntityManager = ({ title, endpoint, fields }) => {
           .includes(search.toLowerCase())
       );
     }
+
+    // Фильтрация подтипов по выбранной категории
+    if (endpoint === "/module-descriptions" && filterModuleCategoryId) {
+      const cid = Number(filterModuleCategoryId);
+      filtered = filtered.filter((item) => Number(item.module_category_id) === cid);
+    }
     
     return filtered;
-  }, [items, search, filterBaseSku, endpoint]);
+  }, [items, search, filterBaseSku, endpoint, filterModuleCategoryId]);
 
   return (
     <section className="glass-card p-6 space-y-4">
@@ -598,6 +722,41 @@ const EntityManager = ({ title, endpoint, fields }) => {
         </div>
       )}
 
+      {endpoint === "/module-descriptions" && (
+        <div className="flex flex-wrap gap-3 items-center border-b border-night-200 pb-4">
+          <label className="text-sm font-semibold text-night-700">Категория:</label>
+          <select
+            value={filterModuleCategoryId}
+            onChange={(e) => {
+              const nextId = e.target.value;
+              setFilterModuleCategoryId(nextId);
+              setEditingId(null);
+              const cat = availableModuleCategories.find((c) => String(c.id) === String(nextId)) || null;
+              const prefix = (cat?.sku_prefix ? String(cat.sku_prefix) : "").trim().toUpperCase();
+              const fallbackCode = String(cat?.code || "").toLowerCase();
+              const fallbackPrefix = fallbackCode === "bottom" ? "НМ" : fallbackCode === "top" ? "ВМ" : "";
+              const nextPrefix = prefix || fallbackPrefix;
+
+              setForm({
+                base_sku: nextPrefix,
+                name: "",
+              });
+            }}
+            className="px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+          >
+            <option value="">Выберите категорию...</option>
+            {availableModuleCategories
+              .slice()
+              .sort((a, b) => Number(a.id) - Number(b.id))
+              .map((c) => (
+                <option key={c.id} value={String(c.id)}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
+        </div>
+      )}
+
       {/* Вкладки для модулей */}
       {endpoint === "/modules" && (
         <div className="flex gap-2 border-b border-night-200 pb-2">
@@ -619,7 +778,6 @@ const EntityManager = ({ title, endpoint, fields }) => {
           </SecureButton>
         </div>
       )}
-
 
       <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
         {endpoint === "/kit-solutions" && (
@@ -703,8 +861,12 @@ const EntityManager = ({ title, endpoint, fields }) => {
                 >
                   <option value="">+ Добавить нижний модуль...</option>
                   {availableModules
-                    .filter((m) => String(m.base_sku || "").startsWith("Н") || 
-                             (m.module_category_id && m.module_category_id.toString().includes('bottom')))
+                    .filter((m) => {
+                      const baseSku = String(m.base_sku || "");
+                      if (baseSku.startsWith("Н")) return true;
+                      const cat = availableModuleCategories.find((c) => c.id === Number(m.module_category_id));
+                      return cat?.code === "bottom";
+                    })
                     .map((m) => (
                       <option key={`bottom-${m.id}`} value={m.id}>
                         #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
@@ -800,8 +962,12 @@ const EntityManager = ({ title, endpoint, fields }) => {
                 >
                   <option value="">+ Добавить верхний модуль...</option>
                   {availableModules
-                    .filter((m) => String(m.base_sku || "").startsWith("В") || 
-                             (m.module_category_id && m.module_category_id.toString().includes('top')))
+                    .filter((m) => {
+                      const baseSku = String(m.base_sku || "");
+                      if (baseSku.startsWith("В")) return true;
+                      const cat = availableModuleCategories.find((c) => c.id === Number(m.module_category_id));
+                      return cat?.code === "top";
+                    })
                     .map((m) => (
                       <option key={`top-${m.id}`} value={m.id}>
                         #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
@@ -895,7 +1061,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
           </div>
         )}
 
-        {currentFields.map((field) => (
+        {(endpoint === "/module-descriptions" && !filterModuleCategoryId ? [] : currentFields).map((field) => (
           <label key={field.name} className="text-sm text-night-700 space-y-1">
             <span>{field.label}</span>
             {field.inputType === "image" ? (
@@ -941,6 +1107,28 @@ const EntityManager = ({ title, endpoint, fields }) => {
                     {option.label}
                   </option>
                 ))}
+              </select>
+            ) : field.type === "moduleCategory" ? (
+              <select
+                value={form[field.name] ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    [field.name]: e.target.value ? Number(e.target.value) : "",
+                  }))
+                }
+                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                required={field.required}
+              >
+                <option value="">Выберите...</option>
+                {availableModuleCategories
+                  .slice()
+                  .sort((a, b) => Number(a.id) - Number(b.id))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
               </select>
             ) : field.type === "color" ? (
               <div className="space-y-2">
@@ -1012,6 +1200,31 @@ const EntityManager = ({ title, endpoint, fields }) => {
                   field.type === "number" &&
                   typeof field.name === "string" &&
                   field.name.endsWith("_mm");
+
+                if (endpoint === "/module-descriptions" && field.name === "base_sku") {
+                  const current = String(form[field.name] ?? "").toUpperCase();
+                  const prefix = selectedCategoryPrefix ? String(selectedCategoryPrefix).toUpperCase() : "";
+
+                  return (
+                    <SecureInput
+                      type={field.type}
+                      value={current}
+                      onChange={(value) => {
+                        const raw = String(value ?? "").toUpperCase();
+                        if (!prefix) {
+                          setForm((prev) => ({ ...prev, [field.name]: raw }));
+                          return;
+                        }
+                        const normalized = raw.startsWith(prefix)
+                          ? raw
+                          : `${prefix}${raw.replace(/^\s+/, "")}`;
+                        setForm((prev) => ({ ...prev, [field.name]: normalized }));
+                      }}
+                      placeholder={prefix ? `${prefix}...` : field.placeholder}
+                      required={field.required}
+                    />
+                  );
+                }
 
                 if (!isMmNumberField) {
                   return (

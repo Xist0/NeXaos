@@ -16,6 +16,13 @@ const fs = require("fs");
 const getKitSolutionWithModules = async (kitSolutionId, options = {}) => {
   const includeInactive = !!options.includeInactive;
 
+  const inferPositionTypeFromBaseSku = (baseSku) => {
+    const s = String(baseSku || "").trim();
+    if (/^В/i.test(s)) return "top";
+    if (/^Н/i.test(s)) return "bottom";
+    return null;
+  };
+
   // Получаем основную информацию о готовом решении
   const { rows: kitRows } = await query(
     `SELECT 
@@ -72,13 +79,10 @@ const getKitSolutionWithModules = async (kitSolutionId, options = {}) => {
       m.*,
       mc.code as category_code,
       mc.name as category_name,
-      mt.code as type_code,
-      mt.name as type_name,
       imgm.url as module_preview_url
     FROM kit_solution_modules ksm
     JOIN modules m ON ksm.module_id = m.id
     LEFT JOIN module_categories mc ON m.module_category_id = mc.id
-    LEFT JOIN module_types mt ON m.module_type_id = mt.id
     LEFT JOIN LATERAL (
       SELECT url
       FROM images
@@ -101,7 +105,8 @@ const getKitSolutionWithModules = async (kitSolutionId, options = {}) => {
   };
 
   moduleRows.forEach((module) => {
-    const type = module.position_type || module.category_code || "bottom";
+    const inferred = inferPositionTypeFromBaseSku(module.base_sku);
+    const type = module.position_type || module.category_code || inferred || "bottom";
     if (!modulesByType[type]) return;
 
     modulesByType[type].push({
@@ -117,8 +122,6 @@ const getKitSolutionWithModules = async (kitSolutionId, options = {}) => {
       finalPrice: module.final_price,
       categoryCode: module.category_code,
       categoryName: module.category_name,
-      typeCode: module.type_code,
-      typeName: module.type_name,
       positionOrder: module.position_order,
     });
   });
@@ -158,6 +161,13 @@ const getKitSolutionWithModules = async (kitSolutionId, options = {}) => {
  * @returns {Promise<Object>} Созданное/обновленное готовое решение
  */
 const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
+  const inferPositionTypeFromBaseSku = (baseSku) => {
+    const s = String(baseSku || "").trim();
+    if (/^В/i.test(s)) return "top";
+    if (/^Н/i.test(s)) return "bottom";
+    return null;
+  };
+
   const {
     id,
     name,
@@ -276,13 +286,20 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     // Получаем информацию о модулях для определения их категорий
     const { rows: modulesInfo } = await query(
       `SELECT m.id, mc.code as category_code
+            , m.base_sku
        FROM modules m
        LEFT JOIN module_categories mc ON m.module_category_id = mc.id
        WHERE m.id = ANY($1::int[])`,
       [moduleIds]
     );
 
-    const moduleMap = new Map(modulesInfo.map(m => [m.id, m.category_code || 'bottom']));
+    const moduleMap = new Map(
+      modulesInfo.map((m) => {
+        const inferred = inferPositionTypeFromBaseSku(m.base_sku);
+        const type = m.category_code || inferred || "bottom";
+        return [m.id, type];
+      })
+    );
 
     // Вставляем связи с модулями
     for (let i = 0; i < moduleIds.length; i++) {
@@ -387,8 +404,14 @@ const listKitSolutions = async (filters = {}) => {
   const sql = `
     SELECT 
       ks.*,
+      c1.id as primary_color_id,
       c1.name as primary_color_name,
+      c1.sku as primary_color_sku,
+      c1.image_url as primary_color_image,
+      c2.id as secondary_color_id,
       c2.name as secondary_color_name,
+      c2.sku as secondary_color_sku,
+      c2.image_url as secondary_color_image,
       kt.name as kitchen_type_name,
       img.url as image_preview_url,
       (SELECT COUNT(*) FROM kit_solution_modules WHERE kit_solution_id = ks.id) as modules_count
@@ -416,6 +439,24 @@ const listKitSolutions = async (filters = {}) => {
       row.preview_url = row.image_preview_url;
     }
     delete row.image_preview_url;
+
+    if (row.primary_color_id && row.primary_color_name) {
+      row.primary_color = {
+        id: row.primary_color_id,
+        name: row.primary_color_name,
+        sku: row.primary_color_sku,
+        image_url: row.primary_color_image,
+      };
+    }
+    if (row.secondary_color_id && row.secondary_color_name) {
+      row.secondary_color = {
+        id: row.secondary_color_id,
+        name: row.secondary_color_name,
+        sku: row.secondary_color_sku,
+        image_url: row.secondary_color_image,
+      };
+    }
+
     return row;
   });
 };

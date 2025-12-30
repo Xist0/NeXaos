@@ -4,6 +4,7 @@ import OrdersTable from "../components/admin/OrdersTable";
 import EntityManager from "../components/admin/EntityManager";
 import ModulesAdmin from "../components/admin/ModulesAdmin";
 import KitSolutionsAdmin from "../components/admin/KitSolutionsAdmin";
+import ModuleDescriptionsAdmin from "../components/admin/ModuleDescriptionsAdmin";
 import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight } from "react-icons/fa";
 
 // Структура разделов админ панели
@@ -44,8 +45,8 @@ const adminSections = [
     items: [
       { id: "calculationParameters", label: "Параметры расчета", endpoint: "/calculation-parameters" },
       { id: "materialPrices", label: "Цена материалов", endpoint: "/material-prices" },
-      { id: "moduleTypes", label: "Типы модулей", endpoint: "/module-types" },
-      { id: "moduleDescriptions", label: "Подтипы модулей (основа артикула)", endpoint: "/module-descriptions" },
+      { id: "moduleCategories", label: "Типы модулей", endpoint: "/module-categories" },
+      { id: "moduleDescriptions", label: "Подтипы модулей", endpoint: "/module-descriptions", special: "moduleDescriptionCreator" },
       { id: "kitchenTypes", label: "Тип кухни", endpoint: "/kitchen-types" },
       { id: "sizeTemplates", label: "Шаблоны размеров", endpoint: "/size-templates" },
       { id: "colors", label: "Цвета", endpoint: "/colors" },
@@ -70,23 +71,20 @@ const entityConfigs = {
     { name: "is_active", label: "Активен", type: "checkbox" },
   ],
 },
-  moduleTypes: {
+  moduleCategories: {
     title: "Типы модулей",
-    endpoint: "/module-types",
+    endpoint: "/module-categories",
     fields: [
-      { name: "code", label: "Код", required: true },
       { name: "name", label: "Название", required: true },
-      { name: "description", label: "Описание" },
+      { name: "sku_prefix", label: "Сокращение", required: true },
     ],
   },
   moduleDescriptions: {
-    title: "Подтипы модулей (основа артикула)",
+    title: "Подтипы модулей",
     endpoint: "/module-descriptions",
     fields: [
       { name: "base_sku", label: "Основа артикула", required: true },
       { name: "name", label: "Название", required: true },
-      { name: "description", label: "Описание" },
-      { name: "characteristics", label: "Характеристики (JSON)" },
     ],
   },
   sizeTemplates: {
@@ -173,10 +171,10 @@ const entityConfigs = {
       { name: "material_class_id", label: "Класс материала (ID)", type: "number" },
       { name: "price_per_unit", label: "Цена за ед.", type: "number" },
       { name: "comment", label: "Комментарий" },
-      { name: "module_type_id", label: "Тип модуля (ID)", type: "number" },
       { name: "base_sku", label: "Основа артикула" },
       { name: "primary_color_id", label: "Основной цвет", type: "color" },
       { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
     ],
   },
   materialClasses: {
@@ -254,6 +252,7 @@ const AdminPage = () => {
   const entityConfig = entityConfigs[activeTab];
   const isModuleCreator = currentItem?.special === "moduleCreator";
   const isKitSolutionCreator = currentItem?.special === "kitSolutionCreator";
+  const isModuleDescriptionCreator = currentItem?.special === "moduleDescriptionCreator";
 
   return (
     <div className="shop-container py-12 space-y-6">
@@ -333,9 +332,12 @@ const AdminPage = () => {
 
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ ГОТОВЫХ РЕШЕНИЙ */}
           {isKitSolutionCreator && <KitSolutionsAdmin />}
+
+          {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ ПОДТИПОВ МОДУЛЕЙ */}
+          {isModuleDescriptionCreator && <ModuleDescriptionsAdmin />}
           
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
-          {entityConfig && !isModuleCreator && !isKitSolutionCreator && (
+          {entityConfig && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && (
             <EntityManager key={entityConfig.endpoint} {...entityConfig} />
           )}
         </div>

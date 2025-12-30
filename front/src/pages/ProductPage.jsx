@@ -340,16 +340,24 @@ const ProductPage = () => {
             </span>
           </div>
         )}
-        {item.facade_color && (
+        {(item.primary_color || item.facade_color) && (
           <div className="glass-card p-4">
             <span className="text-night-500 text-xs block mb-1">Фасад</span>
-            <ColorBadge value={item.facade_color} />
+            {item.primary_color ? (
+              <ColorBadge colorData={item.primary_color} />
+            ) : (
+              <ColorBadge value={item.facade_color} />
+            )}
           </div>
         )}
-        {item.corpus_color && (
+        {(item.secondary_color || item.corpus_color) && (
           <div className="glass-card p-4">
             <span className="text-night-500 text-xs block mb-1">Корпус</span>
-            <ColorBadge value={item.corpus_color} />
+            {item.secondary_color ? (
+              <ColorBadge colorData={item.secondary_color} />
+            ) : (
+              <ColorBadge value={item.corpus_color} />
+            )}
           </div>
         )}
       </div>
