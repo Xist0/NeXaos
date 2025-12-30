@@ -30,7 +30,7 @@ const ProductCard = memo(({ product, onAdd, className = "" }) => {
   const href =
     product?.__type === "kitSolution"
       ? `/catalog/kit/${product.id}`
-      : `/product/${product.id || product.sku}`;
+      : `/catalog/${product.id}`;
 
   return (
     <article

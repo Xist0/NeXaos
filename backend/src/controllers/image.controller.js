@@ -4,6 +4,58 @@ const path = require("path");
 const fs = require("fs");
 const logger = require("../utils/logger");
 
+const normalizeSkuForFolder = (sku) => {
+  const transliterate = (str) => {
+    const cyrillic = {
+      'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
+      'з': 'z', 'и': 'i', 'й': 'j', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+      'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
+      'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
+      'я': 'ya'
+    };
+    return String(str || "")
+      .toLowerCase()
+      .split('')
+      .map(char => cyrillic[char] || char)
+      .join('')
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/_+/g, '_');
+  };
+
+  return transliterate(sku);
+};
+
+const legacySkuFolder = (sku) => {
+  return String(sku || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_")
+    .replace(/_+/g, "_");
+};
+
+const legacyUnicodeFolder = (sku) => {
+  return String(sku || "")
+    .replace(/[^a-zA-Z0-9а-яА-ЯёЁ_-]/g, "_")
+    .replace(/\s+/g, "_");
+};
+
+const getModuleFolderCandidates = (sku) => {
+  const preferred = normalizeSkuForFolder(sku);
+  const legacy = legacySkuFolder(sku);
+  const unicodeLegacy = legacyUnicodeFolder(sku);
+  return Array.from(new Set([preferred, legacy, unicodeLegacy].filter(Boolean)));
+};
+
+const resolveExistingModuleFolder = (sku) => {
+  const candidates = getModuleFolderCandidates(sku);
+  for (const folder of candidates) {
+    const folderPath = path.join(__dirname, "..", "public", "uploads", "modules", folder);
+    if (fs.existsSync(folderPath)) {
+      return folder;
+    }
+  }
+  return normalizeSkuForFolder(sku);
+};
+
 /**
  * Получает полные данные модуля для формирования имени файла
  * @param {number} moduleId - ID модуля
@@ -18,40 +70,13 @@ const getModuleData = async (moduleId) => {
 };
 
 /**
- * Получает только SKU модуля (для обратной совместимости)
- * @param {number} moduleId - ID модуля
- * @returns {Promise<string|null>} SKU модуля или null
- */
-const getModuleSku = async (moduleId) => {
-  const moduleData = await getModuleData(moduleId);
-  return moduleData?.sku || null;
-};
-
-/**
  * Получает путь к папке для сохранения изображений модуля
  * @param {string} sku - Артикул модуля
  * @returns {string} Путь к папке модуля
  */
 const getModuleUploadPath = (sku) => {
-  const transliterate = (str) => {
-    const cyrillic = {
-      'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
-      'з': 'z', 'и': 'i', 'й': 'j', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
-      'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
-      'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
-      'я': 'ya'
-    };
-    return str
-      .toLowerCase()
-      .split('')
-      .map(char => cyrillic[char] || char)
-      .join('')
-      .replace(/[^a-z0-9_-]/g, '_')
-      .replace(/_+/g, '_');
-  };
-
-  const safeSku = transliterate(sku);
-  return path.join(__dirname, "..", "public", "uploads", "modules", safeSku);
+  const folder = resolveExistingModuleFolder(sku);
+  return path.join(__dirname, "..", "public", "uploads", "modules", folder);
 };
 
 /**
@@ -102,6 +127,7 @@ const getImageFilename = (moduleData, sortOrder, ext) => {
   
   return parts.filter(Boolean).join('_') + ext;
 };
+
 /**
  * Формирует URL изображения для модуля
  * @param {Object} moduleData - Данные модуля
@@ -113,7 +139,7 @@ const getImageUrl = (moduleData, sortOrder, ext) => {
   if (!moduleData || !moduleData.sku) {
     return `/uploads/image_${Date.now()}${ext}`;
   }
-  const safeSku = sanitizeFilename(moduleData.sku);
+  const safeSku = resolveExistingModuleFolder(moduleData.sku);
   const filename = getImageFilename(moduleData, sortOrder, ext);
   return `/uploads/modules/${safeSku}/${filename}`;
 };
@@ -153,12 +179,17 @@ const renameModuleImages = async (entityType, entityId, moduleData) => {
   for (let i = 0; i < images.length; i++) {
     const image = images[i];
     const oldUrl = image.url;
-    const oldPath = oldUrl.startsWith("/") 
+    let oldPath = oldUrl.startsWith("/") 
       ? path.join(__dirname, "..", "public", oldUrl.slice(1))
       : path.join(__dirname, "..", "public", oldUrl);
 
     if (!fs.existsSync(oldPath)) {
-      continue; // Файл не существует, пропускаем
+      const candidate = path.join(moduleDir, path.basename(oldPath));
+      if (fs.existsSync(candidate)) {
+        oldPath = candidate;
+      } else {
+        continue; // Файл не существует, пропускаем
+      }
     }
 
     // Определяем расширение файла
@@ -265,9 +296,59 @@ const getImages = async (req, res) => {
      (sort_order = 0) as is_preview
      FROM images 
      WHERE entity_type = $1 AND entity_id = $2 
-     ORDER BY sort_order ASC, id ASC`,
+     ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
     [entityType, parsedId]
   );
+
+  if (entityType === "modules") {
+    try {
+      const moduleData = await getModuleData(parsedId);
+      if (moduleData?.sku) {
+        const folderCandidates = getModuleFolderCandidates(moduleData.sku);
+        await Promise.all(
+          rows.map(async (row) => {
+            if (!row?.url || !row.url.startsWith("/uploads/modules/")) return;
+
+            const match = row.url.match(/^\/uploads\/modules\/([^/]+)\/(.+)$/);
+            if (!match) return;
+
+            const currentFolder = match[1];
+            const filename = match[2];
+            if (!filename) return;
+
+            let resolvedFolder = null;
+            for (const candidate of folderCandidates) {
+              const candidatePath = path.join(
+                __dirname,
+                "..",
+                "public",
+                "uploads",
+                "modules",
+                candidate,
+                filename
+              );
+              if (fs.existsSync(candidatePath)) {
+                resolvedFolder = candidate;
+                break;
+              }
+            }
+
+            if (!resolvedFolder) return;
+            if (currentFolder === resolvedFolder) return;
+
+            const fixedUrl = `/uploads/modules/${resolvedFolder}/${filename}`;
+            await query(`UPDATE images SET url = $1 WHERE id = $2`, [fixedUrl, row.id]);
+            row.url = fixedUrl;
+          })
+        );
+      }
+    } catch (e) {
+      logger.warn("Не удалось автоматически исправить URL изображений модуля", {
+        moduleId: parsedId,
+        error: e?.message,
+      });
+    }
+  }
 
   // Логируем успешное получение списка изображений
   logger.info("Получен список изображений", {
@@ -354,8 +435,8 @@ const uploadImage = async (req, res) => {
       moduleData.sku = `MODULE_${parsedId}`;
     }
     
-    // Получаем путь к папке модуля на основе SKU
-    uploadDir = getModuleUploadPath(moduleData.sku);
+    const resolvedFolder = resolveExistingModuleFolder(moduleData.sku);
+    uploadDir = path.join(__dirname, "..", "public", "uploads", "modules", resolvedFolder);
     // Создаем папку если её нет
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -389,7 +470,8 @@ const uploadImage = async (req, res) => {
   if (entityType === "modules" && moduleData) {
     // Для модулей используем новую схему: Название_Артикул_цвет_номер
     newFilename = getImageFilename(moduleData, sortOrder, ext);
-    urlPath = getImageUrl(moduleData, sortOrder, ext);
+    const folder = resolveExistingModuleFolder(moduleData.sku);
+    urlPath = `/uploads/modules/${folder}/${newFilename}`;
   } else {
     // Для других типов сущностей используем старую схему
     const timestamp = Date.now();
@@ -647,7 +729,7 @@ const setPreview = async (req, res) => {
     `SELECT sort_order FROM images WHERE id = $1`,
     [parsedId]
   );
-  const currentSortOrder = currentImage[0]?.sort_order || 0;
+  const currentSortOrder = currentImage[0]?.sort_order;
 
   // Если изображение уже является превью, ничего не делаем
   if (currentSortOrder === 0) {

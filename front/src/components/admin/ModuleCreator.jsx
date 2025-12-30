@@ -29,19 +29,21 @@ const getImageUrl = (url) => {
   return url;
 };
 
-const ModuleCreator = () => {
+const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
   const getRef = useRef(get);
+  const loggerRef = useRef(logger);
 
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
 
   // Реальный ID созданного модуля
-  const [moduleId, setModuleId] = useState(null);
+  const [moduleId, setModuleId] = useState(initialModuleId);
 
   // Защита от двойного create при быстрых кликах/рендерах
   const createLockRef = useRef(false);
+  const skuNonceRef = useRef(null);
 
   const [form, setForm] = useState({
     // UI-поля
@@ -73,7 +75,54 @@ const ModuleCreator = () => {
 
   useEffect(() => {
     getRef.current = get;
+    loggerRef.current = logger;
   }, [get]);
+
+  useEffect(() => {
+    if (!initialModuleId) return;
+
+    let active = true;
+    setLoading(true);
+    getRef.current(`/modules/${initialModuleId}`)
+      .then((res) => {
+        const data = res?.data;
+        if (!active || !data) return;
+
+        const sku = String(data.sku || "");
+        const skuParts = sku.split("-");
+        const maybeNonce = skuParts[skuParts.length - 1];
+        if (/^[a-z0-9]{4}$/i.test(maybeNonce)) {
+          skuNonceRef.current = maybeNonce;
+        }
+
+        setForm((prev) => ({
+          ...prev,
+          baseSku: data.base_sku || "",
+          description_id: data.description_id ?? null,
+          sku: data.sku || "",
+          name: data.name || "",
+          short_desc: data.short_desc || "",
+          length_mm: data.length_mm != null ? String(data.length_mm) : prev.length_mm,
+          depth_mm: data.depth_mm != null ? String(data.depth_mm) : prev.depth_mm,
+          height_mm: data.height_mm != null ? String(data.height_mm) : prev.height_mm,
+          facade_color: data.facade_color || "",
+          corpus_color: data.corpus_color || "",
+          preview_url: data.preview_url || null,
+          final_price: data.final_price != null ? String(data.final_price) : "",
+        }));
+        setStep(2);
+      })
+      .catch((e) => {
+        loggerRef.current?.error("Не удалось загрузить модуль для редактирования", e);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [initialModuleId]);
 
   useEffect(() => {
     const loadReferencesOnce = async () => {
@@ -101,7 +150,7 @@ const ModuleCreator = () => {
 
         setReferenceData({ baseSkus, colorsFacade, colorsCorpus, isLoaded: true });
       } catch (e) {
-        logger.error("Ошибка загрузки справочников:", e);
+        loggerRef.current?.error("Ошибка загрузки справочников:", e);
       } finally {
         setIsLoadingReferences(false);
       }
@@ -128,17 +177,23 @@ const ModuleCreator = () => {
 
 
   const buildSku = useCallback((draft) => {
-  const parts = [draft.baseSku];
-  const len = Number(draft.length_mm);
-  if (Number.isFinite(len) && len > 0) parts.push(String(Math.round(len)));
-  if (draft.facade_color) parts.push(draft.facade_color);
-  
-  // ✅ ДОБАВЛЯЕМ УНИКАЛЬНОСТЬ
-  const random = Math.random().toString(36).substring(2, 6); // 4 случайных символа
-  parts.push(random);
-  
-  return parts.filter(Boolean).join("-");
-}, []);
+    const parts = [draft.baseSku];
+    const len = Number(draft.length_mm);
+    if (Number.isFinite(len) && len > 0) parts.push(String(Math.round(len)));
+    if (draft.facade_color) parts.push(draft.facade_color);
+
+    if (!skuNonceRef.current) {
+      const fromSku = String(draft.sku || "").split("-").pop();
+      if (/^[a-z0-9]{4}$/i.test(fromSku)) {
+        skuNonceRef.current = fromSku;
+      } else {
+        skuNonceRef.current = Math.random().toString(36).substring(2, 6);
+      }
+    }
+
+    parts.push(skuNonceRef.current);
+    return parts.filter(Boolean).join("-");
+  }, []);
 
   const isStepValid = useCallback(
     (s) => {
@@ -289,16 +344,31 @@ const ModuleCreator = () => {
 
     setLoading(true);
     try {
-      // UPDATE schema требует минимум 1 поле, но мы отправим нужные. [file:84][file:88]
       const payload = {
+        name: String(form.name || "").trim(),
+        sku: String(form.sku || "").trim(),
+        short_desc: form.short_desc ? String(form.short_desc) : null,
+        preview_url: form.preview_url,
+
+        base_sku: form.baseSku || null,
+        description_id: Number(form.description_id) || null,
+
+        length_mm: Number(form.length_mm) || null,
+        depth_mm: Number(form.depth_mm) || null,
+        height_mm: Number(form.height_mm) || null,
+
+        facade_color: form.facade_color || null,
+        corpus_color: form.corpus_color || null,
+
         final_price: Number(form.final_price),
         price: Number(form.final_price),
-        preview_url: form.preview_url,
-        is_active: true
+        is_active: true,
       };
 
       const resp = await put(`/modules/${moduleId}`, payload);
       logger.info("Модуль сохранен и опубликован:", resp?.data);
+
+      onDone?.();
 
       // сброс
       setForm({
@@ -316,6 +386,7 @@ const ModuleCreator = () => {
         final_price: ""
       });
       setModuleId(null);
+      skuNonceRef.current = null;
       setStep(1);
     } catch (e) {
       logger.error("Ошибка сохранения модуля:", e?.response?.data || e?.message || e);

@@ -19,7 +19,8 @@ const getById = asyncHandler(async (req, res) => {
     throw ApiError.badRequest("Некорректный ID готового решения");
   }
 
-  const kitSolution = await kitSolutionService.getKitSolutionWithModules(kitSolutionId);
+  const includeInactive = req.user?.roleName === "admin" || req.user?.roleName === "manager";
+  const kitSolution = await kitSolutionService.getKitSolutionWithModules(kitSolutionId, { includeInactive });
 
   res.status(200).json({ data: kitSolution });
 });
@@ -34,11 +35,36 @@ const list = asyncHandler(async (req, res) => {
     colorId: req.query.colorId,
     minPrice: req.query.minPrice,
     maxPrice: req.query.maxPrice,
+    limit: req.query.limit,
+    offset: req.query.offset,
   };
+
+  const includeInactiveRequested =
+    req.query.includeInactive === "true" || req.query.includeInactive === true;
+  const canIncludeInactive = req.user?.roleName === "admin" || req.user?.roleName === "manager";
+  if (includeInactiveRequested && canIncludeInactive) {
+    filters.includeInactive = true;
+  }
 
   const kitSolutions = await kitSolutionService.listKitSolutions(filters);
 
   res.status(200).json({ data: kitSolutions });
+});
+
+/**
+ * Удалить готовое решение
+ * DELETE /api/kit-solutions/:id
+ */
+const remove = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const kitSolutionId = parseInt(id, 10);
+
+  if (isNaN(kitSolutionId) || kitSolutionId <= 0) {
+    throw ApiError.badRequest("Некорректный ID готового решения");
+  }
+
+  await kitSolutionService.removeKitSolution(kitSolutionId);
+  res.status(204).send();
 });
 
 /**
@@ -118,6 +144,7 @@ module.exports = {
   list,
   create,
   update,
+  remove,
   findSimilar,
 };
 

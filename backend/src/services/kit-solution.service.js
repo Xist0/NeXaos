@@ -1,6 +1,8 @@
 const { query } = require("../config/db");
 const logger = require("../utils/logger");
 const ApiError = require("../utils/api-error");
+const path = require("path");
+const fs = require("fs");
 
 /**
  * Сервис для работы с готовыми решениями (комплектами кухни)
@@ -11,49 +13,81 @@ const ApiError = require("../utils/api-error");
  * @param {number} kitSolutionId - ID готового решения
  * @returns {Promise<Object>} Готовое решение с модулями
  */
-const getKitSolutionWithModules = async (kitSolutionId) => {
+const getKitSolutionWithModules = async (kitSolutionId, options = {}) => {
+  const includeInactive = !!options.includeInactive;
+
   // Получаем основную информацию о готовом решении
   const { rows: kitRows } = await query(
     `SELECT 
-     ks.*,
-     c1.name as primary_color_name,
-     c1.sku as primary_color_sku,
-     c1.image_url as primary_color_image,
-     c2.name as secondary_color_name,
-     c2.sku as secondary_color_sku,
-     c2.image_url as secondary_color_image,
-     m.name as material_name,
-     kt.name as kitchen_type_name
-     FROM kit_solutions ks
-     LEFT JOIN colors c1 ON ks.primary_color_id = c1.id
-     LEFT JOIN colors c2 ON ks.secondary_color_id = c2.id
-     LEFT JOIN materials m ON ks.material_id = m.id
-     LEFT JOIN kitchen_types kt ON ks.kitchen_type_id = kt.id
-     WHERE ks.id = $1 AND ks.is_active = true`,
+      ks.*,
+      c1.name as primary_color_name,
+      c1.sku as primary_color_sku,
+      c1.image_url as primary_color_image,
+      c2.name as secondary_color_name,
+      c2.sku as secondary_color_sku,
+      c2.image_url as secondary_color_image,
+      m.name as material_name,
+      kt.name as kitchen_type_name,
+      img.url as image_preview_url
+    FROM kit_solutions ks
+    LEFT JOIN colors c1 ON ks.primary_color_id = c1.id
+    LEFT JOIN colors c2 ON ks.secondary_color_id = c2.id
+    LEFT JOIN materials m ON ks.material_id = m.id
+    LEFT JOIN kitchen_types kt ON ks.kitchen_type_id = kt.id
+    LEFT JOIN LATERAL (
+      SELECT url
+      FROM images
+      WHERE entity_type = 'kit-solutions' AND entity_id = ks.id
+      ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC
+      LIMIT 1
+    ) img ON true
+    WHERE ks.id = $1${includeInactive ? "" : " AND ks.is_active = true"}`,
     [kitSolutionId]
   );
 
   if (kitRows.length === 0) {
-    throw new Error("Готовое решение не найдено");
+    throw ApiError.notFound("Запись не найдена");
   }
 
   const kitSolution = kitRows[0];
+  if (kitSolution.image_preview_url) {
+    kitSolution.preview_url = kitSolution.image_preview_url;
+  }
+  delete kitSolution.image_preview_url;
+
+  const { rows: allImages } = await query(
+    `SELECT id, url, alt, sort_order,
+     (sort_order = 0) as is_preview
+     FROM images
+     WHERE entity_type = 'kit-solutions' AND entity_id = $1
+     ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
+    [kitSolutionId]
+  );
+  kitSolution.images = allImages;
 
   // Получаем модули готового решения, сгруппированные по типам
   const { rows: moduleRows } = await query(
     `SELECT 
-     ksm.*,
-     m.*,
-     mc.code as category_code,
-     mc.name as category_name,
-     mt.code as type_code,
-     mt.name as type_name
-     FROM kit_solution_modules ksm
-     JOIN modules m ON ksm.module_id = m.id
-     LEFT JOIN module_categories mc ON m.module_category_id = mc.id
-     LEFT JOIN module_types mt ON m.module_type_id = mt.id
-     WHERE ksm.kit_solution_id = $1
-     ORDER BY ksm.position_type, ksm.position_order`,
+      ksm.*,
+      m.*,
+      mc.code as category_code,
+      mc.name as category_name,
+      mt.code as type_code,
+      mt.name as type_name,
+      imgm.url as module_preview_url
+    FROM kit_solution_modules ksm
+    JOIN modules m ON ksm.module_id = m.id
+    LEFT JOIN module_categories mc ON m.module_category_id = mc.id
+    LEFT JOIN module_types mt ON m.module_type_id = mt.id
+    LEFT JOIN LATERAL (
+      SELECT url
+      FROM images
+      WHERE entity_type = 'modules' AND entity_id = m.id
+      ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC
+      LIMIT 1
+    ) imgm ON true
+    WHERE ksm.kit_solution_id = $1
+    ORDER BY ksm.position_type, ksm.position_order`,
     [kitSolutionId]
   );
 
@@ -66,26 +100,27 @@ const getKitSolutionWithModules = async (kitSolutionId) => {
     accessory: [],
   };
 
-  moduleRows.forEach(module => {
-    const type = module.position_type || module.category_code || 'bottom';
-    if (modulesByType[type]) {
-      modulesByType[type].push({
-        id: module.module_id,
-        sku: module.sku,
-        name: module.name,
-        lengthMm: module.length_mm,
-        depthMm: module.depth_mm,
-        heightMm: module.height_mm,
-        facadeColor: module.facade_color,
-        corpusColor: module.corpus_color,
-        finalPrice: module.final_price,
-        categoryCode: module.category_code,
-        categoryName: module.category_name,
-        typeCode: module.type_code,
-        typeName: module.type_name,
-        positionOrder: module.position_order,
-      });
-    }
+  moduleRows.forEach((module) => {
+    const type = module.position_type || module.category_code || "bottom";
+    if (!modulesByType[type]) return;
+
+    modulesByType[type].push({
+      id: module.module_id,
+      sku: module.sku,
+      name: module.name,
+      preview_url: module.module_preview_url || module.preview_url,
+      lengthMm: module.length_mm,
+      depthMm: module.depth_mm,
+      heightMm: module.height_mm,
+      facadeColor: module.facade_color,
+      corpusColor: module.corpus_color,
+      finalPrice: module.final_price,
+      categoryCode: module.category_code,
+      categoryName: module.category_name,
+      typeCode: module.type_code,
+      typeName: module.type_name,
+      positionOrder: module.position_order,
+    });
   });
 
   // Рассчитываем общие размеры и длину столешницы
@@ -128,14 +163,19 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     name,
     sku,
     description,
+    kitchen_type_id,
     primary_color_id,
     secondary_color_id,
     material_id,
+    total_length_mm,
+    total_depth_mm,
+    total_height_mm,
     countertop_length_mm,
     countertop_depth_mm,
     base_price,
     final_price,
     preview_url,
+    is_active,
   } = kitData;
 
   // Нормализуем material_id: если пусто/не число/не существует — сохраняем NULL
@@ -149,20 +189,51 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     normalizedMaterialId = materialRows.length > 0 ? parsedMaterialId : null;
   }
 
+  // Нормализуем kitchen_type_id
+  let normalizedKitchenTypeId = null;
+  const parsedKitchenTypeId = Number(kitchen_type_id);
+  if (Number.isFinite(parsedKitchenTypeId) && parsedKitchenTypeId > 0) {
+    const { rows: ktRows } = await query(
+      `SELECT id FROM kitchen_types WHERE id = $1`,
+      [parsedKitchenTypeId]
+    );
+    normalizedKitchenTypeId = ktRows.length > 0 ? parsedKitchenTypeId : null;
+  }
+
   let kitSolutionId;
 
   if (id) {
     // Обновление существующего решения
     await query(
       `UPDATE kit_solutions 
-       SET name = $1, sku = $2, description = $3, 
-           primary_color_id = $4, secondary_color_id = $5, material_id = $6,
-           countertop_length_mm = $7, countertop_depth_mm = $8,
-           base_price = $9, final_price = $10, preview_url = $11,
+       SET name = $1, sku = $2, description = $3,
+           kitchen_type_id = $4,
+           primary_color_id = $5, secondary_color_id = $6, material_id = $7,
+           total_length_mm = $8, total_depth_mm = $9, total_height_mm = $10,
+           countertop_length_mm = $11, countertop_depth_mm = $12,
+           base_price = $13, final_price = $14, preview_url = $15,
+           is_active = $16,
            updated_at = now()
-       WHERE id = $12`,
-      [name, sku, description, primary_color_id, secondary_color_id, normalizedMaterialId,
-       countertop_length_mm, countertop_depth_mm, base_price, final_price, preview_url, id]
+       WHERE id = $17`,
+      [
+        name,
+        sku,
+        description,
+        normalizedKitchenTypeId,
+        primary_color_id,
+        secondary_color_id,
+        normalizedMaterialId,
+        total_length_mm,
+        total_depth_mm,
+        total_height_mm,
+        countertop_length_mm,
+        countertop_depth_mm,
+        base_price,
+        final_price,
+        preview_url,
+        is_active,
+        id,
+      ]
     );
     kitSolutionId = id;
 
@@ -172,12 +243,30 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     // Создание нового решения
     const { rows } = await query(
       `INSERT INTO kit_solutions 
-       (name, sku, description, primary_color_id, secondary_color_id, material_id,
-        countertop_length_mm, countertop_depth_mm, base_price, final_price, preview_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (name, sku, description, kitchen_type_id,
+        primary_color_id, secondary_color_id, material_id,
+        total_length_mm, total_depth_mm, total_height_mm,
+        countertop_length_mm, countertop_depth_mm, base_price, final_price, preview_url, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING id`,
-      [name, sku, description, primary_color_id, secondary_color_id, normalizedMaterialId,
-       countertop_length_mm, countertop_depth_mm, base_price, final_price, preview_url]
+      [
+        name,
+        sku,
+        description,
+        normalizedKitchenTypeId,
+        primary_color_id,
+        secondary_color_id,
+        normalizedMaterialId,
+        total_length_mm,
+        total_depth_mm,
+        total_height_mm,
+        countertop_length_mm,
+        countertop_depth_mm,
+        base_price,
+        final_price,
+        preview_url,
+        is_active,
+      ]
     );
     kitSolutionId = rows[0].id;
   }
@@ -209,7 +298,48 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
   }
 
   // Получаем обновленное решение
-  return await getKitSolutionWithModules(kitSolutionId);
+  return await getKitSolutionWithModules(kitSolutionId, { includeInactive: true });
+};
+
+const removeKitSolution = async (kitSolutionId) => {
+  const parsedId = Number(kitSolutionId);
+  if (!Number.isFinite(parsedId) || parsedId <= 0) {
+    throw ApiError.badRequest("Некорректный ID готового решения");
+  }
+
+  const { rows: imgRows } = await query(
+    `SELECT id, url FROM images WHERE entity_type = 'kit-solutions' AND entity_id = $1`,
+    [parsedId]
+  );
+
+  for (const img of imgRows) {
+    const url = img.url;
+    if (!url) continue;
+    const urlPath = url.startsWith("/") ? url.slice(1) : url;
+    const filePath = path.join(__dirname, "..", "public", urlPath);
+    if (fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  if (imgRows.length > 0) {
+    await query(
+      `DELETE FROM images WHERE entity_type = 'kit-solutions' AND entity_id = $1`,
+      [parsedId]
+    );
+  }
+
+  const { rows } = await query(
+    `DELETE FROM kit_solutions WHERE id = $1 RETURNING id`,
+    [parsedId]
+  );
+  if (!rows[0]) {
+    throw ApiError.notFound("Запись не найдена");
+  }
 };
 
 /**
@@ -218,8 +348,14 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
  * @returns {Promise<Array>} Список готовых решений
  */
 const listKitSolutions = async (filters = {}) => {
-  const { search, colorId, minPrice, maxPrice } = filters;
-  const conditions = ['ks.is_active = true'];
+  const { search, colorId, minPrice, maxPrice, includeInactive, limit, offset } = filters;
+  const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
+  const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
+
+  const conditions = [];
+  if (!includeInactive) {
+    conditions.push('ks.is_active = true');
+  }
   const params = [];
   let paramIndex = 1;
 
@@ -247,23 +383,41 @@ const listKitSolutions = async (filters = {}) => {
     paramIndex++;
   }
 
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const sql = `
     SELECT 
-     ks.*,
-     c1.name as primary_color_name,
-     c2.name as secondary_color_name,
-     kt.name as kitchen_type_name,
-     (SELECT COUNT(*) FROM kit_solution_modules WHERE kit_solution_id = ks.id) as modules_count
-     FROM kit_solutions ks
-     LEFT JOIN colors c1 ON ks.primary_color_id = c1.id
-     LEFT JOIN colors c2 ON ks.secondary_color_id = c2.id
-     LEFT JOIN kitchen_types kt ON ks.kitchen_type_id = kt.id
-     WHERE ${conditions.join(' AND ')}
-     ORDER BY ks.id DESC
+      ks.*,
+      c1.name as primary_color_name,
+      c2.name as secondary_color_name,
+      kt.name as kitchen_type_name,
+      img.url as image_preview_url,
+      (SELECT COUNT(*) FROM kit_solution_modules WHERE kit_solution_id = ks.id) as modules_count
+    FROM kit_solutions ks
+    LEFT JOIN colors c1 ON ks.primary_color_id = c1.id
+    LEFT JOIN colors c2 ON ks.secondary_color_id = c2.id
+    LEFT JOIN kitchen_types kt ON ks.kitchen_type_id = kt.id
+    LEFT JOIN LATERAL (
+      SELECT url
+      FROM images
+      WHERE entity_type = 'kit-solutions' AND entity_id = ks.id
+      ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC
+      LIMIT 1
+    ) img ON true
+    ${whereClause}
+    ORDER BY ks.id DESC
+    LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
   `;
 
+  params.push(safeLimit, safeOffset);
+
   const { rows } = await query(sql, params);
-  return rows;
+  return rows.map((row) => {
+    if (row.image_preview_url) {
+      row.preview_url = row.image_preview_url;
+    }
+    delete row.image_preview_url;
+    return row;
+  });
 };
 
 /**
@@ -294,9 +448,17 @@ const findSimilarKitSolutions = async (params) => {
 
   // Получаем все активные готовые решения кроме исходного
   const { rows: allKits } = await query(
-    `SELECT ks.*, 
-     (SELECT COUNT(*) FROM kit_solution_modules WHERE kit_solution_id = ks.id) as modules_count
+    `SELECT ks.*,
+      img.url as image_preview_url,
+      (SELECT COUNT(*) FROM kit_solution_modules WHERE kit_solution_id = ks.id) as modules_count
      FROM kit_solutions ks
+     LEFT JOIN LATERAL (
+       SELECT url
+       FROM images
+       WHERE entity_type = 'kit-solutions' AND entity_id = ks.id
+       ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC
+       LIMIT 1
+     ) img ON true
      WHERE ks.id != $1 AND ks.is_active = true
      ORDER BY ks.id`,
     [kitSolutionId]
@@ -356,12 +518,17 @@ const findSimilarKitSolutions = async (params) => {
       matches.push("hasTallModule");
     }
 
-    return {
+    const out = {
       ...kit,
       similarityScore,
       matches,
       similarityPercent: Math.min(100, Math.round((similarityScore / 100) * 100)),
     };
+    if (out.image_preview_url) {
+      out.preview_url = out.image_preview_url;
+    }
+    delete out.image_preview_url;
+    return out;
   }));
 
   // Сортируем по убыванию схожести
@@ -382,6 +549,7 @@ const findSimilarKitSolutions = async (params) => {
 module.exports = {
   getKitSolutionWithModules,
   saveKitSolutionWithModules,
+  removeKitSolution,
   listKitSolutions,
   findSimilarKitSolutions,
 };

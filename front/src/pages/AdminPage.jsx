@@ -2,7 +2,8 @@ import { useState } from "react";
 import SecureButton from "../components/ui/SecureButton";
 import OrdersTable from "../components/admin/OrdersTable";
 import EntityManager from "../components/admin/EntityManager";
-import ModuleCreator from "../components/admin/ModuleCreator";
+import ModulesAdmin from "../components/admin/ModulesAdmin";
+import KitSolutionsAdmin from "../components/admin/KitSolutionsAdmin";
 import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight } from "react-icons/fa";
 
 // Структура разделов админ панели
@@ -31,7 +32,7 @@ const adminSections = [
     label: "Каталог",
     icon: FaBook,
     items: [
-      { id: "kitSolutions", label: "Готовые решения", endpoint: "/kit-solutions" },
+      { id: "kitSolutions", label: "Готовые решения", endpoint: "/kit-solutions", special: "kitSolutionCreator" },
       { id: "modules", label: "Модули", endpoint: "/modules", special: "moduleCreator" },
       { id: "hardwareExtended", label: "Фурнитура", endpoint: "/hardware-extended" },
     ],
@@ -252,6 +253,7 @@ const AdminPage = () => {
   const currentItem = currentSection?.items.find((item) => item.id === activeTab);
   const entityConfig = entityConfigs[activeTab];
   const isModuleCreator = currentItem?.special === "moduleCreator";
+  const isKitSolutionCreator = currentItem?.special === "kitSolutionCreator";
 
   return (
     <div className="shop-container py-12 space-y-6">
@@ -327,10 +329,13 @@ const AdminPage = () => {
           {activeTab === "orders" && <OrdersTable />}
           
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ МОДУЛЕЙ */}
-          {isModuleCreator && <ModuleCreator />}
+          {isModuleCreator && <ModulesAdmin />}
+
+          {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ ГОТОВЫХ РЕШЕНИЙ */}
+          {isKitSolutionCreator && <KitSolutionsAdmin />}
           
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
-          {entityConfig && !isModuleCreator && (
+          {entityConfig && !isModuleCreator && !isKitSolutionCreator && (
             <EntityManager key={entityConfig.endpoint} {...entityConfig} />
           )}
         </div>

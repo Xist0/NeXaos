@@ -112,11 +112,11 @@ const EntityManager = ({ title, endpoint, fields }) => {
     if (endpoint !== "/kit-solutions") return;
     if (kitCalcInFlightRef.current) return;
 
-    const bottomIds = kitSelectedBottomIds
-      .map((v) => Number(v))
+    const bottomIds = kitSelectedBottomModules
+      .flatMap((m) => Array(Math.max(1, Number(m.quantity) || 1)).fill(Number(m.moduleId)))
       .filter((v) => Number.isFinite(v));
-    const topIds = kitSelectedTopIds
-      .map((v) => Number(v))
+    const topIds = kitSelectedTopModules
+      .flatMap((m) => Array(Math.max(1, Number(m.quantity) || 1)).fill(Number(m.moduleId)))
       .filter((v) => Number.isFinite(v));
 
     if (bottomIds.length === 0) {

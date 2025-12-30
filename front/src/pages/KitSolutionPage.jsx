@@ -24,20 +24,26 @@ const getImageUrl = (url) => {
 const KitSolutionPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { get } = useApi();
+  const { get, post } = useApi();
   const { addItem } = useCart();
   const logger = useLogger();
 
   const [kit, setKit] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [images, setImages] = useState([]);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [similarItems, setSimilarItems] = useState([]);
+  const [similarLoading, setSimilarLoading] = useState(false);
 
   const getRef = useRef(get);
+  const postRef = useRef(post);
   const loggerRef = useRef(logger);
 
   useEffect(() => {
     getRef.current = get;
+    postRef.current = post;
     loggerRef.current = logger;
-  }, [get, logger]);
+  }, [get, post, logger]);
 
   useEffect(() => {
     if (!id || id === "undefined") {
@@ -52,7 +58,12 @@ const KitSolutionPage = () => {
       setLoading(true);
       try {
         const res = await getRef.current(`/kit-solutions/${id}`, undefined, { signal: abortController.signal });
-        if (active) setKit(res?.data || null);
+        if (active) {
+          const data = res?.data || null;
+          setKit(data);
+          setImages(Array.isArray(data?.images) ? data.images : []);
+          setSelectedImageIndex(0);
+        }
       } catch (e) {
         if (active && !abortController.signal.aborted) {
           loggerRef.current?.error("Не удалось загрузить готовое решение");
@@ -71,7 +82,12 @@ const KitSolutionPage = () => {
     };
   }, [id, navigate]);
 
-  const mainImage = useMemo(() => getImageUrl(kit?.preview_url), [kit?.preview_url]);
+  const mainImage = useMemo(() => {
+    if (Array.isArray(images) && images.length > 0) {
+      return getImageUrl(images[selectedImageIndex]?.url);
+    }
+    return getImageUrl(kit?.preview_url);
+  }, [images, selectedImageIndex, kit?.preview_url]);
 
   const handleAddToCart = () => {
     if (!kit) return;
@@ -92,36 +108,31 @@ const KitSolutionPage = () => {
       .filter((section) => section.items.length > 0)
   ), [modulesByType]);
 
-  const componentModules = useMemo(() => {
-    const typeTitle = {
-      bottom: "Нижние модули",
-      top: "Верхние модули",
-      tall: "Пеналы",
-      filler: "Доборные элементы",
-      accessory: "Аксессуары",
-    };
-    const result = [];
-    if (!modulesByType) return [];
-    Object.entries(modulesByType).forEach(([type, list]) => {
-      if (!Array.isArray(list) || list.length === 0) return;
-      list.forEach((m) => {
-        if (!m?.id) return;
-        result.push({
-          id: m.id,
-          name: m.name,
-          sku: m.sku,
-          short_desc: typeTitle[type] ? `Категория: ${typeTitle[type]}` : undefined,
-          final_price: m.finalPrice,
-          price: m.finalPrice,
-          image: m.preview_url || m.previewUrl,
-          image_url: m.preview_url || m.previewUrl,
-          preview_url: m.preview_url || m.previewUrl,
-          is_active: true,
-        });
-      });
-    });
-    return result;
-  }, [modulesByType]);
+  const loadSimilar = async () => {
+    if (!id || similarLoading) return;
+    setSimilarLoading(true);
+    try {
+      const res = await postRef.current(`/kit-solutions/${id}/similar`, { limit: 12 });
+      const list = Array.isArray(res?.data) ? res.data : [];
+      const filtered = list.filter((x) => x.id !== Number(id) && x.is_active).slice(0, 12);
+      setSimilarItems(filtered);
+    } catch (e) {
+      loggerRef.current?.error("Не удалось загрузить похожие готовые решения", e);
+      setSimilarItems([]);
+    } finally {
+      setSimilarLoading(false);
+    }
+  };
+
+  const primaryColorData = useMemo(() => {
+    if (!kit?.primary_color_name) return null;
+    return { name: kit.primary_color_name, image_url: kit.primary_color_image };
+  }, [kit?.primary_color_name, kit?.primary_color_image]);
+
+  const secondaryColorData = useMemo(() => {
+    if (!kit?.secondary_color_name) return null;
+    return { name: kit.secondary_color_name, image_url: kit.secondary_color_image };
+  }, [kit?.secondary_color_name, kit?.secondary_color_image]);
 
   if (loading) {
     return <div className="shop-container py-12"><div className="glass-card p-6 text-night-500">Загружаем...</div></div>;
@@ -151,7 +162,56 @@ const KitSolutionPage = () => {
               loading="lazy"
               decoding="async"
             />
+
+            {images.length > 1 && (
+              <>
+                <button
+                  onClick={() =>
+                    setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1))
+                  }
+                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white shadow-lg rounded-full p-2 opacity-0 group-hover:opacity-100 transition-all z-20"
+                  aria-label="Предыдущее"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() =>
+                    setSelectedImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0))
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white shadow-lg rounded-full p-2 opacity-0 group-hover:opacity-100 transition-all z-20"
+                  aria-label="Следующее"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </>
+            )}
           </div>
+
+          {images.length > 1 && (
+            <div className="grid grid-cols-5 gap-2 px-1">
+              {images.map((img, index) => (
+                <button
+                  key={img.id || index}
+                  onClick={() => setSelectedImageIndex(index)}
+                  className={`aspect-square rounded-xl overflow-hidden border-2 transition-all ${
+                    selectedImageIndex === index
+                      ? "border-accent shadow-md ring-2 ring-accent/50 scale-105"
+                      : "border-night-200 hover:border-night-300 hover:scale-105"
+                  }`}
+                >
+                  <img
+                    src={getImageUrl(img.url)}
+                    alt={`${kit.name} ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -171,6 +231,14 @@ const KitSolutionPage = () => {
             </div>
             <div className="space-y-2">
               <SecureButton onClick={handleAddToCart} className="w-full justify-center py-3 text-base font-semibold bg-accent text-night-900 hover:bg-accent-dark">В корзину</SecureButton>
+              <SecureButton
+                onClick={loadSimilar}
+                variant="outline"
+                className="w-full justify-center py-3 text-base font-semibold"
+                disabled={similarLoading}
+              >
+                {similarLoading ? "Загрузка..." : "Похожие"}
+              </SecureButton>
             </div>
           </div>
 
@@ -189,8 +257,8 @@ const KitSolutionPage = () => {
               <div>
                 <h3 className="text-sm font-semibold text-night-900 mb-3 uppercase tracking-wide">Цвета</h3>
                 <div className="flex flex-wrap gap-3">
-                  {kit.primary_color_name && <ColorBadge value={kit.primary_color_name} labelPrefix="Основной:" />}
-                  {kit.secondary_color_name && <ColorBadge value={kit.secondary_color_name} labelPrefix="Доп.:" />}
+                  {primaryColorData && <ColorBadge labelPrefix="Основной:" colorData={primaryColorData} />}
+                  {secondaryColorData && <ColorBadge labelPrefix="Доп.:" colorData={secondaryColorData} />}
                 </div>
               </div>
             )}
@@ -211,7 +279,7 @@ const KitSolutionPage = () => {
         </div>
 
         <div className="glass-card p-8 space-y-6">
-          <h3 className="font-bold text-night-900 text-lg">Состав готового решения</h3>
+          <h3 className="font-bold text-night-900 text-lg">Компоненты</h3>
           {compositionSections.length === 0 ? (
             <p className="text-sm text-night-500">Состав не указан.</p>
           ) : (
@@ -223,8 +291,19 @@ const KitSolutionPage = () => {
                     <Link
                       key={module.id}
                       to={`/catalog/${module.id}`}
-                      className="flex items-start justify-between gap-4 rounded-lg border border-night-100 p-3 hover:border-accent transition"
+                      className="flex items-start gap-4 rounded-lg border border-night-100 p-3 hover:border-accent transition"
                     >
+                      <div className="w-14 h-14 bg-night-50 rounded-lg overflow-hidden border border-night-200 flex-shrink-0">
+                        <img
+                          src={getImageUrl(module.preview_url)}
+                          alt={module.name}
+                          className="w-full h-full object-cover"
+                          crossOrigin="anonymous"
+                          onError={(e) => { if (e.target.src !== placeholderImage) e.target.src = placeholderImage; }}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      </div>
                       <div className="space-y-1 text-sm">
                         <p className="font-semibold text-night-900">{module.name}</p>
                         {module.sku && <p className="text-night-500">Артикул: {module.sku}</p>}
@@ -234,9 +313,9 @@ const KitSolutionPage = () => {
                           </p>
                         )}
                       </div>
-                      <span className="text-sm font-semibold text-night-900 whitespace-nowrap">
+                      <div className="ml-auto text-sm font-semibold text-night-900 whitespace-nowrap">
                         {formatCurrency(module.finalPrice || 0)}
-                      </span>
+                      </div>
                     </Link>
                   ))}
                 </div>
@@ -245,16 +324,31 @@ const KitSolutionPage = () => {
           )}
         </div>
 
-        {componentModules.length > 0 && (
-          <div className="glass-card p-8">
-            <h3 className="font-bold text-night-900 mb-4 text-lg">Компоненты ({componentModules.length})</h3>
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {componentModules.map((module) => (
-                <ProductCard key={module.id} product={module} onAdd={(item) => addItem(item, 1)} />
+        <div className="glass-card p-8">
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <h3 className="font-bold text-night-900 text-lg">Похожие</h3>
+            <SecureButton
+              variant="outline"
+              onClick={loadSimilar}
+              disabled={similarLoading}
+              className="text-sm px-4 py-2"
+            >
+              {similarLoading ? "Загрузка..." : "Показать"}
+            </SecureButton>
+          </div>
+
+          {similarLoading ? (
+            <div className="text-night-500 text-center py-12">Загружаем похожие...</div>
+          ) : similarItems.length === 0 ? (
+            <div className="text-night-500 text-center py-12">Похожие не найдены</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+              {similarItems.map((product) => (
+                <ProductCard key={product.id} product={{ ...product, __type: "kitSolution" }} onAdd={(item) => addItem(item, 1)} />
               ))}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

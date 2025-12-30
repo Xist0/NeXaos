@@ -6,7 +6,7 @@ import SecureButton from "../ui/SecureButton";
 import { FaSpinner, FaUpload, FaImage, FaCheckCircle, FaTrash } from "react-icons/fa";
 
 const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
-  const { get, del, put } = useApi();
+  const { get, del, post } = useApi();
   const logger = useLogger();
 
   const [images, setImages] = useState([]);
@@ -43,76 +43,73 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
     }
   }, [entityId, entityType, get, logger, onPreviewUpdate]);
 
-  // ✅ ИСПРАВЛЕНО: правильная передача токена в fetch()
-const handleUpload = async (event) => {
-if (!entityId) {
-    logger.warn("Нет entityId для загрузки");
-    return;
-  }
+  const handleUpload = async (event) => {
+    if (!entityId) {
+      logger.warn("Нет entityId для загрузки");
+      return;
+    }
 
-  const files = Array.from(event.target.files);
-  if (files.length === 0) return;
+    const files = Array.from(event.target.files);
+    if (files.length === 0) return;
 
-  // ✅ Берём токен из store (всегда актуальный)
-  const token = useAuthStore.getState().accessToken;
-  if (!token) {
-    logger.error("❌ Вы не авторизованы. Логин требуется.");
-    return;
-  }
+    const token = useAuthStore.getState().accessToken;
+    if (!token) {
+      logger.error("❌ Вы не авторизованы. Логин требуется.");
+      return;
+    }
 
-  setUploading(true);
-  setUploadProgress(0);
-  let successCount = 0;
+    setUploading(true);
+    setUploadProgress(0);
+    let successCount = 0;
 
-  try {
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("entityType", entityType);
-        formData.append("entityId", String(entityId));
-        formData.append("alt", file.name.split(".")[0]);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+          formData.append("entityType", entityType);
+          formData.append("entityId", String(entityId));
+          formData.append("alt", file.name.split(".")[0]);
 
-        const response = await fetch("http://localhost:5000/api/images", {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-          headers: {
-            "Authorization": `Bearer ${token}` // ✅ Правильный токен
+          const response = await fetch("http://localhost:5000/api/images", {
+            method: "POST",
+            body: formData,
+            credentials: "include",
+            headers: {
+              "Authorization": `Bearer ${token}`
+            }
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({
+              message: `HTTP ${response.status}`
+            }));
+            throw new Error(errorData?.message || `HTTP ${response.status}`);
           }
-        });
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({
-            message: `HTTP ${response.status}`
-          }));
-          throw new Error(errorData?.message || `HTTP ${response.status}`);
+          const data = await response.json();
+          successCount++;
+          logger.info(`✅ Загружено: ${file.name}`);
+          setUploadProgress(((i + 1) / files.length) * 100);
+        } catch (error) {
+          logger.error(`❌ ${file.name}:`, error?.message || String(error));
         }
+      }
 
-        const data = await response.json();
-        successCount++;
-        logger.info(`✅ Загружено: ${file.name}`);
-        setUploadProgress(((i + 1) / files.length) * 100);
-      } catch (error) {
-        logger.error(`❌ ${file.name}:`, error?.message || String(error));
+      if (successCount > 0) {
+        logger.info(`✅ ${successCount} файл(ов) загружено`);
+        await fetchImages();
+        onUpdate?.();
+      }
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
       }
     }
-
-    if (successCount > 0) {
-      logger.info(`✅ ${successCount} файл(ов) загружено`);
-      await fetchImages();
-      onUpdate?.();
-    }
-  } finally {
-    setUploading(false);
-    setUploadProgress(0);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  }
-};
-
+  };
 
   const handleDelete = async (imageId) => {
     if (!confirm("Удалить изображение?")) return;
@@ -129,7 +126,7 @@ if (!entityId) {
 
   const handleSetPreview = async (imageId) => {
     try {
-      await put(`/images/${imageId}/preview`);
+      await post(`/images/${imageId}/set-preview`);
       logger.info("✅ Превью обновлено");
       const previewImage = images.find((img) => img.id === imageId);
       if (previewImage?.url) {

@@ -35,12 +35,15 @@ const ProductPage = () => {
   const [similarLoading, setSimilarLoading] = useState(false);
 
   const getRef = useRef(get);
+  const loggerRef = useRef(logger);
   const isFetchingRef = useRef(false);
   const lastIdRef = useRef(null);
 
   useEffect(() => {
     getRef.current = get;
   }, [get]);
+
+  loggerRef.current = logger;
 
   // Загрузка товара/комплекта
   useEffect(() => {
@@ -61,52 +64,26 @@ const ProductPage = () => {
 
     const fetchItem = async () => {
       try {
-        // Пробуем сначала kit-solution
-        try {
-          const kitRes = await getRef.current(`/kit-solutions/${id}`, undefined, { 
-            signal: abortController.signal 
-          });
-          if (active && kitRes?.data) {
-            setItem({ ...kitRes.data, __type: "kitSolution" });
-            // Для kit нет отдельных изображений
-            setImages([]);
-            setSimilarLoading(false);
-            setSimilarItems([]);
-          } else {
-            // Если kit не найден — модуль
-            const moduleRes = await getRef.current(`/modules/${id}`, undefined, { 
-              signal: abortController.signal 
-            });
-            if (active && moduleRes?.data) {
-              const itemData = moduleRes.data;
-              setItem(itemData);
-              
-              // Загружаем изображения модуля
-              try {
-                const imagesRes = await getRef.current(`/images/modules/${id}`, undefined, { 
-                  signal: abortController.signal 
-                });
-                setImages(imagesRes?.data || []);
-              } catch (imgErr) {
-                console.warn("Изображения не загружены:", imgErr);
-                setImages([]);
-              }
-            }
-          }
-        } catch (moduleErr) {
-          console.error("Ошибка загрузки:", moduleErr);
-          navigate("/catalog");
+        const moduleRes = await getRef.current(`/modules/${id}`, undefined, {
+          signal: abortController.signal,
+        });
+
+        if (active && moduleRes?.data) {
+          const itemData = moduleRes.data;
+          setItem(itemData);
+          setImages(Array.isArray(itemData?.images) ? itemData.images : []);
+          setSelectedImageIndex(0);
         }
       } catch (error) {
         if (active) {
-          logger.error("Не удалось загрузить товар");
+          loggerRef.current?.error("Не удалось загрузить товар");
           navigate("/catalog");
         }
       } finally {
         if (active) {
           setLoading(false);
-          isFetchingRef.current = false;
         }
+        isFetchingRef.current = false;
       }
     };
 
@@ -116,7 +93,7 @@ const ProductPage = () => {
       active = false;
       abortController.abort();
     };
-  }, [id, navigate, logger]);
+  }, [id, navigate]);
 
   // Похожие товары
   const loadSimilar = useCallback(async () => {
@@ -391,7 +368,7 @@ const ProductPage = () => {
                   {items.map(module => (
                     <Link
                       key={module.id}
-                      to={`/product/${module.id}`}
+                      to={`/catalog/${module.id}`}
                       className="glass-card p-4 hover:border-accent transition-all group"
                     >
                       <div className="space-y-2">

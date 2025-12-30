@@ -1,5 +1,48 @@
 const ApiError = require("../utils/api-error");
 const crudService = require("../services/crud.service");
+const path = require("path");
+const fs = require("fs");
+
+const normalizeSkuForFolder = (sku) => {
+  const transliterate = (str) => {
+    const cyrillic = {
+      'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'yo', 'ж': 'zh',
+      'з': 'z', 'и': 'i', 'й': 'j', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+      'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
+      'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
+      'я': 'ya'
+    };
+    return String(str || "")
+      .toLowerCase()
+      .split("")
+      .map((char) => cyrillic[char] || char)
+      .join("")
+      .replace(/[^a-z0-9_-]/g, "_")
+      .replace(/_+/g, "_");
+  };
+
+  return transliterate(sku);
+};
+
+const legacySkuFolder = (sku) => {
+  return String(sku || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, "_")
+    .replace(/_+/g, "_");
+};
+
+const legacyUnicodeFolder = (sku) => {
+  return String(sku || "")
+    .replace(/[^a-zA-Z0-9а-яА-ЯёЁ_-]/g, "_")
+    .replace(/\s+/g, "_");
+};
+
+const getModuleFolderCandidates = (sku) => {
+  const preferred = normalizeSkuForFolder(sku);
+  const legacy = legacySkuFolder(sku);
+  const unicodeLegacy = legacyUnicodeFolder(sku);
+  return Array.from(new Set([preferred, legacy, unicodeLegacy].filter(Boolean)));
+};
 
 const validatePayload = (schema, payload) => {
   if (!schema) {
@@ -21,13 +64,26 @@ const createCrudController = (entity) => {
       for (const item of data) {
         // Добавляем preview_url
         const { rows: imageRows } = await query(
-          `SELECT url FROM images 
+          `SELECT id, url FROM images 
            WHERE entity_type = 'modules' AND entity_id = $1 
-           ORDER BY sort_order ASC, id ASC LIMIT 1`,
+           ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC LIMIT 1`,
           [item.id]
         );
         if (imageRows[0]) {
-          item.preview_url = imageRows[0].url;
+          let previewUrl = imageRows[0].url;
+          if (previewUrl && item?.sku && previewUrl.startsWith("/uploads/modules/")) {
+            const match = previewUrl.match(/^\/uploads\/modules\/([^/]+)\/(.+)$/);
+            const correctFolder = normalizeSkuForFolder(item.sku);
+            if (match && match[1] && match[2] && match[1] !== correctFolder) {
+              const fixedUrl = `/uploads/modules/${correctFolder}/${match[2]}`;
+              const fixedPath = path.join(__dirname, "..", "public", fixedUrl.slice(1));
+              if (fs.existsSync(fixedPath)) {
+                await query(`UPDATE images SET url = $1 WHERE id = $2`, [fixedUrl, imageRows[0].id]);
+                previewUrl = fixedUrl;
+              }
+            }
+          }
+          item.preview_url = previewUrl;
         }
         
         // Добавляем данные о цветах
@@ -115,14 +171,74 @@ const createCrudController = (entity) => {
     // Для модулей добавляем preview_url из первого изображения и данные о цветах
     if (entity.route === "modules") {
       const { rows: imageRows } = await query(
-        `SELECT url FROM images 
+        `SELECT id, url FROM images 
          WHERE entity_type = 'modules' AND entity_id = $1 
-         ORDER BY sort_order ASC, id ASC LIMIT 1`,
+         ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC LIMIT 1`,
         [data.id]
       );
       if (imageRows[0]) {
-        data.preview_url = imageRows[0].url;
+        let previewUrl = imageRows[0].url;
+        if (previewUrl && data?.sku && previewUrl.startsWith("/uploads/modules/")) {
+          const match = previewUrl.match(/^\/uploads\/modules\/([^/]+)\/(.+)$/);
+          const folderCandidates = getModuleFolderCandidates(data.sku);
+          if (match && match[1] && match[2]) {
+            const currentFolder = match[1];
+            const filename = match[2];
+            let resolvedFolder = null;
+            for (const candidate of folderCandidates) {
+              const candidatePath = path.join(__dirname, "..", "public", "uploads", "modules", candidate, filename);
+              if (fs.existsSync(candidatePath)) {
+                resolvedFolder = candidate;
+                break;
+              }
+            }
+            if (resolvedFolder && currentFolder !== resolvedFolder) {
+              const fixedUrl = `/uploads/modules/${resolvedFolder}/${filename}`;
+              await query(`UPDATE images SET url = $1 WHERE id = $2`, [fixedUrl, imageRows[0].id]);
+              previewUrl = fixedUrl;
+            }
+          }
+        }
+        data.preview_url = previewUrl;
       }
+
+      // Добавляем изображения модуля (чтобы фронт не дергал /images отдельно)
+      const { rows: allImages } = await query(
+        `SELECT id, url, alt, sort_order,
+         (sort_order = 0) as is_preview
+         FROM images
+         WHERE entity_type = 'modules' AND entity_id = $1
+         ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
+        [data.id]
+      );
+
+      if (Array.isArray(allImages) && data?.sku) {
+        const folderCandidates = getModuleFolderCandidates(data.sku);
+        for (const img of allImages) {
+          if (!img?.url || !img.url.startsWith("/uploads/modules/")) continue;
+          const match = img.url.match(/^\/uploads\/modules\/([^/]+)\/(.+)$/);
+          if (!match) continue;
+          const currentFolder = match[1];
+          const filename = match[2];
+          if (!filename) continue;
+
+          let resolvedFolder = null;
+          for (const candidate of folderCandidates) {
+            const candidatePath = path.join(__dirname, "..", "public", "uploads", "modules", candidate, filename);
+            if (fs.existsSync(candidatePath)) {
+              resolvedFolder = candidate;
+              break;
+            }
+          }
+          if (!resolvedFolder || currentFolder === resolvedFolder) continue;
+
+          const fixedUrl = `/uploads/modules/${resolvedFolder}/${filename}`;
+          await query(`UPDATE images SET url = $1 WHERE id = $2`, [fixedUrl, img.id]);
+          img.url = fixedUrl;
+        }
+      }
+
+      data.images = allImages;
       
       // Добавляем данные о цветах
       if (data.primary_color_id) {
