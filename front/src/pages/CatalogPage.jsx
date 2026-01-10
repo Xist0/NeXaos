@@ -10,77 +10,26 @@ const CatalogPage = () => {
   const { get } = useApi();
   const { addItem } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState(() => searchParams.get("search") || "");
+  const [debouncedQuery, setDebouncedQuery] = useState(query);
   const [items, setItems] = useState([]);
   const [kitSolutions, setKitSolutions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isFiltersOpen, setFiltersOpen] = useState(false);
 
-  const fromProduct = searchParams.get("fromProduct") === "1";
-  const isInitialMount = useRef(true);
-  const isFirstDebounce = useRef(true);
-  const isQueryInitialized = useRef(false);
+  const [activeCategory, setActiveCategory] = useState(() => searchParams.get("category") || "all");
+  const [activeSubCategory, setActiveSubCategory] = useState(() => searchParams.get("subCategory") || null);
 
-  const [activeCategory, setActiveCategory] = useState(() => {
-    if (!fromProduct) return "all";
-    return searchParams.get("category") || "all";
-  });
-  const [activeSubCategory, setActiveSubCategory] = useState(() => {
-    if (!fromProduct) return null;
-    return searchParams.get("subCategory") || null;
-  });
-
-  const [filters, setFilters] = useState(() => {
-    if (!fromProduct) {
-      return { facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "", categoryId: "", baseSku: "" };
-    }
-    return {
-      facadeColor: searchParams.get("facadeColor") || "",
-      corpusColor: searchParams.get("corpusColor") || "",
-      priceFrom: searchParams.get("priceFrom") || "",
-      priceTo: searchParams.get("priceTo") || "",
-      lengthFrom: searchParams.get("lengthFrom") || "",
-      lengthTo: searchParams.get("lengthTo") || "",
-      categoryId: searchParams.get("categoryId") || "",
-      baseSku: searchParams.get("baseSku") || "",
-    };
-  });
-
+  const [filters, setFilters] = useState(() => ({
+    facadeColor: searchParams.get("facadeColor") || "",
+    corpusColor: searchParams.get("corpusColor") || "",
+    priceFrom: searchParams.get("priceFrom") || "",
+    priceTo: searchParams.get("priceTo") || "",
+    lengthFrom: searchParams.get("lengthFrom") || "",
+    lengthTo: searchParams.get("lengthTo") || "",
+  }));
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
   const [moduleCategories, setModuleCategories] = useState([]);
-  const getRef = useRef(get);
-  const isFetchingRef = useRef(false);
-
-  useEffect(() => { getRef.current = get; }, [get]);
-
-  useEffect(() => {
-    if (isInitialMount.current && !fromProduct) {
-      isInitialMount.current = false;
-      setSearchParams(new URLSearchParams(), { replace: true });
-    } else {
-      isInitialMount.current = false;
-    }
-  }, [fromProduct, setSearchParams]);
-
-  useEffect(() => {
-    if (isQueryInitialized.current) return;
-    const urlQuery = searchParams.get("search") || "";
-    setQuery(urlQuery);
-    isQueryInitialized.current = true;
-  }, [searchParams]);
-
-  useEffect(() => {
-    const loadCategories = async () => {
-      try {
-        const [categoriesRes] = await Promise.all([ get("/module-categories") ]);
-        setModuleCategories(categoriesRes?.data || []);
-      } catch (error) {
-        console.error("Ошибка загрузки категорий", error);
-      }
-    };
-    loadCategories();
-  }, [get]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 400);
@@ -88,178 +37,109 @@ const CatalogPage = () => {
   }, [query]);
 
   useEffect(() => {
-    if (isFirstDebounce.current) {
-      isFirstDebounce.current = false;
-      setDebouncedFilters(filters);
-      return;
-    }
-    const timer = setTimeout(() => { setDebouncedFilters(filters); }, 500);
+    const timer = setTimeout(() => setDebouncedFilters(filters), 500);
     return () => clearTimeout(timer);
   }, [filters]);
 
   useEffect(() => {
     const params = new URLSearchParams();
+    if (debouncedQuery) params.set("search", debouncedQuery);
     if (activeCategory !== "all") params.set("category", activeCategory);
     if (activeSubCategory) params.set("subCategory", activeSubCategory);
-    if (debouncedQuery) params.set("search", debouncedQuery);
     Object.entries(debouncedFilters).forEach(([key, value]) => {
       if (value) params.set(key, value);
     });
     setSearchParams(params, { replace: true });
-  }, [activeCategory, activeSubCategory, debouncedFilters, debouncedQuery, setSearchParams]);
+  }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, setSearchParams]);
+
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        const [categoriesRes] = await Promise.all([get("/module-categories")]);
+        setModuleCategories(categoriesRes?.data || []);
+      } catch (error) {
+        console.error("Ошибка загрузки категорий", error);
+      }
+    };
+    loadInitialData();
+  }, [get]);
 
   useEffect(() => {
     let active = true;
-    const abortController = new AbortController();
     const fetchItems = async () => {
-      if (isFetchingRef.current) return;
-      isFetchingRef.current = true;
       setLoading(true);
       try {
-        const queryParams = {};
-        if (debouncedQuery) queryParams.search = debouncedQuery;
-        Object.entries(debouncedFilters).forEach(([key, value]) => { if (value) queryParams[key] = value; });
-
+        const queryParams = { search: debouncedQuery, ...debouncedFilters };
         if (activeCategory === "kitSolutions") {
-          const response = await getRef.current("/kit-solutions", queryParams);
-          if (active && !abortController.signal.aborted) {
-            const list = Array.isArray(response?.data) ? response.data : [];
-            setKitSolutions(list.map((x) => ({ ...x, __type: "kitSolution" })));
+          const res = await get("/kit-solutions", queryParams);
+          if (active) {
+            setKitSolutions((res?.data || []).map(k => ({...k, __type: "kitSolution"})));
             setItems([]);
-            setLoading(false);
-            isFetchingRef.current = false;
           }
         } else if (activeCategory === "all") {
-          const [modulesRes, kitsRes] = await Promise.all([
-            getRef.current("/modules", Object.keys(queryParams).length > 0 ? queryParams : undefined),
-            getRef.current("/kit-solutions", Object.keys(queryParams).length > 0 ? queryParams : undefined),
-          ]);
-          if (active && !abortController.signal.aborted) {
-            const kits = Array.isArray(kitsRes?.data) ? kitsRes.data : [];
-            setKitSolutions(kits.map((x) => ({ ...x, __type: "kitSolution" })));
+          const [modulesRes, kitsRes] = await Promise.all([get("/modules", queryParams), get("/kit-solutions", queryParams)]);
+          if (active) {
             setItems(modulesRes?.data || []);
-            setLoading(false);
-            isFetchingRef.current = false;
+            setKitSolutions((kitsRes?.data || []).map(k => ({...k, __type: "kitSolution"})));
           }
         } else {
-          if (activeCategory !== "all") {
-            const category = moduleCategories.find((c) => c.code === activeCategory);
-            if (category) queryParams.categoryId = category.id;
-          }
+          const category = moduleCategories.find((c) => c.code === activeCategory);
+          if (category) queryParams.categoryId = category.id;
           if (activeSubCategory) queryParams.baseSku = activeSubCategory;
-          const response = await getRef.current("/modules", Object.keys(queryParams).length > 0 ? queryParams : undefined);
-          if (active && !abortController.signal.aborted) {
-            setItems(response?.data || []);
+          const res = await get("/modules", queryParams);
+          if (active) {
+            setItems(res?.data || []);
             setKitSolutions([]);
-            setLoading(false);
-            isFetchingRef.current = false;
           }
         }
       } catch (error) {
-        if (!abortController.signal.aborted && active) {
-          console.error("Ошибка загрузки товаров:", error);
-          setItems([]);
-          setKitSolutions([]);
-          setLoading(false);
-          isFetchingRef.current = false;
-        }
+        console.error("Ошибка загрузки товаров:", error);
+        setItems([]);
+        setKitSolutions([]);
+      } finally {
+        if (active) setLoading(false);
       }
     };
+
     fetchItems();
-    return () => {
-      active = false;
-      abortController.abort();
-      isFetchingRef.current = false;
-    };
-  }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, moduleCategories]);
+    return () => { active = false; };
+  }, [debouncedQuery, debouncedFilters, activeCategory, activeSubCategory, moduleCategories, get]);
 
-  const bottomSubCategories = useMemo(() => activeCategory !== "bottom" ? [] : [
-    { code: "НМР1", label: "НМР1 - Одностворчатый" }, { code: "НМР2", label: "НМР2 - Двустворчатый" },
-    { code: "НМР.М1", label: "НМР.М1 - Под мойку одностворчатый" }, { code: "НМР.М2", label: "НМР.М2 - Под мойку двустворчатый" },
-    { code: "НМЯ.М1", label: "НМЯ.М1 - С ящиком под мойку" }, { code: "НМЯ.2", label: "НМЯ.2 - С двумя ящиками" },
-    { code: "НМЯ.3", label: "НМЯ.3 - С тремя ящиками" },
-  ], [activeCategory]);
+  const bottomSubCategories = useMemo(() => activeCategory !== "bottom" ? [] : [{ code: "НМР1", label: "Одностворчатые" }, { code: "НМР2", label: "Двустворчатые" }, { code: "НМР.М1", label: "Под мойку" }, { code: "НМЯ.М1", label: "С ящиком под мойку" }, { code: "НМЯ.2", label: "С 2 ящиками" }, { code: "НМЯ.3", label: "С 3 ящиками" }], [activeCategory]);
+  const topSubCategories = useMemo(() => activeCategory !== "top" ? [] : [{ code: "ВМР1", label: "Одностворчатые" }, { code: "ВМР2", label: "Двустворчатые" }, { code: "ВМВ1", label: "Выдвижные" }], [activeCategory]);
 
-  const topSubCategories = useMemo(() => activeCategory !== "top" ? [] : [
-    { code: "ВМР1", label: "ВМР1 - Одностворчатый" }, { code: "ВМР2", label: "ВМР2 - Двустворчатый" }, { code: "ВМВ1", label: "ВМВ1 - Выдвижной" },
-  ], [activeCategory]);
-
-  const displayItems = useMemo(() => {
-    if (activeCategory === "kitSolutions") return kitSolutions;
-    if (activeCategory === "all") return [...kitSolutions, ...items];
-    return items;
-  }, [activeCategory, kitSolutions, items]);
-
-  const activeItems = useMemo(() => displayItems.filter((item) => item.is_active), [displayItems]);
-  const handleAddToCart = useCallback((product) => { addItem(product); }, [addItem]);
-
-  const renderCategoryLink = (code, label, subCategories = []) => {
-    const isActive = activeCategory === code;
-    return (
-      <div key={code}>
-        <button
-          onClick={() => { setActiveCategory(code); setActiveSubCategory(null); }}
-          className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition ${
-            isActive ? "bg-night-100 text-night-900" : "text-night-600 hover:bg-night-50"
-          }`}
-        >
-          {label}
-        </button>
-        {isActive && subCategories.length > 0 && (
-          <div className="pl-4 mt-2 space-y-1 border-l-2 border-night-200 ml-3">
-            {subCategories.map((sub) => (
-              <button
-                key={sub.code}
-                onClick={() => setActiveSubCategory(sub.code)}
-                className={`w-full text-left px-3 py-1.5 rounded-md text-xs transition ${
-                  activeSubCategory === sub.code ? "bg-accent/20 text-accent-dark font-semibold" : "text-night-500 hover:bg-night-50"
-                }`}
-              >
-                {sub.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const displayItems = useMemo(() => (activeCategory === "kitSolutions" ? kitSolutions : activeCategory === "all" ? [...kitSolutions, ...items] : items).filter(item => item.is_active), [activeCategory, kitSolutions, items]);
+  const handleAddToCart = useCallback((product) => addItem(product), [addItem]);
 
   const SidebarContent = () => (
     <aside className="space-y-4 md:space-y-6">
-      <div className="glass-card p-4">
-        <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide px-3">Категории</h3>
-        <nav className="mt-3 space-y-1">
-          {renderCategoryLink("all", "Все")}
-          {renderCategoryLink("kitSolutions", "Готовые решения")}
-          {renderCategoryLink("bottom", "Нижние модули", bottomSubCategories)}
-          {renderCategoryLink("top", "Верхние модули", topSubCategories)}
-          {renderCategoryLink("tall", "Пеналы")}
-          {renderCategoryLink("filler", "Доборные элементы")}
-          {renderCategoryLink("accessory", "Аксессуары")}
-        </nav>
-      </div>
-      <div className="glass-card p-5">
-        <div className="flex items-center justify-between gap-4">
-          <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide">Фильтры</h3>
-          <SecureButton variant="outline" className="px-4 py-2 text-xs" onClick={() => setFilters({ facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "", categoryId: "", baseSku: "" })} >
-            Сброс
-          </SecureButton>
-        </div>
-        <div className="mt-4 space-y-5">
-          <div>
-            <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Цвета</div>
-            <div className="mt-3 space-y-3"><SecureInput value={filters.facadeColor} onChange={(v) => setFilters({ ...filters, facadeColor: v })} placeholder="Цвет фасада"/><SecureInput value={filters.corpusColor} onChange={(v) => setFilters({ ...filters, corpusColor: v })} placeholder="Цвет корпуса"/></div>
+      <FilterGroup title="Категории">
+        <CategoryLink code="all" label="Все" active={activeCategory} setCategory={setActiveCategory} setSubCategory={setActiveSubCategory} />
+        <CategoryLink code="kitSolutions" label="Готовые решения" active={activeCategory} setCategory={setActiveCategory} setSubCategory={setActiveSubCategory} />
+        <CategoryLink code="bottom" label="Нижние модули" subs={bottomSubCategories} active={activeCategory} setCategory={setActiveCategory} subActive={activeSubCategory} setSubCategory={setActiveSubCategory} />
+        <CategoryLink code="top" label="Верхние модули" subs={topSubCategories} active={activeCategory} setCategory={setActiveCategory} subActive={activeSubCategory} setSubCategory={setActiveSubCategory} />
+        <CategoryLink code="tall" label="Пеналы" active={activeCategory} setCategory={setActiveCategory} setSubCategory={setActiveSubCategory} />
+        <CategoryLink code="filler" label="Доборные элементы" active={activeCategory} setCategory={setActiveCategory} setSubCategory={setActiveSubCategory} />
+        <CategoryLink code="accessory" label="Аксессуары" active={activeCategory} setCategory={setActiveCategory} setSubCategory={setActiveSubCategory} />
+      </FilterGroup>
+      <FilterGroup title="Фильтры" onReset={() => setFilters({ facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "" })}>
+        <FilterSection title="Цвета">
+          <SecureInput value={filters.facadeColor} onChange={(v) => setFilters(f => ({ ...f, facadeColor: v }))} placeholder="Цвет фасада" />
+          <SecureInput value={filters.corpusColor} onChange={(v) => setFilters(f => ({ ...f, corpusColor: v }))} placeholder="Цвет корпуса" />
+        </FilterSection>
+        <FilterSection title="Цена">
+          <div className="grid grid-cols-2 gap-3">
+            <SecureInput type="number" value={filters.priceFrom} onChange={(v) => setFilters(f => ({ ...f, priceFrom: v }))} placeholder="От" />
+            <SecureInput type="number" value={filters.priceTo} onChange={(v) => setFilters(f => ({ ...f, priceTo: v }))} placeholder="До" />
           </div>
-          <div>
-            <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Цена</div>
-            <div className="mt-3 grid grid-cols-2 gap-3"><SecureInput type="number" value={filters.priceFrom} onChange={(v) => setFilters({ ...filters, priceFrom: v })} placeholder="От"/><SecureInput type="number" value={filters.priceTo} onChange={(v) => setFilters({ ...filters, priceTo: v })} placeholder="До"/></div>
+        </FilterSection>
+        <FilterSection title="Размер (мм)">
+          <div className="grid grid-cols-2 gap-3">
+            <SecureInput type="number" value={filters.lengthFrom} onChange={(v) => setFilters(f => ({ ...f, lengthFrom: v }))} placeholder="От" />
+            <SecureInput type="number" value={filters.lengthTo} onChange={(v) => setFilters(f => ({ ...f, lengthTo: v }))} placeholder="До" />
           </div>
-          <div>
-            <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Размер (длина, мм)</div>
-            <div className="mt-3 grid grid-cols-2 gap-3"><SecureInput type="number" value={filters.lengthFrom} onChange={(v) => setFilters({ ...filters, lengthFrom: v })} placeholder="От"/><SecureInput type="number" value={filters.lengthTo} onChange={(v) => setFilters({ ...filters, lengthTo: v })} placeholder="До"/></div>
-          </div>
-        </div>
-      </div>
+        </FilterSection>
+      </FilterGroup>
     </aside>
   );
 
@@ -267,50 +147,81 @@ const CatalogPage = () => {
     <div className="shop-container py-8 md:py-12">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 md:mb-8">
         <div className="max-w-xl">
-          <p className="text-xs uppercase tracking-[0.3em] text-night-400">Каталог</p>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-night-900">Каталог мебели</h1>
+          <p className="text-xs uppercase tracking-[0.2em] text-night-400">Каталог</p>
+          <h1 className="text-3xl sm:text-4xl font-bold text-night-900">Каталог мебели</h1>
         </div>
         <SecureInput value={query} onChange={setQuery} placeholder="Поиск по названию или артикулу" className="w-full sm:w-auto sm:min-w-[280px]" />
       </div>
 
       <div className="lg:hidden mb-6">
-        <SecureButton onClick={() => setFiltersOpen(true)} className="w-full">Фильтры и категории</SecureButton>
+        <SecureButton onClick={() => setFiltersOpen(true)} className="w-full justify-center text-base py-3">Фильтры и категории</SecureButton>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[280px_1fr] xl:grid-cols-[350px_1fr]">
+      <div className="grid gap-8 lg:grid-cols-[280px_1fr] xl:grid-cols-[320px_1fr]">
         <div className="hidden lg:block"><SidebarContent /></div>
-        <div className="min-w-0">
+        <main className="min-w-0">
           {loading ? (
-            <div className="glass-card p-6 text-night-500">Загружаем товары...</div>
-          ) : (
-            <section className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg sm:text-xl font-semibold text-night-900">{activeItems.length} позици{activeItems.length !== 1 ? "й" : "я"}</h2>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-6">
-                {activeItems.map((product, index) => <ProductCard key={product.id ? `product-${product.id}`: `product-${index}-${product.sku || product.name}`} product={product} onAdd={handleAddToCart} />)}
+            <div className="glass-card p-6 text-center text-night-500">Загружаем товары...</div>
+          ) : displayItems.length > 0 ? (
+            <section>
+              <h2 className="text-lg sm:text-xl font-semibold text-night-900 mb-4">{displayItems.length} позици{displayItems.length !== 1 ? "й" : "я"}</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+                {displayItems.map((product) => <ProductCard key={product.id || product.sku} product={product} onAdd={handleAddToCart} />)}
               </div>
             </section>
+          ) : (
+            <div className="glass-card p-8 text-center text-night-500">Не найдено товаров, соответствующих вашему запросу. Попробуйте изменить фильтры.</div>
           )}
-          {!loading && activeItems.length === 0 && (
-            <div className="glass-card p-6 text-night-500">Мы не нашли таких товаров. Попробуйте другой запрос или измените фильтры.</div>
-          )}
+        </main>
+      </div>
+
+      <div className={`fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden transition-opacity ${isFiltersOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`} onClick={() => setFiltersOpen(false)}></div>
+      <div className={`fixed top-0 left-0 h-full w-[320px] max-w-[85vw] bg-night-50/90 backdrop-blur-lg shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${isFiltersOpen ? 'translate-x-0' : '-translate-x-full'} lg:hidden`}>
+        <div className="p-4 h-full overflow-y-auto space-y-6">
+          <div className="flex justify-between items-center px-2">
+            <h2 className="text-xl font-bold">Фильтры</h2>
+            <button onClick={() => setFiltersOpen(false)} className="text-2xl text-night-500 hover:text-night-900">&times;</button>
+          </div>
+          <SidebarContent />
         </div>
       </div>
+    </div>
+  );
+};
 
-      {isFiltersOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setFiltersOpen(false)}></div>
+const FilterGroup = ({ title, onReset, children }) => (
+  <div className="glass-card p-4">
+    <div className="flex items-center justify-between gap-4 px-1 mb-2">
+      <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide">{title}</h3>
+      {onReset && <button onClick={onReset} className="text-xs font-semibold text-night-400 hover:text-accent hover:underline">Сброс</button>}
+    </div>
+    <div className="mt-3 space-y-1">{children}</div>
+  </div>
+);
+
+const FilterSection = ({ title, children }) => (
+  <div className="pt-4 border-t border-night-100/80 first:border-t-0 first:pt-0">
+    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1 mb-3">{title}</div>
+    <div className="space-y-3 px-1">{children}</div>
+  </div>
+);
+
+const CategoryLink = ({ code, label, subs = [], active, setCategory, subActive, setSubCategory }) => {
+  const isActive = active === code;
+  return (
+    <div>
+      <button onClick={() => { setCategory(code); setSubCategory(null); }} className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition ${isActive ? "bg-night-100 text-night-900" : "text-night-600 hover:bg-night-100/50"}`}>
+        {label}
+      </button>
+      {isActive && subs.length > 0 && (
+        <div className="pl-4 mt-2 space-y-1 border-l-2 border-night-200 ml-3">
+          {subs.map((sub) => (
+            <button key={sub.code} onClick={() => setSubCategory(sub.code)} className={`w-full text-left px-3 py-1.5 rounded-md text-xs transition ${subActive === sub.code ? "bg-accent/20 text-accent-dark font-semibold" : "text-night-500 hover:bg-night-100/50"}`}>
+              {sub.label}
+            </button>
+          ))}
+        </div>
       )}
-
-      <div className={`fixed top-0 left-0 h-full w-[320px] max-w-[85vw] bg-white shadow-lg z-50 transform transition-transform duration-300 ease-in-out ${isFiltersOpen ? 'translate-x-0' : '-translate-x-full'} lg:hidden`}>
-         <div className="p-4 h-full overflow-y-auto">
-           <div className="flex justify-between items-center mb-4">
-             <h2 className="text-xl font-semibold">Фильтры</h2>
-             <SecureButton onClick={() => setFiltersOpen(false)} variant="ghost" className="px-2 py-1">&times;</SecureButton>
-           </div>
-           <SidebarContent />
-         </div>
-      </div>
     </div>
   );
 };

@@ -1,10 +1,9 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ---------- BASE / RESET ---------- */
 @layer base {
   *,
   *::before,
@@ -14,108 +13,53 @@
 
   html {
     font-family: "Inter", system-ui, sans-serif;
-    line-height: 1.4;
+    line-height: 1.5;
     font-weight: 400;
-    color: #21262d;
-    background-color: #ffffff;
     text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     -webkit-text-size-adjust: 100%;
   }
 
   body {
     margin: 0;
     min-height: 100vh;
-    @apply bg-white text-night-900 antialiased;
+    @apply bg-white text-night-900;
   }
 
   #root {
     min-height: 100vh;
   }
 
-  img,
-  svg,
-  video,
-  canvas {
+  img, svg, video, canvas {
     display: block;
     max-width: 100%;
   }
 
-  a {
-    color: inherit;
-    text-decoration: none;
-  }
-
-  button,
-  input,
-  textarea,
-  select {
+  button, input, textarea, select {
     font: inherit;
   }
 }
 
-/* ---------- COMPONENTS ---------- */
 @layer components {
   .shop-shell {
-    @apply min-h-screen flex flex-col bg-night-50;
+    @apply min-h-screen flex flex-col bg-night-50/50;
   }
 
-  /**
-   * Глобальный контейнер сайта.
-   * Требование: на ПК ширина 1400px и НИКАКИХ внутренних боковых отступов.
-   * На мобильных/планшетах — отступы есть (иначе контент прилипнет к краям).
-   */
   .shop-container {
-    @apply w-full mx-auto;
-    max-width: 1400px;
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-
-  @media (min-width: 640px) {
-    .shop-container {
-      padding-left: 16px;
-      padding-right: 16px;
-    }
-  }
-
-  @media (min-width: 768px) {
-    .shop-container {
-      padding-left: 24px;
-      padding-right: 24px;
-    }
-  }
-
-  /* ПК: ровно 1400px и 0 внутренних отступов */
-  @media (min-width: 1024px) {
-    .shop-container {
-      padding-left: 0;
-      padding-right: 0;
-    }
+    @apply w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
   }
 
   .glass-card {
-    @apply rounded-2xl bg-white border border-night-200 shadow-sm;
-  }
-
-  .secure-button {
-    @apply relative inline-flex items-center justify-center rounded-full px-6 py-3 font-semibold tracking-wide text-night-900 transition-transform duration-200 shadow-md shadow-accent/20 bg-accent hover:bg-accent-dark;
-  }
-
-  .secure-button[disabled],
-  .secure-button.is-busy {
-    @apply opacity-60 cursor-not-allowed shadow-none;
-  }
-
-  .secure-input {
-    @apply w-full rounded-xl border border-night-200 bg-white px-4 py-3 text-night-900 placeholder-night-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25;
+    @apply rounded-xl bg-white/60 border border-night-100 shadow-sm backdrop-blur-lg;
   }
 
   .toast-stack {
-    @apply fixed bottom-6 right-6 flex flex-col gap-3 z-[1100];
+    @apply fixed top-5 sm:bottom-6 sm:top-auto right-5 sm:right-6 flex flex-col gap-3 z-[1100];
   }
 
   .toast {
-    @apply glass-card px-4 py-3 text-sm;
+    @apply glass-card px-4 py-3 text-sm rounded-lg shadow-lg;
   }
 
   .toast--error {
