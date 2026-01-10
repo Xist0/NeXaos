@@ -3,12 +3,9 @@ export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     screens: {
-      'xs': '475px',
-      'sm': '640px',
+      'sm': '320px',
       'md': '768px',
-      'lg': '1024px',
-      'xl': '1280px',
-      '2xl': '1536px',
+      'lg': '1000px',
     },
     extend: {
       maxWidth: {

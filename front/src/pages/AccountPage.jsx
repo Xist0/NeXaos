@@ -17,14 +17,9 @@ const AccountPage = () => {
   const [activeTab, setActiveTab] = useState("orders");
   const [orders, setOrders] = useState([]);
   const [orderDetails, setOrderDetails] = useState({});
-  const [loading, setLoading] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
-  const [form, setForm] = useState({
-    fullName: user?.fullName || "",
-    phone: user?.phone || "",
-    email: user?.email || "",
-  });
+  const [form, setForm] = useState({ fullName: user?.fullName || "", phone: user?.phone || "", email: user?.email || "" });
   const [saving, setSaving] = useState(false);
   const logger = useLogger();
 
@@ -34,11 +29,7 @@ const AccountPage = () => {
       return;
     }
     if (user) {
-      setForm({
-        fullName: user.fullName || "",
-        phone: user.phone || "",
-        email: user.email || "",
-      });
+      setForm({ fullName: user.fullName || "", phone: user.phone || "", email: user.email || "" });
     }
   }, [user, token, navigate]);
 
@@ -53,7 +44,6 @@ const AccountPage = () => {
     try {
       const response = await get("/orders");
       const allOrders = response?.data || [];
-      // Фильтруем заказы текущего пользователя
       const userOrders = allOrders.filter((order) => order.user_id === user?.id);
       setOrders(userOrders);
     } catch (error) {
@@ -65,14 +55,10 @@ const AccountPage = () => {
   };
 
   const fetchOrderDetails = async (orderId) => {
-    if (orderDetails[orderId]) return; // Уже загружены
-
+    if (orderDetails[orderId]) return;
     try {
       const response = await get(`/orders/${orderId}`);
-      setOrderDetails((prev) => ({
-        ...prev,
-        [orderId]: response?.data || response,
-      }));
+      setOrderDetails((prev) => ({ ...prev, [orderId]: response?.data || response }));
     } catch (error) {
       logger.error("Не удалось загрузить детали заказа");
     }
@@ -94,11 +80,7 @@ const AccountPage = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await put(`/users/${user.id}`, {
-        full_name: form.fullName,
-        phone: form.phone,
-      });
-      // Обновляем данные пользователя в store
+      await put(`/users/${user.id}`, { full_name: form.fullName, phone: form.phone });
       const updatedUser = await fetchProfile();
       useAuthStore.setState({ user: updatedUser });
       localStorage.setItem("nexaos_user", JSON.stringify(updatedUser));
@@ -110,218 +92,117 @@ const AccountPage = () => {
     }
   };
 
-  const getStatusLabel = (status) => {
-    const statusMap = {
-      pending: "Новый",
-      processing: "В работе",
-      shipped: "Отправлен",
-      completed: "Завершён",
-      cancelled: "Отменён",
-    };
-    return statusMap[status] || status;
-  };
+  const getStatusLabel = (status) => ({ pending: "Новый", processing: "В работе", shipped: "Отправлен", completed: "Завершён", cancelled: "Отменён" }[status] || status);
+  const getStatusColor = (status) => ({ pending: "bg-yellow-100 text-yellow-800", processing: "bg-blue-100 text-blue-800", shipped: "bg-purple-100 text-purple-800", completed: "bg-green-100 text-green-800", cancelled: "bg-red-100 text-red-800" }[status] || "bg-gray-100 text-gray-800");
 
-  const getStatusColor = (status) => {
-    const colorMap = {
-      pending: "bg-yellow-100 text-yellow-800",
-      processing: "bg-blue-100 text-blue-800",
-      shipped: "bg-purple-100 text-purple-800",
-      completed: "bg-green-100 text-green-800",
-      cancelled: "bg-red-100 text-red-800",
-    };
-    return colorMap[status] || "bg-gray-100 text-gray-800";
-  };
-
-  if (!token) {
-    return null;
-  }
+  if (!token) return null;
 
   return (
-    <div className="shop-container py-12">
-      <div className="mb-8">
+    <div className="shop-container py-8 md:py-12">
+      <div className="mb-6 md:mb-8">
         <p className="text-xs uppercase tracking-[0.3em] text-night-400">Личный кабинет</p>
-        <h1 className="text-3xl font-semibold text-night-900">Мой профиль</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-night-900">Мой профиль</h1>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-6">
-        <SecureButton
-          variant={activeTab === "orders" ? "primary" : "outline"}
-          className="px-5 py-2 text-sm"
-          onClick={() => setActiveTab("orders")}
-        >
-          Мои заказы
-        </SecureButton>
-        <SecureButton
-          variant={activeTab === "profile" ? "primary" : "outline"}
-          className="px-5 py-2 text-sm"
-          onClick={() => setActiveTab("profile")}
-        >
-          Личные данные
-        </SecureButton>
+      <div className="flex flex-wrap gap-2 sm:gap-3 mb-6 md:mb-8 border-b border-night-100">
+        <TabButton id="orders" activeTab={activeTab} setActiveTab={setActiveTab}>Мои заказы</TabButton>
+        <TabButton id="profile" activeTab={activeTab} setActiveTab={setActiveTab}>Личные данные</TabButton>
       </div>
 
-      {activeTab === "orders" && (
-        <div className="glass-card p-6">
-          <h2 className="text-xl font-semibold text-night-900 mb-4">Мои заказы</h2>
-          {ordersLoading ? (
-            <div className="text-center py-8 text-night-500">Загрузка...</div>
-          ) : orders.length === 0 ? (
-            <div className="text-center py-8 text-night-500">
-              У вас пока нет заказов
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {orders.map((order) => {
-                const details = orderDetails[order.id];
-                const isExpanded = expandedOrderId === order.id;
-
-                return (
-                  <div
-                    key={order.id}
-                    className="border border-night-100 rounded-lg overflow-hidden hover:shadow-md transition"
-                  >
-                    <div
-                      className="p-4 cursor-pointer"
-                      onClick={() => handleToggleOrder(order.id)}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="font-semibold text-night-900">
-                              Заказ #{order.id}
-                            </span>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                order.status || "pending"
-                              )}`}
-                            >
-                              {getStatusLabel(order.status || "pending")}
-                            </span>
-                          </div>
-                          <p className="text-sm text-night-500">
-                            {new Date(order.created_at).toLocaleString("ru-RU", {
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-lg font-semibold text-night-900">
-                            {formatCurrency(order.total || 0)}
-                          </p>
-                          <p className="text-xs text-night-400 mt-1">
-                            {isExpanded ? "Свернуть" : "Подробнее"} ▼
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {isExpanded && details && (
-                      <div className="border-t border-night-100 bg-night-50 p-4 space-y-4">
-                        {details.items && details.items.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold text-night-900 mb-2">Товары:</h4>
-                            <div className="space-y-2">
-                              {details.items.map((item) => (
-                                <div
-                                  key={item.id}
-                                  className="bg-white rounded p-2 flex justify-between text-sm"
-                                >
-                                  <span>
-                                    {item.module_name || `Модуль #${item.module_id}`} × {item.qty}
-                                  </span>
-                                  <span className="font-medium">
-                                    {formatCurrency((item.price || 0) * (item.qty || 0))}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {details.notes && details.notes.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold text-night-900 mb-2">Заметки:</h4>
-                            <div className="space-y-2">
-                              {details.notes.map((note) => (
-                                <div
-                                  key={note.id}
-                                  className="bg-white rounded p-3 text-sm border-l-4 border-accent"
-                                >
-                                  <p className="text-night-900">{note.note}</p>
-                                  <p className="text-xs text-night-500 mt-1">
-                                    {new Date(note.created_at).toLocaleString("ru-RU")}
-                                    {note.author_name && ` • ${note.author_name}`}
-                                  </p>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {(!details.notes || details.notes.length === 0) && (
-                          <p className="text-sm text-night-500">Заметок пока нет</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === "profile" && (
-        <div className="glass-card p-6">
-          <h2 className="text-xl font-semibold text-night-900 mb-6">Личные данные</h2>
-          <div className="space-y-4 max-w-md">
-            <div>
-              <label className="text-sm font-medium text-night-700">Имя</label>
-              <SecureInput
-                value={form.fullName}
-                onChange={handleChange("fullName")}
-                placeholder="Иван Иванов"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-night-700">Email</label>
-              <SecureInput
-                type="email"
-                value={form.email}
-                disabled
-                className="opacity-60"
-              />
-              <p className="text-xs text-night-400 mt-1">
-                Email нельзя изменить
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-night-700">Телефон</label>
-              <PhoneInput
-                value={form.phone}
-                onChange={handleChange("phone")}
-                placeholder="+7 (000) - 000 - 00 -00"
-              />
-            </div>
-            <div className="pt-4">
-              <SecureButton
-                onClick={handleSave}
-                disabled={saving}
-                className="w-full justify-center"
-              >
-                {saving ? "Сохранение..." : "Сохранить изменения"}
-              </SecureButton>
-            </div>
-          </div>
-        </div>
-      )}
+      <div>
+        {activeTab === "orders" && <OrdersTab orders={orders} loading={ordersLoading} expandedId={expandedOrderId} onToggle={handleToggleOrder} details={orderDetails} getStatusLabel={getStatusLabel} getStatusColor={getStatusColor} />}
+        {activeTab === "profile" && <ProfileTab form={form} onChange={handleChange} onSave={handleSave} saving={saving} />}
+      </div>
     </div>
   );
 };
 
-export default AccountPage;
+const TabButton = ({ id, activeTab, setActiveTab, children }) => (
+  <button
+    onClick={() => setActiveTab(id)}
+    className={`px-4 sm:px-5 py-2.5 text-sm sm:text-base font-semibold transition-colors duration-200 border-b-2 ${activeTab === id ? "border-accent text-accent" : "border-transparent text-night-500 hover:text-night-900"}`}>
+    {children}
+  </button>
+);
 
+const OrdersTab = ({ orders, loading, expandedId, onToggle, details, getStatusLabel, getStatusColor }) => (
+  <div>
+    <h2 className="text-xl sm:text-2xl font-semibold text-night-900 mb-4">Мои заказы</h2>
+    {loading ? (
+      <div className="glass-card p-8 text-center text-night-500">Загрузка...</div>
+    ) : orders.length === 0 ? (
+      <div className="glass-card p-8 text-center text-night-500">У вас пока нет заказов</div>
+    ) : (
+      <div className="space-y-4">
+        {orders.map(order => <OrderCard key={order.id} order={order} isExpanded={expandedId === order.id} onToggle={onToggle} details={details[order.id]} getStatusLabel={getStatusLabel} getStatusColor={getStatusColor} />)}
+      </div>
+    )}
+  </div>
+);
+
+const OrderCard = ({ order, isExpanded, onToggle, details, getStatusLabel, getStatusColor }) => (
+  <div className="glass-card rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200">
+    <div className="p-4 cursor-pointer" onClick={() => onToggle(order.id)}>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-2">
+            <span className="font-semibold text-night-900">Заказ #{order.id}</span>
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status || "pending")}`}>{getStatusLabel(order.status || "pending")}</span>
+          </div>
+          <p className="text-sm text-night-500">
+            {new Date(order.created_at).toLocaleString("ru-RU", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </p>
+        </div>
+        <div className="text-left sm:text-right mt-2 sm:mt-0">
+          <p className="text-lg font-semibold text-night-900">{formatCurrency(order.total || 0)}</p>
+          <p className={`text-xs text-night-400 mt-1 transition-transform duration-200 transform ${isExpanded ? "rotate-180" : ""}`}>▼</p>
+        </div>
+      </div>
+    </div>
+    {isExpanded && details && (
+      <div className="border-t border-night-100 bg-night-50/50 p-4 space-y-4">
+        {details.items?.length > 0 && (
+          <div>
+            <h4 className="font-semibold text-night-900 mb-2">Товары:</h4>
+            <div className="space-y-2">{details.items.map(item => <div key={item.id} className="bg-white rounded p-2 flex justify-between text-sm"><span>{item.module_name || `Модуль #${item.module_id}`} × {item.qty}</span><span className="font-medium">{formatCurrency((item.price || 0) * (item.qty || 0))}</span></div>)}</div>
+          </div>
+        )}
+        {details.notes?.length > 0 && (
+          <div>
+            <h4 className="font-semibold text-night-900 mb-2">Заметки:</h4>
+            <div className="space-y-2">{details.notes.map(note => <div key={note.id} className="bg-white rounded p-3 text-sm border-l-4 border-accent"><p className="text-night-900">{note.note}</p><p className="text-xs text-night-500 mt-1">{new Date(note.created_at).toLocaleString("ru-RU")} {note.author_name && `• ${note.author_name}`}</p></div>)}</div>
+          </div>
+        )}
+        {!details.notes?.length && <p className="text-sm text-night-500">Заметок пока нет</p>}
+      </div>
+    )}
+  </div>
+);
+
+const ProfileTab = ({ form, onChange, onSave, saving }) => (
+  <div className="glass-card p-6 sm:p-8">
+    <h2 className="text-xl sm:text-2xl font-semibold text-night-900 mb-6">Личные данные</h2>
+    <div className="space-y-4 max-w-md mx-auto">
+      <div>
+        <label className="text-sm font-medium text-night-700">Имя</label>
+        <SecureInput value={form.fullName} onChange={onChange("fullName")} placeholder="Иван Иванов" className="mt-1" />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-night-700">Email</label>
+        <SecureInput type="email" value={form.email} disabled className="mt-1 opacity-60 bg-night-50" />
+        <p className="text-xs text-night-400 mt-1">Email нельзя изменить</p>
+      </div>
+      <div>
+        <label className="text-sm font-medium text-night-700">Телефон</label>
+        <PhoneInput value={form.phone} onChange={onChange("phone")} placeholder="+7 (000) - 000 - 00 -00" className="mt-1" />
+      </div>
+      <div className="pt-4">
+        <SecureButton onClick={onSave} disabled={saving} className="w-full justify-center py-3 text-base">
+          {saving ? "Сохранение..." : "Сохранить изменения"}
+        </SecureButton>
+      </div>
+    </div>
+  </div>
+);
+
+export default AccountPage;

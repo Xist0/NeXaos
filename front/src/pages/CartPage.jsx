@@ -7,31 +7,22 @@ import useApi from "../hooks/useApi";
 import useAuthStore from "../store/authStore";
 import useLogger from "../hooks/useLogger";
 
-// ✅ ВЫНЕСЕННЫЙ КОМПОНЕНТ
 const SuccessModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur flex items-center justify-center">
+    <div className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur flex items-center justify-center p-4">
       <div className="glass-card w-full max-w-md p-8 relative">
-        <button
-          aria-label="Закрыть"
-          className="absolute right-4 top-4 text-night-400 hover:text-night-700 text-xl"
-          onClick={onClose}
-        >
+        <button aria-label="Закрыть" className="absolute right-4 top-4 text-night-400 hover:text-night-700 text-xl" onClick={onClose}>
           ✕
         </button>
         <div className="text-center space-y-4">
           <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center">
-            <span className="text-green-600 text-2xl">✓</span>
+            <span className="text-green-600 text-3xl">✓</span>
           </div>
           <h2 className="text-2xl font-semibold text-night-900">Заказ принят!</h2>
-          <p className="text-night-500">
-            Менеджер свяжется с вами в ближайшее время для уточнения деталей.
-          </p>
-          <SecureButton onClick={onClose} className="w-full justify-center">
-            Закрыть
-          </SecureButton>
+          <p className="text-night-500">Менеджер свяжется с вами в ближайшее время для уточнения деталей.</p>
+          <SecureButton onClick={onClose} className="w-full justify-center">Закрыть</SecureButton>
         </div>
       </div>
     </div>
@@ -45,47 +36,23 @@ const CartPage = () => {
   const logger = useLogger();
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const modalRef = useRef(null);
 
-  const summary = items.reduce(
-    (acc, item) => {
-      const line = item.price * item.quantity;
-      acc.count += item.quantity;
-      acc.subtotal += line;
-      return acc;
-    },
-    { count: 0, subtotal: 0 }
-  );
+  const summary = items.reduce((acc, item) => {
+    acc.count += item.quantity;
+    acc.subtotal += item.price * item.quantity;
+    return acc;
+  }, { count: 0, subtotal: 0 });
 
   const handleCheckout = async () => {
     if (items.length === 0 || isSubmitting) return;
-
     setIsSubmitting(true);
     try {
-      const orderData = {
-        status: "pending",
-        total: summary.subtotal,
-        ...(user?.id && { user_id: user.id }),
-      };
-
-      const orderResponse = await post("/orders", orderData);
+      const orderResponse = await post("/orders", { status: "pending", total: summary.subtotal, ...(user?.id && { user_id: user.id }) });
       const order = orderResponse?.data || orderResponse;
-
       if (!order?.id) throw new Error("Не удалось создать заказ");
 
-      const orderItemsPromises = items.map((item) =>
-        post("/order-items", {
-          order_id: order.id,
-          module_id: item.id,
-          qty: item.quantity,
-          price: item.price,
-          cost_price: item.price * 0.7,
-        })
-      );
-
-      await Promise.all(orderItemsPromises);
+      await Promise.all(items.map(item => post("/order-items", { order_id: order.id, module_id: item.id, qty: item.quantity, price: item.price, cost_price: item.price * 0.7, })) );
       clearCart();
-
       setIsSuccessModalOpen(true);
       logger.info("Заказ успешно оформлен");
     } catch (error) {
@@ -95,32 +62,16 @@ const CartPage = () => {
     }
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        setIsSuccessModalOpen(false);
-      }
-    };
-
-    if (isSuccessModalOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [isSuccessModalOpen]);
-
   return (
     <>
-      <div className="shop-container py-12">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="shop-container py-8 md:py-12">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6 md:mb-8">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-night-400">Корзина</p>
-            <h1 className="text-3xl font-semibold text-night-900">Ваш заказ</h1>
+            <h1 className="text-2xl sm:text-3xl font-semibold text-night-900">Ваш заказ</h1>
           </div>
           {items.length > 0 && (
-            <button
-              onClick={clearCart}
-              className="text-sm font-semibold text-night-400 hover:text-night-700"
-            >
+            <button onClick={clearCart} className="text-sm font-semibold text-night-400 hover:text-night-700 hover:underline">
               Очистить корзину
             </button>
           )}
@@ -128,66 +79,37 @@ const CartPage = () => {
 
         {items.length === 0 ? (
           <div className="mt-10 glass-card p-8 text-center text-night-500">
-            Корзина пуста.{" "}
-            <Link to="/catalog" className="text-accent">
-              Перейдите в каталог
-            </Link>
-            , чтобы выбрать мебель.
+            Корзина пуста. <Link to="/catalog" className="text-accent font-semibold hover:underline">Перейдите в каталог</Link>, чтобы выбрать мебель.
           </div>
         ) : (
-          <div className="mt-10 grid gap-8 lg:grid-cols-[2fr,1fr]">
+          <div className="mt-8 md:mt-10 grid gap-8 lg:grid-cols-[1.5fr,1fr] xl:grid-cols-[2fr,1fr]">
             <ul className="space-y-4">
               {items.map((item) => (
-                <li key={item.id} className="glass-card flex flex-col gap-4 p-5 sm:flex-row">
-                  <div className="h-28 w-full rounded-xl bg-night-100 sm:w-40">
-                    <img
-                      src={
-                        item.image ||
-                        "https://images.unsplash.com/photo-1505692794400-0d9dc9c65f0e?auto=format&fit=crop&w=400&q=80"
-                      }
-                      alt={item.name}
-                      className="h-full w-full rounded-xl object-cover"
-                    />
+                <li key={item.id} className="glass-card flex flex-col sm:flex-row gap-4 p-4">
+                  <div className="h-32 w-full sm:w-32 flex-shrink-0 rounded-lg bg-night-100">
+                    <img src={item.image || "https://images.unsplash.com/photo-1505692794400-0d9dc9c65f0e?auto=format&fit=crop&w=400&q=80"} alt={item.name} className="h-full w-full rounded-lg object-cover" />
                   </div>
                   <div className="flex flex-1 flex-col gap-3">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="text-lg font-semibold text-night-900">{item.name}</p>
-                        <p className="text-sm text-night-400">{item.sku || "SKU не указан"}</p>
+                        <p className="font-semibold text-night-900 leading-tight">{item.name}</p>
+                        <p className="text-xs sm:text-sm text-night-400">{item.sku || "SKU не указан"}</p>
                       </div>
-                      <button
-                        onClick={() => removeItem(item.id)}
-                        className="text-sm text-night-400 hover:text-night-700"
-                      >
-                        Удалить
-                      </button>
+                      <button onClick={() => removeItem(item.id)} className="text-xs text-night-400 hover:text-night-700 font-semibold">Удалить</button>
                     </div>
-                    <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center justify-between gap-4 mt-auto">
                       <div className="inline-flex items-center rounded-full border border-night-100">
-                        <button
-                          className="px-3 py-2 text-night-500 hover:text-night-900"
-                          onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
-                          disabled={item.quantity <= 1}
-                        >
-                          -
-                        </button>
-                        <span className="px-4 text-sm font-semibold">{item.quantity}</span>
-                        <button
-                          className="px-3 py-2 text-night-500 hover:text-night-900"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        >
-                          +
-                        </button>
+                        <button className="px-3 py-1.5 text-night-500 hover:text-night-900" onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))} disabled={item.quantity <= 1}>–</button>
+                        <span className="px-3 text-sm font-semibold w-10 text-center">{item.quantity}</span>
+                        <button className="px-3 py-1.5 text-night-500 hover:text-night-900" onClick={() => updateQuantity(item.id, item.quantity + 1)}>+</button>
                       </div>
-                      <p className="text-xl font-semibold text-night-900">
-                        {formatCurrency(item.price * item.quantity)}
-                      </p>
+                      <p className="text-lg font-semibold text-night-900">{formatCurrency(item.price * item.quantity)}</p>
                     </div>
                   </div>
                 </li>
               ))}
             </ul>
-            <aside className="glass-card flex flex-col gap-4 p-6">
+            <aside className="glass-card self-start sticky top-24 flex flex-col gap-4 p-6">
               <h2 className="text-xl font-semibold text-night-900">Итого</h2>
               <div className="flex justify-between text-sm text-night-500">
                 <span>Товары ({summary.count})</span>
@@ -197,25 +119,17 @@ const CartPage = () => {
                 <span>К оплате</span>
                 <span>{formatCurrency(summary.subtotal)}</span>
               </div>
-              <SecureButton
-                onClick={handleCheckout}
-                className="w-full justify-center"
-                disabled={syncing || isSubmitting || items.length === 0}
-              >
+              <SecureButton onClick={handleCheckout} className="w-full justify-center py-3 text-base" disabled={syncing || isSubmitting || items.length === 0}>
                 {isSubmitting ? "Отправка..." : "Оформить заказ"}
               </SecureButton>
-              <p className="text-xs text-night-400">
+              <p className="text-xs text-night-400 text-center">
                 При авторизации корзина сохраняется в аккаунте и доступна с любого устройства.
               </p>
             </aside>
           </div>
         )}
       </div>
-
-      <SuccessModal
-        isOpen={isSuccessModalOpen}
-        onClose={() => setIsSuccessModalOpen(false)}
-      />
+      <SuccessModal isOpen={isSuccessModalOpen} onClose={() => setIsSuccessModalOpen(false)} />
     </>
   );
 };

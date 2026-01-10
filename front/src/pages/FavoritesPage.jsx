@@ -8,10 +8,10 @@ const FavoritesPage = () => {
   const { addItem } = useCart();
 
   return (
-    <div className="shop-container py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold text-night-900">Избранное</h1>
-        <p className="text-sm text-night-500">
+    <div className="shop-container py-8 md:py-12">
+      <div className="mb-6 md:mb-8">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-night-900">Избранное</h1>
+        <p className="text-sm text-night-500 mt-1">
           Товары, которые вы отметили.
         </p>
       </div>
@@ -27,7 +27,7 @@ const FavoritesPage = () => {
           </Link>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
           {favorites.map((product) => (
             <ProductCard
               key={product.id}

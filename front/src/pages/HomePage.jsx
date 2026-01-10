@@ -41,21 +41,21 @@ const HomePage = () => {
   }, [get]);
 
   return (
-    <div className="space-y-16 pb-16">
+    <div className="space-y-8 sm:space-y-12 md:space-y-16 pb-16">
       <section className="bg-white">
-        <div className="shop-container grid gap-10 py-16 lg:grid-cols-2 lg:items-center">
+        <div className="shop-container grid gap-8 py-8 md:py-12 lg:py-16 lg:grid-cols-2 lg:items-center">
           <div className="space-y-6">
-            <p className="text-sm uppercase tracking-[0.3em] text-night-400">
+            <p className="text-xs sm:text-sm uppercase tracking-[0.2em] sm:tracking-[0.3em] text-night-400">
               МЕБЕЛЬ ДЛЯ ВАШЕГО ДОМА
             </p>
-            <h1 className="text-4xl font-semibold text-night-900 sm:text-5xl">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-semibold text-night-900">
               Модульные решения в стиле Stolplit — теперь в NeXaos
             </h1>
-            <p className="text-lg text-night-500">
+            <p className="text-base md:text-lg text-night-500">
               Каталог готовых коллекций, дизайнерских кухонь и шкафов. Выберите материалы,
               цвета и конфигурацию онлайн, а мы соберём и доставим.
             </p>
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-4">
               <Link
                 to="/catalog"
                 className="inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-[#21262d] shadow-md bg-[#e3e161] hover:bg-[#d6d04d] transition"
@@ -64,12 +64,12 @@ const HomePage = () => {
               </Link>
               <Link
                 to="/cart"
-                className="rounded-full border border-night-200 px-6 py-3 text-sm font-semibold text-night-700 transition hover:border-night-400 hover:bg-night-50"
+                className="inline-flex items-center justify-center rounded-full border border-night-200 px-6 py-3 text-sm font-semibold text-night-700 transition hover:border-night-400 hover:bg-night-50"
               >
                 Перейти в корзину
               </Link>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               {perks.map((perk) => (
                 <div key={perk.title} className="rounded-2xl border border-night-100 p-4">
                   <p className="text-sm font-semibold text-night-900">{perk.title}</p>
@@ -101,19 +101,19 @@ const HomePage = () => {
       <section className="shop-container space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-semibold text-night-900">Популярные наборы</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold text-night-900">Популярные наборы</h2>
             <p className="text-sm text-night-500">Выбор покупателей, вдохновлённый Stolplit</p>
           </div>
           <Link to="/catalog" className="text-sm font-semibold text-night-600 hover:text-night-900">
             Весь каталог →
           </Link>
         </div>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-3 md:gap-6">
           {featured.map((product) => (
             <ProductCard key={product.id} product={product} onAdd={addItem} />
           ))}
           {!featured.length && (
-            <div className="glass-card p-6 text-night-500">Загружаем предложения...</div>
+            <div className="glass-card col-span-2 lg:col-span-3 p-6 text-night-500">Загружаем предложения...</div>
           )}
         </div>
       </section>
@@ -122,4 +122,3 @@ const HomePage = () => {
 };
 
 export default HomePage;
-

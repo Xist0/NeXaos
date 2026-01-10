@@ -15,14 +15,13 @@ const CatalogPage = () => {
   const [items, setItems] = useState([]);
   const [kitSolutions, setKitSolutions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isFiltersOpen, setFiltersOpen] = useState(false);
 
-  // Проверяем, пришли ли мы со страницы товара
   const fromProduct = searchParams.get("fromProduct") === "1";
   const isInitialMount = useRef(true);
   const isFirstDebounce = useRef(true);
   const isQueryInitialized = useRef(false);
 
-  // Инициализируем состояние с учетом того, пришли ли мы со страницы товара
   const [activeCategory, setActiveCategory] = useState(() => {
     if (!fromProduct) return "all";
     return searchParams.get("category") || "all";
@@ -32,19 +31,9 @@ const CatalogPage = () => {
     return searchParams.get("subCategory") || null;
   });
 
-  // Инициализируем фильтры - сбрасываем если не пришли со страницы товара
   const [filters, setFilters] = useState(() => {
     if (!fromProduct) {
-      return {
-        facadeColor: "",
-        corpusColor: "",
-        priceFrom: "",
-        priceTo: "",
-        lengthFrom: "",
-        lengthTo: "",
-        categoryId: "",
-        baseSku: "",
-      };
+      return { facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "", categoryId: "", baseSku: "" };
     }
     return {
       facadeColor: searchParams.get("facadeColor") || "",
@@ -58,24 +47,17 @@ const CatalogPage = () => {
     };
   });
 
-  // Debounced фильтры для оптимизации запросов
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
-
   const [moduleCategories, setModuleCategories] = useState([]);
   const getRef = useRef(get);
   const isFetchingRef = useRef(false);
 
-  // Обновляем ref при изменении get
-  useEffect(() => {
-    getRef.current = get;
-  }, [get]);
+  useEffect(() => { getRef.current = get; }, [get]);
 
-  // Сбрасываем фильтры при первом открытии каталога (если не пришли со страницы товара)
   useEffect(() => {
     if (isInitialMount.current && !fromProduct) {
       isInitialMount.current = false;
-      const params = new URLSearchParams();
-      setSearchParams(params, { replace: true });
+      setSearchParams(new URLSearchParams(), { replace: true });
     } else {
       isInitialMount.current = false;
     }
@@ -88,13 +70,10 @@ const CatalogPage = () => {
     isQueryInitialized.current = true;
   }, [searchParams]);
 
-  // Загружаем категории и типы модулей
   useEffect(() => {
     const loadCategories = async () => {
       try {
-        const [categoriesRes] = await Promise.all([
-          get("/module-categories"),
-        ]);
+        const [categoriesRes] = await Promise.all([ get("/module-categories") ]);
         setModuleCategories(categoriesRes?.data || []);
       } catch (error) {
         console.error("Ошибка загрузки категорий", error);
@@ -103,27 +82,21 @@ const CatalogPage = () => {
     loadCategories();
   }, [get]);
 
-  // Debounce для поискового запроса
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 400);
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Debounce для фильтров (оптимизация запросов)
   useEffect(() => {
     if (isFirstDebounce.current) {
       isFirstDebounce.current = false;
       setDebouncedFilters(filters);
       return;
     }
-
-    const timer = setTimeout(() => {
-      setDebouncedFilters(filters);
-    }, 500);
+    const timer = setTimeout(() => { setDebouncedFilters(filters); }, 500);
     return () => clearTimeout(timer);
   }, [filters]);
 
-  // Обновляем URL при изменении фильтров (используем debounced фильтры для URL)
   useEffect(() => {
     const params = new URLSearchParams();
     if (activeCategory !== "all") params.set("category", activeCategory);
@@ -133,32 +106,19 @@ const CatalogPage = () => {
       if (value) params.set(key, value);
     });
     setSearchParams(params, { replace: true });
-  }, [
-    activeCategory,
-    activeSubCategory,
-    debouncedFilters,
-    debouncedQuery,
-    setSearchParams,
-  ]);
+  }, [activeCategory, activeSubCategory, debouncedFilters, debouncedQuery, setSearchParams]);
 
-  // Оптимизированный эффект загрузки данных с использованием debounced фильтров
   useEffect(() => {
     let active = true;
     const abortController = new AbortController();
-
     const fetchItems = async () => {
       if (isFetchingRef.current) return;
-
       isFetchingRef.current = true;
       setLoading(true);
-
       try {
         const queryParams = {};
         if (debouncedQuery) queryParams.search = debouncedQuery;
-
-        Object.entries(debouncedFilters).forEach(([key, value]) => {
-          if (value) queryParams[key] = value;
-        });
+        Object.entries(debouncedFilters).forEach(([key, value]) => { if (value) queryParams[key] = value; });
 
         if (activeCategory === "kitSolutions") {
           const response = await getRef.current("/kit-solutions", queryParams);
@@ -171,16 +131,9 @@ const CatalogPage = () => {
           }
         } else if (activeCategory === "all") {
           const [modulesRes, kitsRes] = await Promise.all([
-            getRef.current(
-              "/modules",
-              Object.keys(queryParams).length > 0 ? queryParams : undefined
-            ),
-            getRef.current(
-              "/kit-solutions",
-              Object.keys(queryParams).length > 0 ? queryParams : undefined
-            ),
+            getRef.current("/modules", Object.keys(queryParams).length > 0 ? queryParams : undefined),
+            getRef.current("/kit-solutions", Object.keys(queryParams).length > 0 ? queryParams : undefined),
           ]);
-
           if (active && !abortController.signal.aborted) {
             const kits = Array.isArray(kitsRes?.data) ? kitsRes.data : [];
             setKitSolutions(kits.map((x) => ({ ...x, __type: "kitSolution" })));
@@ -193,14 +146,8 @@ const CatalogPage = () => {
             const category = moduleCategories.find((c) => c.code === activeCategory);
             if (category) queryParams.categoryId = category.id;
           }
-
           if (activeSubCategory) queryParams.baseSku = activeSubCategory;
-
-          const response = await getRef.current(
-            "/modules",
-            Object.keys(queryParams).length > 0 ? queryParams : undefined
-          );
-
+          const response = await getRef.current("/modules", Object.keys(queryParams).length > 0 ? queryParams : undefined);
           if (active && !abortController.signal.aborted) {
             setItems(response?.data || []);
             setKitSolutions([]);
@@ -218,9 +165,7 @@ const CatalogPage = () => {
         }
       }
     };
-
     fetchItems();
-
     return () => {
       active = false;
       abortController.abort();
@@ -228,28 +173,16 @@ const CatalogPage = () => {
     };
   }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, moduleCategories]);
 
-  // Подкатегории
-  const bottomSubCategories = useMemo(() => {
-    if (activeCategory !== "bottom") return [];
-    return [
-      { code: "НМР1", label: "НМР1 - Одностворчатый" },
-      { code: "НМР2", label: "НМР2 - Двустворчатый" },
-      { code: "НМР.М1", label: "НМР.М1 - Под мойку одностворчатый" },
-      { code: "НМР.М2", label: "НМР.М2 - Под мойку двустворчатый" },
-      { code: "НМЯ.М1", label: "НМЯ.М1 - С ящиком под мойку" },
-      { code: "НМЯ.2", label: "НМЯ.2 - С двумя ящиками" },
-      { code: "НМЯ.3", label: "НМЯ.3 - С тремя ящиками" },
-    ];
-  }, [activeCategory]);
+  const bottomSubCategories = useMemo(() => activeCategory !== "bottom" ? [] : [
+    { code: "НМР1", label: "НМР1 - Одностворчатый" }, { code: "НМР2", label: "НМР2 - Двустворчатый" },
+    { code: "НМР.М1", label: "НМР.М1 - Под мойку одностворчатый" }, { code: "НМР.М2", label: "НМР.М2 - Под мойку двустворчатый" },
+    { code: "НМЯ.М1", label: "НМЯ.М1 - С ящиком под мойку" }, { code: "НМЯ.2", label: "НМЯ.2 - С двумя ящиками" },
+    { code: "НМЯ.3", label: "НМЯ.3 - С тремя ящиками" },
+  ], [activeCategory]);
 
-  const topSubCategories = useMemo(() => {
-    if (activeCategory !== "top") return [];
-    return [
-      { code: "ВМР1", label: "ВМР1 - Одностворчатый" },
-      { code: "ВМР2", label: "ВМР2 - Двустворчатый" },
-      { code: "ВМВ1", label: "ВМВ1 - Выдвижной" },
-    ];
-  }, [activeCategory]);
+  const topSubCategories = useMemo(() => activeCategory !== "top" ? [] : [
+    { code: "ВМР1", label: "ВМР1 - Одностворчатый" }, { code: "ВМР2", label: "ВМР2 - Двустворчатый" }, { code: "ВМВ1", label: "ВМВ1 - Выдвижной" },
+  ], [activeCategory]);
 
   const displayItems = useMemo(() => {
     if (activeCategory === "kitSolutions") return kitSolutions;
@@ -257,26 +190,15 @@ const CatalogPage = () => {
     return items;
   }, [activeCategory, kitSolutions, items]);
 
-  const activeItems = useMemo(() => {
-    return displayItems.filter((item) => item.is_active);
-  }, [displayItems]);
-
-  const handleAddToCart = useCallback(
-    (product) => {
-      addItem(product);
-    },
-    [addItem]
-  );
+  const activeItems = useMemo(() => displayItems.filter((item) => item.is_active), [displayItems]);
+  const handleAddToCart = useCallback((product) => { addItem(product); }, [addItem]);
 
   const renderCategoryLink = (code, label, subCategories = []) => {
     const isActive = activeCategory === code;
     return (
       <div key={code}>
         <button
-          onClick={() => {
-            setActiveCategory(code);
-            setActiveSubCategory(null);
-          }}
+          onClick={() => { setActiveCategory(code); setActiveSubCategory(null); }}
           className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition ${
             isActive ? "bg-night-100 text-night-900" : "text-night-600 hover:bg-night-50"
           }`}
@@ -290,9 +212,7 @@ const CatalogPage = () => {
                 key={sub.code}
                 onClick={() => setActiveSubCategory(sub.code)}
                 className={`w-full text-left px-3 py-1.5 rounded-md text-xs transition ${
-                  activeSubCategory === sub.code
-                    ? "bg-accent/20 text-accent-dark font-semibold"
-                    : "text-night-500 hover:bg-night-50"
+                  activeSubCategory === sub.code ? "bg-accent/20 text-accent-dark font-semibold" : "text-night-500 hover:bg-night-50"
                 }`}
               >
                 {sub.label}
@@ -304,159 +224,92 @@ const CatalogPage = () => {
     );
   };
 
-  return (
-    <div className="shop-container py-12">
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-night-400">Каталог</p>
-          <h1 className="text-3xl font-semibold text-night-900">Каталог мебели</h1>
+  const SidebarContent = () => (
+    <aside className="space-y-4 md:space-y-6">
+      <div className="glass-card p-4">
+        <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide px-3">Категории</h3>
+        <nav className="mt-3 space-y-1">
+          {renderCategoryLink("all", "Все")}
+          {renderCategoryLink("kitSolutions", "Готовые решения")}
+          {renderCategoryLink("bottom", "Нижние модули", bottomSubCategories)}
+          {renderCategoryLink("top", "Верхние модули", topSubCategories)}
+          {renderCategoryLink("tall", "Пеналы")}
+          {renderCategoryLink("filler", "Доборные элементы")}
+          {renderCategoryLink("accessory", "Аксессуары")}
+        </nav>
+      </div>
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between gap-4">
+          <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide">Фильтры</h3>
+          <SecureButton variant="outline" className="px-4 py-2 text-xs" onClick={() => setFilters({ facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "", categoryId: "", baseSku: "" })} >
+            Сброс
+          </SecureButton>
         </div>
-        <SecureInput
-          value={query}
-          onChange={setQuery}
-          placeholder="Поиск по названию или артикулу"
-          className="min-w-[280px]"
-        />
+        <div className="mt-4 space-y-5">
+          <div>
+            <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Цвета</div>
+            <div className="mt-3 space-y-3"><SecureInput value={filters.facadeColor} onChange={(v) => setFilters({ ...filters, facadeColor: v })} placeholder="Цвет фасада"/><SecureInput value={filters.corpusColor} onChange={(v) => setFilters({ ...filters, corpusColor: v })} placeholder="Цвет корпуса"/></div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Цена</div>
+            <div className="mt-3 grid grid-cols-2 gap-3"><SecureInput type="number" value={filters.priceFrom} onChange={(v) => setFilters({ ...filters, priceFrom: v })} placeholder="От"/><SecureInput type="number" value={filters.priceTo} onChange={(v) => setFilters({ ...filters, priceTo: v })} placeholder="До"/></div>
+          </div>
+          <div>
+            <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">Размер (длина, мм)</div>
+            <div className="mt-3 grid grid-cols-2 gap-3"><SecureInput type="number" value={filters.lengthFrom} onChange={(v) => setFilters({ ...filters, lengthFrom: v })} placeholder="От"/><SecureInput type="number" value={filters.lengthTo} onChange={(v) => setFilters({ ...filters, lengthTo: v })} placeholder="До"/></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+
+  return (
+    <div className="shop-container py-8 md:py-12">
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6 md:mb-8">
+        <div className="max-w-xl">
+          <p className="text-xs uppercase tracking-[0.3em] text-night-400">Каталог</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-night-900">Каталог мебели</h1>
+        </div>
+        <SecureInput value={query} onChange={setQuery} placeholder="Поиск по названию или артикулу" className="w-full sm:w-auto sm:min-w-[280px]" />
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-[350px_1fr]">
-        <aside className="space-y-6">
-          <div className="glass-card p-4">
-            <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide px-3">
-              Категории
-            </h3>
-            <nav className="mt-3 space-y-1">
-              {renderCategoryLink("all", "Все")}
-              {renderCategoryLink("kitSolutions", "Готовые решения")}
-              {renderCategoryLink("bottom", "Нижние модули", bottomSubCategories)}
-              {renderCategoryLink("top", "Верхние модули", topSubCategories)}
-              {renderCategoryLink("tall", "Пеналы")}
-              {renderCategoryLink("filler", "Доборные элементы")}
-              {renderCategoryLink("accessory", "Аксессуары")}
-            </nav>
-          </div>
+      <div className="lg:hidden mb-6">
+        <SecureButton onClick={() => setFiltersOpen(true)} className="w-full">Фильтры и категории</SecureButton>
+      </div>
 
-          <div className="glass-card p-5">
-            <div className="flex items-center justify-between gap-4">
-              <h3 className="text-sm font-semibold text-night-900 uppercase tracking-wide">
-                Фильтры
-              </h3>
-              <SecureButton
-                variant="outline"
-                className="px-4 py-2 text-xs"
-                onClick={() => {
-                  setFilters({
-                    facadeColor: "",
-                    corpusColor: "",
-                    priceFrom: "",
-                    priceTo: "",
-                    lengthFrom: "",
-                    lengthTo: "",
-                    categoryId: "",
-                    baseSku: "",
-                  });
-                }}
-              >
-                Сброс
-              </SecureButton>
-            </div>
-
-            <div className="mt-4 space-y-5">
-              <div>
-                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">
-                  Цвета
-                </div>
-                <div className="mt-3 space-y-3">
-                  <SecureInput
-                    value={filters.facadeColor}
-                    onChange={(v) => setFilters({ ...filters, facadeColor: v })}
-                    placeholder="Цвет фасада"
-                  />
-                  <SecureInput
-                    value={filters.corpusColor}
-                    onChange={(v) => setFilters({ ...filters, corpusColor: v })}
-                    placeholder="Цвет корпуса"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">
-                  Цена
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <SecureInput
-                    type="number"
-                    value={filters.priceFrom}
-                    onChange={(v) => setFilters({ ...filters, priceFrom: v })}
-                    placeholder="От"
-                  />
-                  <SecureInput
-                    type="number"
-                    value={filters.priceTo}
-                    onChange={(v) => setFilters({ ...filters, priceTo: v })}
-                    placeholder="До"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">
-                  Размер (длина, мм)
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <SecureInput
-                    type="number"
-                    value={filters.lengthFrom}
-                    onChange={(v) => setFilters({ ...filters, lengthFrom: v })}
-                    placeholder="От"
-                  />
-                  <SecureInput
-                    type="number"
-                    value={filters.lengthTo}
-                    onChange={(v) => setFilters({ ...filters, lengthTo: v })}
-                    placeholder="До"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-
+      <div className="grid gap-8 lg:grid-cols-[280px_1fr] xl:grid-cols-[350px_1fr]">
+        <div className="hidden lg:block"><SidebarContent /></div>
         <div className="min-w-0">
           {loading ? (
             <div className="glass-card p-6 text-night-500">Загружаем товары...</div>
           ) : (
             <section className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-night-900">
-                  {activeItems.length} позици{activeItems.length !== 1 ? "й" : "я"}
-                </h2>
+                <h2 className="text-lg sm:text-xl font-semibold text-night-900">{activeItems.length} позици{activeItems.length !== 1 ? "й" : "я"}</h2>
               </div>
-
-              {/* ФИКС 300px + gap 40px + перенос строк */}
-              <div className="grid gap-10 justify-center [grid-template-columns:repeat(auto-fit,300px)]">
-                {activeItems.map((product, index) => (
-                  <ProductCard
-                    key={
-                      product.id
-                        ? `product-${product.id}`
-                        : `product-${index}-${product.sku || product.name}`
-                    }
-                    product={product}
-                    onAdd={handleAddToCart}
-                  />
-                ))}
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-4 md:gap-6">
+                {activeItems.map((product, index) => <ProductCard key={product.id ? `product-${product.id}`: `product-${index}-${product.sku || product.name}`} product={product} onAdd={handleAddToCart} />)}
               </div>
             </section>
           )}
-
           {!loading && activeItems.length === 0 && (
-            <div className="glass-card p-6 text-night-500">
-              Мы не нашли таких товаров. Попробуйте другой запрос или измените фильтры.
-            </div>
+            <div className="glass-card p-6 text-night-500">Мы не нашли таких товаров. Попробуйте другой запрос или измените фильтры.</div>
           )}
         </div>
+      </div>
+
+      {isFiltersOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setFiltersOpen(false)}></div>
+      )}
+
+      <div className={`fixed top-0 left-0 h-full w-[320px] max-w-[85vw] bg-white shadow-lg z-50 transform transition-transform duration-300 ease-in-out ${isFiltersOpen ? 'translate-x-0' : '-translate-x-full'} lg:hidden`}>
+         <div className="p-4 h-full overflow-y-auto">
+           <div className="flex justify-between items-center mb-4">
+             <h2 className="text-xl font-semibold">Фильтры</h2>
+             <SecureButton onClick={() => setFiltersOpen(false)} variant="ghost" className="px-2 py-1">&times;</SecureButton>
+           </div>
+           <SidebarContent />
+         </div>
       </div>
     </div>
   );

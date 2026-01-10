@@ -1,6 +1,8 @@
 const { query } = require("../config/db");
 const ApiError = require("../utils/api-error");
 const { buildInsertQuery, buildUpdateQuery } = require("../utils/sql-builder");
+const fs = require("fs").promises;
+const path = require("path");
 
 const sanitizePayload = (entity, payload) => {
   const allowedFields = Object.entries(entity.columns)
@@ -199,18 +201,62 @@ const remove = async (entity, id) => {
   if (!id || id === "undefined" || id === "null") {
     throw ApiError.badRequest("Не указан ID записи");
   }
-  
+
   const parsedId = parseInt(id, 10);
   if (isNaN(parsedId) || parsedId <= 0) {
     throw ApiError.badRequest("Некорректный ID записи");
   }
 
-  const { rows } = await query(
-    `DELETE FROM ${entity.table} WHERE ${entity.idColumn} = $1 RETURNING ${entity.idColumn}`,
-    [parsedId]
-  );
-  if (!rows[0]) {
-    throw ApiError.notFound("Запись не найдена");
+  // Await does not work with a try-catch block
+  await query("BEGIN");
+
+  try {
+    const { rows: images } = await query(
+      `SELECT url FROM images WHERE entity_type = $1 AND entity_id = $2`,
+      [entity.table, parsedId]
+    );
+
+    if (images.length > 0) {
+      for (const image of images) {
+        const imagePath = path.join(
+          __dirname,
+          "..",
+          "public",
+          image.url
+        );
+        try {
+          await fs.unlink(imagePath);
+        } catch (error) {
+          if (error.code !== "ENOENT") {
+            // ENOENT means file not found, which is fine, we can ignore it.
+            // For other errors, we log them but proceed with DB deletion.
+            console.error(
+              `Error deleting file ${imagePath}:`,
+              error
+            );
+          }
+        }
+      }
+
+      await query(
+        `DELETE FROM images WHERE entity_type = $1 AND entity_id = $2`,
+        [entity.table, parsedId]
+      );
+    }
+
+    const { rows: deletedRows } = await query(
+      `DELETE FROM ${entity.table} WHERE ${entity.idColumn} = $1 RETURNING ${entity.idColumn}`,
+      [parsedId]
+    );
+
+    if (deletedRows.length === 0) {
+      throw ApiError.notFound("Запись не найдена");
+    }
+
+    await query("COMMIT");
+  } catch (error) {
+    await query("ROLLBACK");
+    throw error;
   }
 };
 
@@ -221,4 +267,3 @@ module.exports = {
   update,
   remove,
 };
-
