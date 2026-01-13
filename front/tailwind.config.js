@@ -3,8 +3,8 @@ export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     screens: {
-      'sm': '320px',
-      'md': '768px',
+      'sm': '500px',
+      'md': '800px',
       'lg': '1000px',
     },
     extend: {

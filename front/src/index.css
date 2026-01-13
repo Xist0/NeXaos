@@ -35,13 +35,29 @@
     display: block;
     max-width: 100%;
   }
-
-  button, input, textarea, select {
-    font: inherit;
-  }
 }
 
 @layer components {
+  /* Глобальные input стили */
+  input,
+  textarea,
+  select {
+    @apply w-full box-border min-w-0 border-2 border-transparent 
+           rounded-lg px-3.5 py-2.5 text-sm bg-night-50/50 shadow-sm;
+    
+    transition: border-color 150ms ease-in-out, box-shadow 150ms ease-in-out, background-color 150ms ease-in-out;
+    
+    outline: none !important;
+    outline-offset: 0 !important;
+    
+    &:focus {
+      @apply border-accent bg-night-50 shadow-md;
+      outline: none !important;
+    }
+    
+  }
+
+  /* Остальные компоненты */
   .shop-shell {
     @apply min-h-screen flex flex-col bg-night-50/50;
   }

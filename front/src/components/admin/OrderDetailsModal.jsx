@@ -14,6 +14,9 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
   const [isPrivate, setIsPrivate] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
 
+
+  
+
   useEffect(() => {
     if (isOpen && orderId) {
       fetchOrderDetails();

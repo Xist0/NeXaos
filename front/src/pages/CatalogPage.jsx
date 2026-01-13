@@ -128,13 +128,13 @@ const CatalogPage = () => {
           <SecureInput value={filters.corpusColor} onChange={(v) => setFilters(f => ({ ...f, corpusColor: v }))} placeholder="Цвет корпуса" />
         </FilterSection>
         <FilterSection title="Цена">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2 px-1 w-full overflow-hidden">
             <SecureInput type="number" value={filters.priceFrom} onChange={(v) => setFilters(f => ({ ...f, priceFrom: v }))} placeholder="От" />
             <SecureInput type="number" value={filters.priceTo} onChange={(v) => setFilters(f => ({ ...f, priceTo: v }))} placeholder="До" />
           </div>
         </FilterSection>
         <FilterSection title="Размер (мм)">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2 px-1 w-full overflow-hidden">
             <SecureInput type="number" value={filters.lengthFrom} onChange={(v) => setFilters(f => ({ ...f, lengthFrom: v }))} placeholder="От" />
             <SecureInput type="number" value={filters.lengthTo} onChange={(v) => setFilters(f => ({ ...f, lengthTo: v }))} placeholder="До" />
           </div>
@@ -165,7 +165,7 @@ const CatalogPage = () => {
           ) : displayItems.length > 0 ? (
             <section>
               <h2 className="text-lg sm:text-xl font-semibold text-night-900 mb-4">{displayItems.length} позици{displayItems.length !== 1 ? "й" : "я"}</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-1 md:gap-3">
                 {displayItems.map((product) => <ProductCard key={product.id || product.sku} product={product} onAdd={handleAddToCart} />)}
               </div>
             </section>
