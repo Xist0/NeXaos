@@ -1,7 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import useApi from "../../hooks/useApi";
 import SecureButton from "../ui/SecureButton";
-import SecureInput from "../ui/SecureInput";
 import { formatCurrency } from "../../utils/format";
 import useLogger from "../../hooks/useLogger";
 
@@ -14,6 +13,8 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
   const [isPrivate, setIsPrivate] = useState(false);
   const [savingNote, setSavingNote] = useState(false);
 
+  const modalRef = useRef(null);
+
 
   
 
@@ -22,6 +23,32 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
       fetchOrderDetails();
     }
   }, [isOpen, orderId]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") onClose?.();
+    };
+    window.addEventListener("keydown", onKeyDown);
+
+    // фокус на модалке, чтобы колесо/клавиши не уходили на фон
+    setTimeout(() => modalRef.current?.focus(), 0);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+    };
+  }, [isOpen, onClose]);
 
   const fetchOrderDetails = async () => {
     setLoading(true);
@@ -123,11 +150,15 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
 
   return (
     <div 
-      className="fixed inset-0 z-[1000] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center p-4"
       onClick={handleBackdropClick}
     >
       <div 
-        className="glass-card w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 relative shadow-2xl"
+        ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        className="w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6 relative shadow-2xl rounded-2xl bg-white border border-night-200 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -249,9 +280,9 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
                   order.notes.map((note) => (
                     <div
                       key={note.id}
-                      className={`border rounded-lg p-3 ${
+                      className={`rounded-xl border p-3 ${
                         note.is_private
-                          ? "border-orange-200 bg-orange-50"
+                          ? "border-night-200 bg-night-50"
                           : "border-night-100 bg-white"
                       }`}
                     >
@@ -259,8 +290,8 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             {note.is_private && (
-                              <span className="px-2 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full">
-                                Приватная
+                              <span className="px-2 py-0.5 bg-night-100 text-night-700 text-xs rounded-full font-semibold">
+                                Только для администратора
                               </span>
                             )}
                             <span className="text-xs text-night-500">
@@ -272,10 +303,10 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
                         </div>
                         <SecureButton
                           variant="ghost"
-                          className="px-2 py-1 text-xs"
+                          className="px-2 py-1 text-xs whitespace-nowrap"
                           onClick={() => handleTogglePrivate(note.id, note.is_private)}
                         >
-                          {note.is_private ? "Сделать публичной" : "Сделать приватной"}
+                          {note.is_private ? "Сделать видимой всем" : "Только для администратора"}
                         </SecureButton>
                       </div>
                     </div>
@@ -290,25 +321,34 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
                   e.preventDefault();
                   handleAddNote();
                 }}
-                className="border border-night-200 rounded-lg p-4 bg-night-50"
+                className="border border-night-200 rounded-xl p-4 bg-night-50"
               >
                 <div className="space-y-3">
-                  <SecureInput
+                  <textarea
                     value={newNote}
-                    onChange={setNewNote}
+                    onChange={(e) => setNewNote(e.target.value)}
                     placeholder="Добавить заметку..."
-                    className="w-full"
+                    className="secure-input w-full min-h-[92px] resize-y"
                   />
                   <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 text-sm text-night-700">
-                      <input
-                        type="checkbox"
-                        checked={isPrivate}
-                        onChange={(e) => setIsPrivate(e.target.checked)}
-                        className="rounded"
-                      />
-                      Приватная заметка (только для администраторов)
-                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsPrivate((v) => !v)}
+                      className={`inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-lg border transition ${
+                        isPrivate
+                          ? "border-night-300 bg-white text-night-900"
+                          : "border-night-200 bg-white/70 text-night-600"
+                      }`}
+                    >
+                      <span
+                        className={`h-4 w-4 rounded-full border flex items-center justify-center ${
+                          isPrivate ? "border-night-400 bg-night-100" : "border-night-300 bg-white"
+                        }`}
+                      >
+                        {isPrivate ? "✓" : ""}
+                      </span>
+                      Только для администратора
+                    </button>
                     <SecureButton
                       type="submit"
                       disabled={!newNote.trim() || savingNote}

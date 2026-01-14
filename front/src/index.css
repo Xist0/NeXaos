@@ -49,12 +49,14 @@
     
     outline: none !important;
     outline-offset: 0 !important;
-    
-    &:focus {
-      @apply border-accent bg-night-50 shadow-md;
-      outline: none !important;
-    }
-    
+ 
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    @apply border-accent bg-night-50 shadow-md;
+    outline: none !important;
   }
 
   /* Остальные компоненты */

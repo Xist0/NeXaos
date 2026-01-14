@@ -81,29 +81,29 @@ const getById = asyncHandler(async (req, res) => {
   try {
     const notesQuery = isAdmin
       ? `SELECT 
-          on.id,
-          on.order_id,
-          on.user_id,
-          on.note,
-          on.is_private,
-          on.created_at,
+          note.id,
+          note.order_id,
+          note.user_id,
+          note.note,
+          note.is_private,
+          note.created_at,
           u.full_name as author_name
-        FROM order_notes on
-        LEFT JOIN users u ON on.user_id = u.id
-        WHERE on.order_id = $1
-        ORDER BY on.created_at DESC`
+        FROM order_notes note
+        LEFT JOIN users u ON note.user_id = u.id
+        WHERE note.order_id = $1
+        ORDER BY note.created_at DESC`
       : `SELECT 
-          on.id,
-          on.order_id,
-          on.user_id,
-          on.note,
-          on.is_private,
-          on.created_at,
+          note.id,
+          note.order_id,
+          note.user_id,
+          note.note,
+          note.is_private,
+          note.created_at,
           u.full_name as author_name
-        FROM order_notes on
-        LEFT JOIN users u ON on.user_id = u.id
-        WHERE on.order_id = $1 AND on.is_private = false
-        ORDER BY on.created_at DESC`;
+        FROM order_notes note
+        LEFT JOIN users u ON note.user_id = u.id
+        WHERE note.order_id = $1 AND note.is_private = false
+        ORDER BY note.created_at DESC`;
 
     const { rows } = await query(notesQuery, [orderId]);
     notes = rows;

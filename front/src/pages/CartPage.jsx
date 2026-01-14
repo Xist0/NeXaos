@@ -6,6 +6,7 @@ import { formatCurrency } from "../utils/format";
 import useApi from "../hooks/useApi";
 import useAuthStore from "../store/authStore";
 import useLogger from "../hooks/useLogger";
+import { getImageUrl, placeholderImage } from "../utils/image";
 
 const SuccessModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
@@ -87,7 +88,16 @@ const CartPage = () => {
               {items.map((item) => (
                 <li key={item.id} className="glass-card flex flex-col sm:flex-row gap-4 p-4">
                   <div className="h-32 w-full sm:w-32 flex-shrink-0 rounded-lg bg-night-100">
-                    <img src={item.image || "https://images.unsplash.com/photo-1505692794400-0d9dc9c65f0e?auto=format&fit=crop&w=400&q=80"} alt={item.name} className="h-full w-full rounded-lg object-cover" />
+                    <img
+                      src={getImageUrl(item.image) || placeholderImage}
+                      alt={item.name}
+                      className="h-full w-full rounded-lg object-cover"
+                      loading="lazy"
+                      decoding="async"
+                      onError={(e) => {
+                        if (e.target.src !== placeholderImage) e.target.src = placeholderImage;
+                      }}
+                    />
                   </div>
                   <div className="flex flex-1 flex-col gap-3">
                     <div className="flex items-start justify-between gap-4">

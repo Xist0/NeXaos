@@ -7,7 +7,7 @@ import SecureButton from "../components/ui/SecureButton";
 import ProductCard from "../components/ui/ProductCard";
 
 const CatalogPage = () => {
-  const { get } = useApi();
+  const { get, post } = useApi();
   const { addItem } = useCart();
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState(() => searchParams.get("search") || "");
@@ -20,6 +20,15 @@ const CatalogPage = () => {
   const [activeCategory, setActiveCategory] = useState(() => searchParams.get("category") || "all");
   const [activeSubCategory, setActiveSubCategory] = useState(() => searchParams.get("subCategory") || null);
 
+  const [similarModuleId, setSimilarModuleId] = useState(() => searchParams.get("similarModuleId") || null);
+  const [similarKitId, setSimilarKitId] = useState(() => searchParams.get("similarKitId") || null);
+  const [fromProduct, setFromProduct] = useState(() => searchParams.get("fromProduct") === "1");
+  const [similarItems, setSimilarItems] = useState([]);
+  const [similarLoading, setSimilarLoading] = useState(false);
+
+  const [similarKitItems, setSimilarKitItems] = useState([]);
+  const [similarKitLoading, setSimilarKitLoading] = useState(false);
+
   const [filters, setFilters] = useState(() => ({
     facadeColor: searchParams.get("facadeColor") || "",
     corpusColor: searchParams.get("corpusColor") || "",
@@ -30,6 +39,36 @@ const CatalogPage = () => {
   }));
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
   const [moduleCategories, setModuleCategories] = useState([]);
+
+  const lastSimilarModuleIdRef = useRef(null);
+  const lastSimilarKitIdRef = useRef(null);
+
+  useEffect(() => {
+    // Если пользователь пришел по ссылке с параметрами (Похожие), синхронизируем локальный state
+    setFromProduct(searchParams.get("fromProduct") === "1");
+    setSimilarModuleId(searchParams.get("similarModuleId") || null);
+    setSimilarKitId(searchParams.get("similarKitId") || null);
+
+    const urlCategory = searchParams.get("category") || "all";
+    const urlSubCategory = searchParams.get("subCategory") || null;
+    if (urlCategory !== activeCategory) setActiveCategory(urlCategory);
+    if (urlSubCategory !== activeSubCategory) setActiveSubCategory(urlSubCategory);
+
+    const nextFilters = {
+      facadeColor: searchParams.get("facadeColor") || "",
+      corpusColor: searchParams.get("corpusColor") || "",
+      priceFrom: searchParams.get("priceFrom") || "",
+      priceTo: searchParams.get("priceTo") || "",
+      lengthFrom: searchParams.get("lengthFrom") || "",
+      lengthTo: searchParams.get("lengthTo") || "",
+    };
+    setFilters((prev) => {
+      const prevJson = JSON.stringify(prev);
+      const nextJson = JSON.stringify(nextFilters);
+      return prevJson === nextJson ? prev : nextFilters;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query), 400);
@@ -49,8 +88,81 @@ const CatalogPage = () => {
     Object.entries(debouncedFilters).forEach(([key, value]) => {
       if (value) params.set(key, value);
     });
+
+    if (fromProduct) params.set("fromProduct", "1");
+    if (similarModuleId) params.set("similarModuleId", String(similarModuleId));
+    if (similarKitId) params.set("similarKitId", String(similarKitId));
+
     setSearchParams(params, { replace: true });
-  }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, setSearchParams]);
+  }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, fromProduct, similarModuleId, similarKitId, setSearchParams]);
+
+  useEffect(() => {
+    const loadSimilarModules = async () => {
+      if (!fromProduct || !similarModuleId) {
+        setSimilarItems([]);
+        return;
+      }
+
+      const parsed = Number(similarModuleId);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setSimilarItems([]);
+        return;
+      }
+
+      if (lastSimilarModuleIdRef.current === parsed && similarItems.length > 0) return;
+      lastSimilarModuleIdRef.current = parsed;
+
+      setSimilarLoading(true);
+      try {
+        const res = await post(`/modules/${parsed}/similar`, { limit: 50 });
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setSimilarItems(list.filter((x) => x?.is_active));
+      } catch (e) {
+        console.error("Ошибка загрузки похожих модулей:", e);
+        setSimilarItems([]);
+        lastSimilarModuleIdRef.current = null;
+      } finally {
+        setSimilarLoading(false);
+      }
+    };
+
+    loadSimilarModules();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromProduct, similarModuleId, post]);
+
+  useEffect(() => {
+    const loadSimilarKits = async () => {
+      if (!fromProduct || !similarKitId) {
+        setSimilarKitItems([]);
+        return;
+      }
+
+      const parsed = Number(similarKitId);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setSimilarKitItems([]);
+        return;
+      }
+
+      if (lastSimilarKitIdRef.current === parsed && similarKitItems.length > 0) return;
+      lastSimilarKitIdRef.current = parsed;
+
+      setSimilarKitLoading(true);
+      try {
+        const res = await post(`/kit-solutions/${parsed}/similar`, { limit: 50 });
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setSimilarKitItems(list.filter((x) => x?.is_active).map((k) => ({ ...k, __type: "kitSolution" })));
+      } catch (e) {
+        console.error("Ошибка загрузки похожих готовых решений:", e);
+        setSimilarKitItems([]);
+        lastSimilarKitIdRef.current = null;
+      } finally {
+        setSimilarKitLoading(false);
+      }
+    };
+
+    loadSimilarKits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromProduct, similarKitId, post]);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -70,6 +182,8 @@ const CatalogPage = () => {
       setLoading(true);
       try {
         const queryParams = { search: debouncedQuery, ...debouncedFilters };
+        const colorId = searchParams.get("colorId");
+        if (colorId) queryParams.colorId = colorId;
         if (activeCategory === "kitSolutions") {
           const res = await get("/kit-solutions", queryParams);
           if (active) {
@@ -103,12 +217,50 @@ const CatalogPage = () => {
 
     fetchItems();
     return () => { active = false; };
-  }, [debouncedQuery, debouncedFilters, activeCategory, activeSubCategory, moduleCategories, get]);
+  }, [debouncedQuery, debouncedFilters, activeCategory, activeSubCategory, moduleCategories, get, searchParams]);
 
   const bottomSubCategories = useMemo(() => activeCategory !== "bottom" ? [] : [{ code: "НМР1", label: "Одностворчатые" }, { code: "НМР2", label: "Двустворчатые" }, { code: "НМР.М1", label: "Под мойку" }, { code: "НМЯ.М1", label: "С ящиком под мойку" }, { code: "НМЯ.2", label: "С 2 ящиками" }, { code: "НМЯ.3", label: "С 3 ящиками" }], [activeCategory]);
   const topSubCategories = useMemo(() => activeCategory !== "top" ? [] : [{ code: "ВМР1", label: "Одностворчатые" }, { code: "ВМР2", label: "Двустворчатые" }, { code: "ВМВ1", label: "Выдвижные" }], [activeCategory]);
 
-  const displayItems = useMemo(() => (activeCategory === "kitSolutions" ? kitSolutions : activeCategory === "all" ? [...kitSolutions, ...items] : items).filter(item => item.is_active), [activeCategory, kitSolutions, items]);
+  const displayItems = useMemo(() => {
+    const safeModules = items.filter((x) => x.is_active);
+    const safeKits = kitSolutions.filter((x) => x.is_active);
+
+    if (!fromProduct) {
+      return activeCategory === "kitSolutions"
+        ? safeKits
+        : activeCategory === "all"
+        ? [...safeKits, ...safeModules]
+        : safeModules;
+    }
+
+    // 1) Режим похожих для kit
+    if (similarKitId && (activeCategory === "kitSolutions" || activeCategory === "all")) {
+      const kitBaseList = safeKits;
+      const baseIds = new Set(kitBaseList.map((x) => x.id));
+      const similarInScope = similarKitItems.filter((x) => baseIds.has(x.id));
+      const similarIds = new Set(similarInScope.map((x) => x.id));
+      const rest = kitBaseList.filter((x) => !similarIds.has(x.id));
+      const kitsOrdered = [...similarInScope, ...rest];
+      return activeCategory === "kitSolutions" ? kitsOrdered : [...kitsOrdered, ...safeModules];
+    }
+
+    // 2) Режим похожих для module
+    if (similarModuleId && activeCategory !== "kitSolutions") {
+      const baseList = activeCategory === "all" ? [...safeKits, ...safeModules] : safeModules;
+      const baseIds = new Set(baseList.map((x) => x.id));
+      const similarInScope = similarItems.filter((x) => baseIds.has(x.id));
+      const similarIds = new Set(similarInScope.map((x) => x.id));
+      const rest = baseList.filter((x) => !similarIds.has(x.id));
+      return [...similarInScope, ...rest];
+    }
+
+    return activeCategory === "kitSolutions"
+      ? safeKits
+      : activeCategory === "all"
+      ? [...safeKits, ...safeModules]
+      : safeModules;
+  }, [activeCategory, kitSolutions, items, fromProduct, similarModuleId, similarKitId, similarItems, similarKitItems]);
   const handleAddToCart = useCallback((product) => addItem(product), [addItem]);
 
   const SidebarContent = () => (

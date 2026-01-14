@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { useParams, Link, useNavigate, useLocation } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import useApi from "../hooks/useApi";
 import useCart from "../hooks/useCart";
 import SecureButton from "../components/ui/SecureButton";
@@ -8,22 +8,12 @@ import { formatCurrency } from "../utils/format";
 import ColorBadge from "../components/ui/ColorBadge";
 import FavoriteButton from "../components/ui/FavoriteButton";
 import useLogger from "../hooks/useLogger";
-
-const placeholderImage = "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=600&q=80";
-
-const getImageUrl = (url) => {
-  if (!url) return placeholderImage;
-  if (url.startsWith('/uploads/')) {
-    return import.meta.env.DEV ? `http://localhost:5000${url}` : url;
-  }
-  return url;
-};
+import { getImageUrl } from "../utils/image";
 
 const ProductPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { get } = useApi();
+  const { get, post } = useApi();
   const { addItem } = useCart();
   const logger = useLogger();
 
@@ -33,15 +23,23 @@ const ProductPage = () => {
   const [loading, setLoading] = useState(true);
   const [similarItems, setSimilarItems] = useState([]);
   const [similarLoading, setSimilarLoading] = useState(false);
+  const [moduleDescription, setModuleDescription] = useState(null);
 
   const getRef = useRef(get);
+  const postRef = useRef(post);
   const loggerRef = useRef(logger);
   const isFetchingRef = useRef(false);
   const lastIdRef = useRef(null);
 
+  const similarRequestRef = useRef({ inFlight: false, lastForId: null });
+
   useEffect(() => {
     getRef.current = get;
   }, [get]);
+
+  useEffect(() => {
+    postRef.current = post;
+  }, [post]);
 
   loggerRef.current = logger;
 
@@ -95,46 +93,61 @@ const ProductPage = () => {
     };
   }, [id, navigate]);
 
+  useEffect(() => {
+    if (!item?.base_sku) {
+      setModuleDescription(null);
+      return;
+    }
+
+    if (item?.short_desc) {
+      setModuleDescription(null);
+      return;
+    }
+
+    let active = true;
+    getRef.current(`/modules/descriptions/${encodeURIComponent(item.base_sku)}`)
+      .then((res) => {
+        if (!active) return;
+        setModuleDescription(res?.data || null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setModuleDescription(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [item?.base_sku, item?.short_desc]);
+
   // Похожие товары
   const loadSimilar = useCallback(async () => {
-    if (!item || similarLoading) return;
-    
+    if (!item?.id) return;
+    if (similarRequestRef.current.inFlight) return;
+    if (similarRequestRef.current.lastForId === item.id && similarItems.length > 0) return;
+
+    similarRequestRef.current.inFlight = true;
+    similarRequestRef.current.lastForId = item.id;
     setSimilarLoading(true);
     try {
-      const queryParams = {};
-      
-      // Приоритетные фильтры
-      if (item.facade_color) queryParams.facadeColor = item.facade_color; // 1
-      if (item.corpus_color) queryParams.corpusColor = item.corpus_color; // 2
-      if (item.length_mm) {
-        queryParams.lengthFrom = String(item.length_mm - 50);
-        queryParams.lengthTo = String(item.length_mm + 50);
-      }
-      
-      // Категория
-      let category = item.category_code || item.module_category_id;
-      if (item.module_category_id) {
-        category = item.module_category_id === 1 ? "bottom" : 
-                  item.module_category_id === 2 ? "top" :
-                  item.module_category_id === 3 ? "tall" :
-                  item.module_category_id === 4 ? "filler" :
-                  item.module_category_id === 5 ? "accessory" : category;
-      }
-      if (category) queryParams.category = category;
-      
-      if (item.base_sku) queryParams.baseSku = item.base_sku;
-      if (item.name) queryParams.search = item.name;
-
-      const res = await getRef.current("/modules", queryParams);
+      const res = await postRef.current(`/modules/${item.id}/similar`, { limit: 12 });
       const list = Array.isArray(res?.data) ? res.data : [];
-      const filtered = list.filter(x => x.id !== Number(id) && x.is_active).slice(0, 12);
+      const filtered = list.filter((x) => x.id !== Number(id) && x.is_active).slice(0, 12);
       setSimilarItems(filtered);
     } catch (error) {
       console.error("Ошибка похожих:", error);
+      setSimilarItems([]);
+      similarRequestRef.current.lastForId = null;
     } finally {
+      similarRequestRef.current.inFlight = false;
       setSimilarLoading(false);
     }
-  }, [item, id, similarLoading]);
+  }, [item?.id, id, similarItems.length]);
+
+  useEffect(() => {
+    if (!item?.id) return;
+    loadSimilar();
+  }, [item?.id, loadSimilar]);
 
   const handleAddToCart = () => {
     if (!item) return;
@@ -142,10 +155,26 @@ const ProductPage = () => {
   };
 
   const handleFindSimilar = () => {
-    const params = new URLSearchParams({ fromProduct: "1" });
+    if (!item?.id) return;
+    const params = new URLSearchParams({ fromProduct: "1", similarModuleId: String(item.id) });
+
+    let categoryCode = item.category_code;
+    if (!categoryCode && item.module_category_id) {
+      categoryCode = item.module_category_id === 1 ? "bottom" :
+        item.module_category_id === 2 ? "top" :
+        item.module_category_id === 3 ? "tall" :
+        item.module_category_id === 4 ? "filler" :
+        item.module_category_id === 5 ? "accessory" : null;
+    }
+    if (categoryCode) params.set("category", categoryCode);
+
+    if (item.base_sku) params.set("subCategory", String(item.base_sku));
     if (item.facade_color) params.set("facadeColor", item.facade_color);
     if (item.corpus_color) params.set("corpusColor", item.corpus_color);
-    if (item.category_code) params.set("category", item.category_code);
+    if (item.length_mm) {
+      params.set("lengthFrom", String(item.length_mm - 50));
+      params.set("lengthTo", String(item.length_mm + 50));
+    }
     navigate(`/catalog?${params.toString()}`);
   };
 
@@ -207,6 +236,13 @@ const ProductPage = () => {
         <div className="space-y-4">
           {/* Большое изображение */}
           <div className="relative aspect-[4/3] bg-night-50 rounded-2xl overflow-hidden border border-night-200 group shadow-lg">
+            <button
+              type="button"
+              onClick={handleFindSimilar}
+              className="absolute right-4 top-4 z-20 rounded-full bg-white/90 hover:bg-white shadow-lg px-4 py-2 text-xs font-semibold text-night-700 hover:text-accent transition"
+            >
+              Похожие
+            </button>
             <img
               src={mainImage}
               alt={item.name}
@@ -283,10 +319,6 @@ const ProductPage = () => {
             <FavoriteButton product={item} className="flex-shrink-0 mt-2" />
           </div>
 
-          {item.short_desc && (
-            <p className="text-night-700 leading-relaxed text-lg">{item.short_desc}</p>
-          )}
-
           {/* Компактная цена + кнопки */}
           <div className="space-y-3">
             <div className="flex items-baseline gap-2 bg-night-50 rounded-xl p-4 border border-night-200">
@@ -302,64 +334,55 @@ const ProductPage = () => {
               >
                 В корзину
               </SecureButton>
-              <SecureButton
-                onClick={handleFindSimilar}
-                variant="outline"
-                className="flex-1 h-12 text-sm border-night-200 hover:border-accent text-night-700 hover:text-accent rounded-xl"
-              >
-                Похожие товары
-              </SecureButton>
             </div>
           </div>
+
+          {(item.length_mm || item.depth_mm || item.height_mm || item.primary_color || item.secondary_color || item.facade_color || item.corpus_color) && (
+            <div className="glass-card p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(item.length_mm || item.depth_mm || item.height_mm) && (
+                  <div>
+                    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Габариты</div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <span className="text-night-500 text-xs block mb-1">Длина</span>
+                        <span className="font-semibold text-night-900">{item.length_mm || "—"} мм</span>
+                      </div>
+                      <div>
+                        <span className="text-night-500 text-xs block mb-1">Глубина</span>
+                        <span className="font-semibold text-night-900">{item.depth_mm || "—"} мм</span>
+                      </div>
+                      <div>
+                        <span className="text-night-500 text-xs block mb-1">Высота</span>
+                        <span className="font-semibold text-night-900">{item.height_mm || "—"} мм</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {(item.primary_color || item.secondary_color || item.facade_color || item.corpus_color) && (
+                  <div>
+                    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Цвета</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(item.primary_color || item.facade_color) && (
+                        item.primary_color ? <ColorBadge labelPrefix="Основной:" colorData={item.primary_color} /> : <ColorBadge labelPrefix="Основной:" value={item.facade_color} />
+                      )}
+                      {(item.secondary_color || item.corpus_color) && (
+                        item.secondary_color ? <ColorBadge labelPrefix="Доп.:" colorData={item.secondary_color} /> : <ColorBadge labelPrefix="Доп.:" value={item.corpus_color} />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Характеристики (компактно) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
-        {(item.length_mm || item.total_length_mm) && (
-          <div className="glass-card p-4">
-            <span className="text-night-500 text-xs block mb-1">Длина</span>
-            <span className="font-semibold text-night-900 text-lg">
-              {item.length_mm || item.total_length_mm} мм
-            </span>
-          </div>
-        )}
-        {(item.depth_mm || item.total_depth_mm) && (
-          <div className="glass-card p-4">
-            <span className="text-night-500 text-xs block mb-1">Глубина</span>
-            <span className="font-semibold text-night-900 text-lg">
-              {item.depth_mm || item.total_depth_mm} мм
-            </span>
-          </div>
-        )}
-        {(item.height_mm || item.total_height_mm) && (
-          <div className="glass-card p-4">
-            <span className="text-night-500 text-xs block mb-1">Высота</span>
-            <span className="font-semibold text-night-900 text-lg">
-              {item.height_mm || item.total_height_mm} мм
-            </span>
-          </div>
-        )}
-        {(item.primary_color || item.facade_color) && (
-          <div className="glass-card p-4">
-            <span className="text-night-500 text-xs block mb-1">Фасад</span>
-            {item.primary_color ? (
-              <ColorBadge colorData={item.primary_color} />
-            ) : (
-              <ColorBadge value={item.facade_color} />
-            )}
-          </div>
-        )}
-        {(item.secondary_color || item.corpus_color) && (
-          <div className="glass-card p-4">
-            <span className="text-night-500 text-xs block mb-1">Корпус</span>
-            {item.secondary_color ? (
-              <ColorBadge colorData={item.secondary_color} />
-            ) : (
-              <ColorBadge value={item.corpus_color} />
-            )}
-          </div>
-        )}
+      <div className="glass-card p-8 mb-12">
+        <h3 className="font-bold text-night-900 mb-4 text-2xl">Описание</h3>
+        <div className="text-night-700 leading-relaxed text-lg whitespace-pre-line">
+          {item.short_desc || moduleDescription?.description || "Описание не указано"}
+        </div>
       </div>
 
       {/* ✅ СОСТАВ ГОТОВОГО РЕШЕНИЯ (только для kit) */}
@@ -412,11 +435,10 @@ const ProductPage = () => {
           <h3 className="font-bold text-night-900 text-2xl">Похожие товары</h3>
           <SecureButton
             variant="outline"
-            onClick={loadSimilar}
-            disabled={similarLoading}
+            onClick={handleFindSimilar}
             className="text-sm px-4 py-2"
           >
-            {similarLoading ? "Загрузка..." : "Показать больше"}
+            Показать больше
           </SecureButton>
         </div>
         {similarLoading ? (

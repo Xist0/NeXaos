@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import useApi from "../hooks/useApi";
 import useCart from "../hooks/useCart";
@@ -8,18 +8,7 @@ import { formatCurrency } from "../utils/format";
 import ColorBadge from "../components/ui/ColorBadge";
 import FavoriteButton from "../components/ui/FavoriteButton";
 import useLogger from "../hooks/useLogger";
-
-const placeholderImage =
-  "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=600&q=80";
-
-const getImageUrl = (url) => {
-  if (!url) return placeholderImage;
-  if (url.startsWith("/uploads/")) {
-    if (import.meta.env.DEV) return `http://localhost:5000${url}`;
-    return url;
-  }
-  return url;
-};
+import { getImageUrl, placeholderImage } from "../utils/image";
 
 const KitSolutionPage = () => {
   const { id } = useParams();
@@ -34,6 +23,8 @@ const KitSolutionPage = () => {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [similarItems, setSimilarItems] = useState([]);
   const [similarLoading, setSimilarLoading] = useState(false);
+
+  const similarRequestRef = useRef({ inFlight: false, lastForId: null });
 
   const getRef = useRef(get);
   const postRef = useRef(post);
@@ -94,6 +85,13 @@ const KitSolutionPage = () => {
     addItem({ ...kit, __type: "kitSolution" }, 1);
   };
 
+  const handleFindSimilar = useCallback(() => {
+    if (!kit?.id) return;
+    const params = new URLSearchParams({ fromProduct: "1", similarKitId: String(kit.id), category: "kitSolutions" });
+    if (kit.primary_color_id) params.set("colorId", String(kit.primary_color_id));
+    navigate(`/catalog?${params.toString()}`);
+  }, [kit?.id, kit?.primary_color_id, navigate]);
+
   const modulesByType = kit?.modules || {};
 
   const compositionSections = useMemo(() => (
@@ -108,8 +106,13 @@ const KitSolutionPage = () => {
       .filter((section) => section.items.length > 0)
   ), [modulesByType]);
 
-  const loadSimilar = async () => {
-    if (!id || similarLoading) return;
+  const loadSimilar = useCallback(async () => {
+    if (!id) return;
+    if (similarRequestRef.current.inFlight) return;
+    if (similarRequestRef.current.lastForId === id && similarItems.length > 0) return;
+
+    similarRequestRef.current.inFlight = true;
+    similarRequestRef.current.lastForId = id;
     setSimilarLoading(true);
     try {
       const res = await postRef.current(`/kit-solutions/${id}/similar`, { limit: 12 });
@@ -119,10 +122,17 @@ const KitSolutionPage = () => {
     } catch (e) {
       loggerRef.current?.error("Не удалось загрузить похожие готовые решения", e);
       setSimilarItems([]);
+      similarRequestRef.current.lastForId = null;
     } finally {
+      similarRequestRef.current.inFlight = false;
       setSimilarLoading(false);
     }
-  };
+  }, [id, similarItems.length]);
+
+  useEffect(() => {
+    if (!id) return;
+    loadSimilar();
+  }, [id, loadSimilar]);
 
   const primaryColorData = useMemo(() => {
     if (!kit?.primary_color_name) return null;
@@ -145,22 +155,28 @@ const KitSolutionPage = () => {
   return (
     <div className="shop-container py-8">
       <nav className="text-sm text-night-500 mb-6">
-        <Link to="/" className="hover:text-accent transition">Главная</Link>{" / "}
-        <Link to="/catalog" className="hover:text-accent transition">Каталог</Link>{" / "}
-        <span className="text-night-900">{kit.name}</span>
+        <Link to="/catalog" className="hover:text-accent transition">Каталог</Link>
+        <span className="text-night-900 mx-2">/</span>
+        <span className="font-medium">{kit.name}</span>
       </nav>
 
-      <div className="grid gap-8 lg:grid-cols-2 mb-12">
+      <div className="grid gap-8 lg:gap-12 lg:grid-cols-2 mb-12">
         <div className="space-y-4">
-          <div className="relative aspect-square bg-night-50 rounded-xl overflow-hidden border border-night-200 group">
+          <div className="relative aspect-[4/3] bg-night-50 rounded-2xl overflow-hidden border border-night-200 group shadow-lg">
+            <button
+              type="button"
+              onClick={handleFindSimilar}
+              className="absolute right-4 top-4 z-20 rounded-full bg-white/90 hover:bg-white shadow-lg px-4 py-2 text-xs font-semibold text-night-700 hover:text-accent transition"
+            >
+              Похожие
+            </button>
             <img
               src={mainImage}
               alt={kit.name}
-              className="h-full w-full object-contain p-4"
+              className="w-full h-full object-contain p-6 transition-all group-hover:p-4 lg:p-8"
               crossOrigin="anonymous"
               onError={(e) => { if (e.target.src !== placeholderImage) e.target.src = placeholderImage; }}
-              loading="lazy"
-              decoding="async"
+              loading="eager"
             />
 
             {images.length > 1 && (
@@ -214,7 +230,7 @@ const KitSolutionPage = () => {
           )}
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 lg:pt-4">
           <div>
             <div className="flex items-start justify-between gap-4">
               <h1 className="text-4xl font-bold text-night-900 mb-3 leading-tight">{kit.name}</h1>
@@ -223,61 +239,67 @@ const KitSolutionPage = () => {
             {kit.sku && <p className="text-sm text-night-500">Артикул: <span className="font-medium text-night-700">{kit.sku}</span></p>}
           </div>
 
-          {kit.description && <div className="text-night-700 leading-relaxed text-lg">{kit.description}</div>}
-
-          <div className="bg-night-50 rounded-lg p-4 border border-night-200">
-            <div className="flex items-baseline gap-3 mb-3">
-              <span className="text-4xl font-bold text-night-900">{formatCurrency(kit.final_price || 0)}</span>
+          <div className="space-y-3">
+            <div className="flex items-baseline gap-2 bg-night-50 rounded-xl p-4 border border-night-200">
+              <span className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-accent to-accent-dark bg-clip-text text-transparent">
+                {formatCurrency(kit.final_price || 0)}
+              </span>
             </div>
-            <div className="space-y-2">
-              <SecureButton onClick={handleAddToCart} className="w-full justify-center py-3 text-base font-semibold bg-accent text-night-900 hover:bg-accent-dark">В корзину</SecureButton>
+            <div className="flex flex-col sm:flex-row gap-3">
               <SecureButton
-                onClick={loadSimilar}
-                variant="outline"
-                className="w-full justify-center py-3 text-base font-semibold"
-                disabled={similarLoading}
+                onClick={handleAddToCart}
+                className="flex-1 h-12 text-base bg-gradient-to-r from-accent to-accent-dark hover:from-accent-dark hover:to-accent text-white font-semibold shadow-lg hover:shadow-xl rounded-xl"
               >
-                {similarLoading ? "Загрузка..." : "Похожие"}
+                В корзину
               </SecureButton>
             </div>
           </div>
 
-          <div className="space-y-4 border-t border-night-200 pt-6">
-            {(kit.total_length_mm || kit.total_depth_mm || kit.total_height_mm) && (
-              <div>
-                <h3 className="text-sm font-semibold text-night-900 mb-3 uppercase tracking-wide">Габариты</h3>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div className="bg-night-50 rounded p-3"><span className="text-night-500 block text-xs mb-1">Длина</span><span className="font-semibold text-night-900 text-lg">{kit.total_length_mm || "-"} мм</span></div>
-                  <div className="bg-night-50 rounded p-3"><span className="text-night-500 block text-xs mb-1">Глубина</span><span className="font-semibold text-night-900 text-lg">{kit.total_depth_mm || "-"} мм</span></div>
-                  <div className="bg-night-50 rounded p-3"><span className="text-night-500 block text-xs mb-1">Высота</span><span className="font-semibold text-night-900 text-lg">{kit.total_height_mm || "-"} мм</span></div>
-                </div>
+          {(kit.total_length_mm || kit.total_depth_mm || kit.total_height_mm || kit.primary_color_name || kit.secondary_color_name) && (
+            <div className="glass-card p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(kit.total_length_mm || kit.total_depth_mm || kit.total_height_mm) && (
+                  <div>
+                    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Габариты</div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <span className="text-night-500 text-xs block mb-1">Длина</span>
+                        <span className="font-semibold text-night-900">{kit.total_length_mm || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-night-500 text-xs block mb-1">Глубина</span>
+                        <span className="font-semibold text-night-900">{kit.total_depth_mm || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-night-500 text-xs block mb-1">Высота</span>
+                        <span className="font-semibold text-night-900">{kit.total_height_mm || "—"}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {(kit.primary_color_name || kit.secondary_color_name) && (
+                  <div>
+                    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Цвета</div>
+                    <div className="flex flex-wrap gap-2">
+                      {primaryColorData && <ColorBadge labelPrefix="Основной:" colorData={primaryColorData} />}
+                      {secondaryColorData && <ColorBadge labelPrefix="Доп.:" colorData={secondaryColorData} />}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            {(kit.primary_color_name || kit.secondary_color_name) && (
-              <div>
-                <h3 className="text-sm font-semibold text-night-900 mb-3 uppercase tracking-wide">Цвета</h3>
-                <div className="flex flex-wrap gap-3">
-                  {primaryColorData && <ColorBadge labelPrefix="Основной:" colorData={primaryColorData} />}
-                  {secondaryColorData && <ColorBadge labelPrefix="Доп.:" colorData={secondaryColorData} />}
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="glass-card p-8 mb-12">
+        <h3 className="font-bold text-night-900 mb-4 text-2xl">Описание</h3>
+        <div className="text-night-700 leading-relaxed text-lg whitespace-pre-line">
+          {kit.description || "Описание не указано"}
         </div>
       </div>
 
       <div className="space-y-6 mb-12">
-        <div className="glass-card p-8">
-          <h3 className="font-bold text-night-900 mb-4 text-lg">Параметры</h3>
-          <div className="grid gap-8 md:grid-cols-3 text-sm">
-            <div className="space-y-2">
-              <div className="flex justify-between py-2 border-b border-night-100"><span className="text-night-500">Тип кухни</span><span className="font-semibold text-night-900">{kit.kitchen_type_name || "—"}</span></div>
-              <div className="flex justify-between py-2 border-b border-night-100"><span className="text-night-500">Материал</span><span className="font-semibold text-night-900">{kit.material_name || "—"}</span></div>
-              <div className="flex justify-between py-2 border-b border-night-100"><span className="text-night-500">Кол-во модулей</span><span className="font-semibold text-night-900">{kit.modules_count || "—"}</span></div>
-            </div>
-          </div>
-        </div>
-
         <div className="glass-card p-8 space-y-6">
           <h3 className="font-bold text-night-900 text-lg">Компоненты</h3>
           {compositionSections.length === 0 ? (
@@ -326,14 +348,13 @@ const KitSolutionPage = () => {
 
         <div className="glass-card p-8">
           <div className="flex items-center justify-between gap-4 mb-6">
-            <h3 className="font-bold text-night-900 text-lg">Похожие</h3>
+            <h3 className="font-bold text-night-900 text-2xl">Похожие</h3>
             <SecureButton
               variant="outline"
-              onClick={loadSimilar}
-              disabled={similarLoading}
+              onClick={handleFindSimilar}
               className="text-sm px-4 py-2"
             >
-              {similarLoading ? "Загрузка..." : "Показать"}
+              Показать больше
             </SecureButton>
           </div>
 

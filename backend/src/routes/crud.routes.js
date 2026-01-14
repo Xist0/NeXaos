@@ -13,9 +13,14 @@ const moduleController = require("../controllers/module.controller");
 const kitSolutionController = require("../controllers/kit-solution.controller");
 
 // Кастомные роуты для orders
-router.get("/orders", asyncHandler(orderController.list));
-router.get("/orders/:id", asyncHandler(orderController.getById));
-router.put("/orders/:id", authGuard, asyncHandler(createCrudController(entities.find(e => e.route === "orders")).update));
+router.get("/orders", authGuard, requireAdminOrManager, asyncHandler(orderController.list));
+router.get("/orders/:id", authGuard, requireAdminOrManager, asyncHandler(orderController.getById));
+router.put(
+  "/orders/:id",
+  authGuard,
+  requireAdminOrManager,
+  asyncHandler(createCrudController(entities.find((e) => e.route === "orders")).update)
+);
 
 entities.forEach((entity) => {
   // Пропускаем orders, так как у них кастомные роуты
@@ -26,11 +31,15 @@ entities.forEach((entity) => {
   const controller = createCrudController(entity);
   const basePath = `/${entity.route}`;
 
+  // Заметки к заказам: только для админа/менеджера
+  const isOrderNotes = entity.route === "order-notes";
+  const auth = isOrderNotes ? [authGuard, requireAdminOrManager] : [authGuard];
+
   router.get(basePath, optionalAuth, asyncHandler(controller.list));
   router.get(`${basePath}/:id`, optionalAuth, asyncHandler(controller.getById));
-  router.post(basePath, authGuard, asyncHandler(controller.create));
-  router.put(`${basePath}/:id`, authGuard, asyncHandler(controller.update));
-  router.delete(`${basePath}/:id`, authGuard, asyncHandler(controller.remove));
+  router.post(basePath, ...auth, asyncHandler(controller.create));
+  router.put(`${basePath}/:id`, ...auth, asyncHandler(controller.update));
+  router.delete(`${basePath}/:id`, ...auth, asyncHandler(controller.remove));
 });
 
 router.post("/logs", (req, res) => {
