@@ -12,6 +12,11 @@ export default defineConfig({
                 changeOrigin: true,
                 secure: false,
             },
+            "/uploads": {
+                target: backendOrigin,
+                changeOrigin: true,
+                secure: false,
+            },
         },
     },
 });

@@ -4,6 +4,7 @@ import ModuleCreator from "./ModuleCreator";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import { FaArrowLeft, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
+import { getImageUrl } from "../../utils/image";
 
 const ModulesAdmin = () => {
   const { get, del } = useApi();
@@ -24,14 +25,6 @@ const ModulesAdmin = () => {
     delRef.current = del;
     loggerRef.current = logger;
   }, [get, del, logger]);
-
-  const getImageUrl = (url) => {
-    if (!url) return null;
-    if (url.startsWith("/uploads/")) {
-      return import.meta.env.DEV ? `http://localhost:5000${url}` : url;
-    }
-    return url;
-  };
 
   const loadModules = useCallback(async ({ force = false } = {}) => {
     if (!force && hasLoadedRef.current) return;

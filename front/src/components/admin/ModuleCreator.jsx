@@ -17,17 +17,7 @@ import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
 import { formatCurrency } from "../../utils/format";
-
-const placeholderImage =
-  "https://images.unsplash.com/photo-1519710164239-da123dc03ef4?auto=format&fit=crop&w=600&q=80";
-
-const getImageUrl = (url) => {
-  if (!url) return placeholderImage;
-  if (url.startsWith("/uploads/")) {
-    return import.meta.env.DEV ? `http://localhost:5000${url}` : url;
-  }
-  return url;
-};
+import { getImageUrl, placeholderImage } from "../../utils/image";
 
 const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
   const { get, post, put } = useApi();

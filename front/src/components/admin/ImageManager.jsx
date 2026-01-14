@@ -4,6 +4,8 @@ import useLogger from "../../hooks/useLogger";
 import useAuthStore from "../../store/authStore";
 import SecureButton from "../ui/SecureButton";
 import { FaSpinner, FaUpload, FaImage, FaCheckCircle, FaTrash } from "react-icons/fa";
+import { API_BASE_URL } from "../../utils/constants";
+import { getImageUrl } from "../../utils/image";
 
 const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
   const { get, del, post } = useApi();
@@ -72,7 +74,7 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
           formData.append("entityId", String(entityId));
           formData.append("alt", file.name.split(".")[0]);
 
-          const response = await fetch("http://localhost:5000/api/images", {
+          const response = await fetch(`${API_BASE_URL}/images`, {
             method: "POST",
             body: formData,
             credentials: "include",
@@ -138,12 +140,9 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
     }
   };
 
-  const getImageUrl = (url) => {
+  const getPreviewUrl = (url) => {
     if (!url) return "https://via.placeholder.com/300x200?text=Нет+изображения";
-    if (url.startsWith("/uploads/")) {
-      return import.meta.env.DEV ? `http://localhost:5000${url}` : url;
-    }
-    return url;
+    return getImageUrl(url);
   };
 
   if (!entityId || entityId === "null") {
@@ -227,7 +226,7 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
             >
               <div className="relative w-full h-36 overflow-hidden bg-night-100">
                 <img
-                  src={getImageUrl(image.url)}
+                  src={getPreviewUrl(image.url)}
                   alt={image.alt || `Image ${idx + 1}`}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                 />

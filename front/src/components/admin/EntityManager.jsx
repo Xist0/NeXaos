@@ -4,6 +4,7 @@ import SecureInput from "../ui/SecureInput";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
+import { getImageUrl } from "../../utils/image";
 import { FaEdit, FaTrash, FaPlus, FaSave, FaTimes } from "react-icons/fa";
 
 const defaultField = (field) => ({
@@ -1076,9 +1077,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
                 />
                 {form[field.name] && (
                   <img
-                    src={form[field.name].startsWith('/uploads/') 
-                      ? (import.meta.env.DEV ? `http://localhost:5000${form[field.name]}` : form[field.name])
-                      : form[field.name]}
+                    src={getImageUrl(form[field.name])}
                     alt={field.label}
                     className="h-20 w-20 rounded-md object-cover border border-night-100"
                     crossOrigin="anonymous"
@@ -1150,9 +1149,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
                 {form[field.name] && (() => {
                   const selectedColor = colors.find(c => c.id === Number(form[field.name]));
                   if (selectedColor && selectedColor.image_url) {
-                    const imageUrl = selectedColor.image_url.startsWith('/uploads/')
-                      ? (import.meta.env.DEV ? `http://localhost:5000${selectedColor.image_url}` : selectedColor.image_url)
-                      : selectedColor.image_url;
+                    const imageUrl = getImageUrl(selectedColor.image_url);
                     return (
                       <div className="flex items-center gap-3 p-2 border border-night-200 rounded-lg bg-night-50">
                         <img
@@ -1441,9 +1438,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
                   <td key={field.name} className="py-3 pr-4">
                     {field.inputType === "image" && item[field.name] ? (
                       <img
-                        src={item[field.name].startsWith('/uploads/') 
-                          ? (import.meta.env.DEV ? `http://localhost:5000${item[field.name]}` : item[field.name])
-                          : item[field.name]}
+                        src={getImageUrl(item[field.name])}
                         alt={field.label}
                         className="h-10 w-10 rounded object-cover border border-night-100"
                         crossOrigin="anonymous"
@@ -1456,9 +1451,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
                         const colorId = Number(item[field.name]);
                         const color = colors.find(c => c.id === colorId);
                         if (color) {
-                          const imageUrl = color.image_url?.startsWith('/uploads/')
-                            ? (import.meta.env.DEV ? `http://localhost:5000${color.image_url}` : color.image_url)
-                            : color.image_url;
+                          const imageUrl = getImageUrl(color.image_url);
                           return (
                             <div className="flex items-center gap-2">
                               {imageUrl && (

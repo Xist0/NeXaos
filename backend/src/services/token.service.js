@@ -3,8 +3,14 @@ const jwt = require("jsonwebtoken");
 const { query } = require("../config/db");
 const logger = require("../utils/logger");
 
-const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET || "your-access-secret-change-in-production";
-const REFRESH_TOKEN_SECRET = process.env.REFRESH_TOKEN_SECRET || "your-refresh-secret-change-in-production";
+const ACCESS_TOKEN_SECRET =
+  process.env.ACCESS_TOKEN_SECRET ||
+  process.env.JWT_SECRET ||
+  "your-access-secret-change-in-production";
+const REFRESH_TOKEN_SECRET =
+  process.env.REFRESH_TOKEN_SECRET ||
+  process.env.JWT_SECRET ||
+  "your-refresh-secret-change-in-production";
 
 // Генерация refresh token (случайная строка)
 const generateRefreshToken = () => crypto.randomBytes(64).toString("hex");

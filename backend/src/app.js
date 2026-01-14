@@ -16,6 +16,13 @@ const app = express();
 app.disable("x-powered-by");
 
 // Настраиваем Helmet для разрешения загрузки изображений
+const allowedOrigins = new Set([
+  ...config.cors.origins,
+  config.proxy?.target,
+].filter(Boolean));
+
+const helmetCspImgSrc = ["'self'", "data:", "https:", ...Array.from(allowedOrigins)];
+
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -23,18 +30,13 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        imgSrc: ["'self'", "data:", "http://localhost:5000", "http://localhost:5173","http://192.168.0.177:5173","https://94.41.185.46", "https:"],
+        imgSrc: helmetCspImgSrc,
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
       },
     },
   })
 );
-
-const allowedOrigins = new Set([
-  ...config.cors.origins,
-  config.proxy?.target,
-].filter(Boolean));
 
 const corsOptions = {
   origin(origin, callback) {

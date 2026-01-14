@@ -1,8 +1,11 @@
 // src/config/env.js
 const dotenv = require("dotenv");
 
-
-if (process.env.NODE_ENV !== "production") {
+// В production переменные должны приходить из systemd EnvironmentFile.
+// Дополнительно поддерживаем явное указание ENV_FILE для удобства.
+if (process.env.ENV_FILE) {
+  dotenv.config({ path: process.env.ENV_FILE });
+} else if (process.env.NODE_ENV !== "production") {
   dotenv.config();
 }
 
@@ -32,6 +35,7 @@ for (const envVar of requiredEnvVars) {
 
 module.exports = {
   env: process.env.NODE_ENV || "development",
+  host: process.env.HOST || "0.0.0.0",
   port: process.env.PORT || 5000,
   cors: {
     origins: parseCsv(process.env.CORS_ORIGINS, [

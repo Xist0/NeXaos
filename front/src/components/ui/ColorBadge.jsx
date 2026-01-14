@@ -1,22 +1,9 @@
 import { resolveColor } from "../../utils/colors";
+import { getImageUrl } from "../../utils/image";
 
 const ColorBadge = ({ value, labelPrefix, colorData }) => {
   // Если передан объект colorData (из базы данных), используем его
   if (colorData && colorData.name) {
-    const getImageUrl = (url) => {
-      if (!url) return null;
-      if (url.startsWith('/uploads/')) {
-        if (import.meta.env.DEV) {
-          return `http://localhost:5000${url}`;
-        }
-        return url;
-      }
-      if (url.startsWith('http://') || url.startsWith('https://')) {
-        return url;
-      }
-      return url;
-    };
-
     const imageUrl = getImageUrl(colorData.image_url);
 
     return (

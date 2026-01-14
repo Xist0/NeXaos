@@ -4,6 +4,7 @@ import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import { FaArrowLeft, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
 import KitSolutionCreator from "./KitSolutionCreator";
+import { getImageUrl } from "../../utils/image";
 
 const KitSolutionsAdmin = () => {
   const { get, del } = useApi();
@@ -25,14 +26,6 @@ const KitSolutionsAdmin = () => {
     delRef.current = del;
     loggerRef.current = logger;
   }, [get, del, logger]);
-
-  const getImageUrl = (url) => {
-    if (!url) return null;
-    if (url.startsWith("/uploads/")) {
-      return import.meta.env.DEV ? `http://localhost:5000${url}` : url;
-    }
-    return url;
-  };
 
   const loadKits = useCallback(async ({ force = false } = {}) => {
     if (!force && hasLoadedRef.current) return;

@@ -4,13 +4,14 @@ const config = require("./config/env");
 const { initDatabase } = require("./db/schema");
 
 const PORT = config.port;
+const HOST = config.host;
 
 const startServer = async () => {
   try {
     // Инициализация БД при старте
     await initDatabase();
 
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, HOST, () => {
       console.log(`🚀 Сервер запущен в режиме ${config.env} на порту ${PORT}`);
       console.log(`🔗 Проверка работоспособности: http://localhost:${PORT}/api/health`);
     });
