@@ -23,20 +23,26 @@ const allowedOrigins = new Set([
 
 const helmetCspImgSrc = ["'self'", "data:", "https:", ...Array.from(allowedOrigins)];
 
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        imgSrc: helmetCspImgSrc,
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-      },
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://130.49.148.245', 'http://nexaos.ru'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// 2. Helmet (твой код)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      imgSrc: helmetCspImgSrc,
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
     },
-  })
-);
+  },
+}));
 
 const corsOptions = {
   origin(origin, callback) {
