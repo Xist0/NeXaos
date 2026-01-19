@@ -5,6 +5,7 @@ const multer = require("multer");
 const ApiError = require("../utils/api-error");
 const asyncHandler = require("../utils/async-handler");
 const { authGuard, optionalAuth, requireAdminOrManager } = require("../middleware/auth.middleware");
+const config = require("../config/env");
 const entities = require("../modules/entities.config");
 const createCrudController = require("../controllers/crud.controller");
 const orderController = require("../controllers/order.controller");
@@ -58,7 +59,7 @@ router.post("/logs", (req, res) => {
 });
 
 // Загрузка файлов (изображения и др.)
-const uploadsDir = path.join(__dirname, "..", "public", "uploads");
+const uploadsDir = config.uploadsDir;
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }

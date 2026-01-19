@@ -38,5 +38,16 @@
   "devDependencies": {
     "eslint": "^8.57.0",
     "nodemon": "^3.1.4"
+  },
+  "nodemonConfig": {
+    "watch": [
+      "src"
+    ],
+    "ignore": [
+      "src/public/uploads/**",
+      "src/public/**",
+      "logs/**",
+      "node_modules/**"
+    ]
   }
 }

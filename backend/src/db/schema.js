@@ -1,20 +1,20 @@
 const bcrypt = require("bcrypt");
-const { query } = require("../config/db");
+const { withClient } = require("../config/db");
 const logger = require("../utils/logger");
 const migrations = require("../migrations");
 
-const runMigrations = async () => {
+const runMigrations = async (client) => {
   console.log("🔍 Запускаем миграции базы данных...");
   for (const migration of migrations) {
-    await migration.up(query);
+    await migration.up((text, params) => client.query(text, params));
   }
   console.log("✅ Все миграции применены");
 };
 
-const seedBasicData = async () => {
+const seedBasicData = async (client) => {
   console.log("🌱 Наполняем базу начальными данными...");
 
-  await query(
+  await client.query(
     `INSERT INTO roles (name, description) 
      VALUES ($1, $2), ($3, $4) 
      ON CONFLICT (name) DO NOTHING`,
@@ -29,7 +29,7 @@ const seedBasicData = async () => {
   ];
 
   for (const [code, name] of units) {
-    await query(
+    await client.query(
       `INSERT INTO units (code, name) VALUES ($1, $2) ON CONFLICT (code) DO NOTHING`,
       [code, name]
     );
@@ -40,10 +40,10 @@ const seedBasicData = async () => {
   const adminPassword = process.env.ADMIN_PASSWORD || "Admin123!";
   const adminFullName = process.env.ADMIN_FULL_NAME || "Test Admin";
 
-  const existingAdmin = await query(`SELECT 1 FROM users WHERE email = $1`, [adminEmail]);
+  const existingAdmin = await client.query(`SELECT 1 FROM users WHERE email = $1`, [adminEmail]);
   if (existingAdmin.rowCount === 0) {
     const passwordHash = await bcrypt.hash(adminPassword, 10);
-    await query(
+    await client.query(
       `INSERT INTO users (role_id, email, password_hash, full_name, phone, is_active)
        SELECT r.id, $1, $2, $3, $4, true
        FROM roles r
@@ -55,13 +55,13 @@ const seedBasicData = async () => {
   }
 
   // Создаём демо-модули для каталога, если таблица modules пустая
-  const modulesCount = await query(`SELECT COUNT(1)::int AS cnt FROM modules`);
+  const modulesCount = await client.query(`SELECT COUNT(1)::int AS cnt FROM modules`);
   const cnt = modulesCount.rows?.[0]?.cnt ?? 0;
   if (cnt === 0) {
-    const bottomCategory = await query(
+    const bottomCategory = await client.query(
       `SELECT id FROM module_categories WHERE code = 'bottom' LIMIT 1`
     );
-    const topCategory = await query(
+    const topCategory = await client.query(
       `SELECT id FROM module_categories WHERE code = 'top' LIMIT 1`
     );
 
@@ -122,7 +122,7 @@ const seedBasicData = async () => {
     ];
 
     for (const m of demoModules) {
-      await query(
+      await client.query(
         `INSERT INTO modules (
           sku, name, base_sku,
           module_category_id,
@@ -149,8 +149,18 @@ const seedBasicData = async () => {
 };
 
 const initDatabase = async () => {
-  await runMigrations();
-  await seedBasicData();
+  // Advisory lock: гарантирует, что миграции/сид выполнятся только один раз
+  // даже при запуске нескольких инстансов (pm2 cluster, несколько dev процессов).
+  const LOCK_ID = 786497123;
+  await withClient(async (client) => {
+    await client.query("SELECT pg_advisory_lock($1)", [LOCK_ID]);
+    try {
+      await runMigrations(client);
+      await seedBasicData(client);
+    } finally {
+      await client.query("SELECT pg_advisory_unlock($1)", [LOCK_ID]);
+    }
+  });
 };
 
 module.exports = { initDatabase };

@@ -23,13 +23,6 @@ const allowedOrigins = new Set([
 
 const helmetCspImgSrc = ["'self'", "data:", "https:", ...Array.from(allowedOrigins)];
 
-app.use(cors({
-  origin: ['http://localhost:5173', 'http://130.49.148.245', 'http://nexaos.ru'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
 // 2. Helmet (твой код)
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -48,9 +41,25 @@ const corsOptions = {
   origin(origin, callback) {
     if (!origin || allowedOrigins.has(origin)) {
       callback(null, true);
-    } else {
-      callback(new Error(`Источник не разрешён: ${origin}`));
+      return;
     }
+
+    if (config.env !== "production") {
+      const devAllowed = [
+        /^https?:\/\/localhost(?::\d+)?$/i,
+        /^https?:\/\/127\.0\.0\.1(?::\d+)?$/i,
+        /^https?:\/\/10\.(?:\d{1,3}\.){2}\d{1,3}(?::\d+)?$/i,
+        /^https?:\/\/192\.168\.(?:\d{1,3}\.)\d{1,3}(?::\d+)?$/i,
+        /^https?:\/\/172\.(?:1[6-9]|2\d|3[0-1])\.(?:\d{1,3}\.)\d{1,3}(?::\d+)?$/i,
+      ];
+
+      if (devAllowed.some((re) => re.test(origin))) {
+        callback(null, true);
+        return;
+      }
+    }
+
+    callback(new Error(`Источник не разрешён: ${origin}`));
   },
   credentials: true,
   optionsSuccessStatus: 200,
@@ -82,7 +91,7 @@ app.use(
     res.header("Cache-Control", "public, max-age=31536000");
     next();
   },
-  express.static(path.join(__dirname, "public", "uploads"), {
+  express.static(config.uploadsDir, {
     etag: true,
     lastModified: true,
     setHeaders: (res, filePath) => {
@@ -109,6 +118,47 @@ app.use(
     },
   })
 );
+
+if (config.legacyUploadsDir && path.resolve(config.legacyUploadsDir) !== path.resolve(config.uploadsDir)) {
+  app.use(
+    "/uploads",
+    (req, res, next) => {
+      const origin = req.headers.origin;
+      if (origin && allowedOrigins.has(origin)) {
+        res.header("Access-Control-Allow-Origin", origin);
+      } else {
+        res.header("Access-Control-Allow-Origin", "*");
+      }
+      res.header("Cross-Origin-Resource-Policy", "cross-origin");
+      res.header("Cross-Origin-Embedder-Policy", "unsafe-none");
+      res.header("Cache-Control", "public, max-age=31536000");
+      next();
+    },
+    express.static(config.legacyUploadsDir, {
+      etag: true,
+      lastModified: true,
+      setHeaders: (res, filePath) => {
+        const origin = res.req.headers.origin;
+        if (origin && allowedOrigins.has(origin)) {
+          res.setHeader("Access-Control-Allow-Origin", origin);
+        } else {
+          res.setHeader("Access-Control-Allow-Origin", "*");
+        }
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+        if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+          res.setHeader("Content-Type", "image/jpeg");
+        } else if (filePath.endsWith('.png')) {
+          res.setHeader("Content-Type", "image/png");
+        } else if (filePath.endsWith('.gif')) {
+          res.setHeader("Content-Type", "image/gif");
+        } else if (filePath.endsWith('.webp')) {
+          res.setHeader("Content-Type", "image/webp");
+        }
+      },
+    })
+  );
+}
 applySecurityMiddleware(app);
 applyProxy(app);
 

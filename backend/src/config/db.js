@@ -85,6 +85,15 @@ const runQuery = async (text, params = []) => {
 
 const query = (text, params = []) => sequential(() => runQuery(text, params));
 
+const withClient = async (callback) => {
+  const client = await pool.connect();
+  try {
+    return await callback(client);
+  } finally {
+    client.release();
+  }
+};
+
 const withTransaction = async (callback) => {
   const client = await pool.connect();
   try {
@@ -100,4 +109,4 @@ const withTransaction = async (callback) => {
   }
 };
 
-module.exports = { query, withTransaction };
+module.exports = { query, withClient, withTransaction };

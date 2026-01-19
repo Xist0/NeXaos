@@ -3,6 +3,7 @@ const { query } = require("../config/db");
 const path = require("path");
 const fs = require("fs");
 const logger = require("../utils/logger");
+const config = require("../config/env");
 
 const normalizeSkuForFolder = (sku) => {
   const transliterate = (str) => {
@@ -48,7 +49,7 @@ const getModuleFolderCandidates = (sku) => {
 const resolveExistingModuleFolder = (sku) => {
   const candidates = getModuleFolderCandidates(sku);
   for (const folder of candidates) {
-    const folderPath = path.join(__dirname, "..", "public", "uploads", "modules", folder);
+    const folderPath = path.join(config.uploadsDir, "modules", folder);
     if (fs.existsSync(folderPath)) {
       return folder;
     }
@@ -76,7 +77,7 @@ const getModuleData = async (moduleId) => {
  */
 const getModuleUploadPath = (sku) => {
   const folder = resolveExistingModuleFolder(sku);
-  return path.join(__dirname, "..", "public", "uploads", "modules", folder);
+  return path.join(config.uploadsDir, "modules", folder);
 };
 
 /**
@@ -180,8 +181,8 @@ const renameModuleImages = async (entityType, entityId, moduleData) => {
     const image = images[i];
     const oldUrl = image.url;
     let oldPath = oldUrl.startsWith("/") 
-      ? path.join(__dirname, "..", "public", oldUrl.slice(1))
-      : path.join(__dirname, "..", "public", oldUrl);
+      ? path.join(config.uploadsDir, oldUrl.replace(/^\/?uploads\//, ""))
+      : path.join(config.uploadsDir, String(oldUrl).replace(/^uploads\//, ""));
 
     if (!fs.existsSync(oldPath)) {
       const candidate = path.join(moduleDir, path.basename(oldPath));
@@ -250,8 +251,8 @@ const renameModuleImages = async (entityType, entityId, moduleData) => {
       console.warn(`Не удалось переименовать временный файл ${rename.tempPath} в ${rename.newPath}:`, err.message);
       // Пытаемся вернуть файл на старое место
       const oldPath = rename.oldUrl.startsWith("/") 
-        ? path.join(__dirname, "..", "public", rename.oldUrl.slice(1))
-        : path.join(__dirname, "..", "public", rename.oldUrl);
+        ? path.join(config.uploadsDir, rename.oldUrl.replace(/^\/?uploads\//, ""))
+        : path.join(config.uploadsDir, String(rename.oldUrl).replace(/^uploads\//, ""));
       try {
         if (fs.existsSync(rename.tempPath)) {
           fs.renameSync(rename.tempPath, oldPath);
@@ -413,7 +414,7 @@ const uploadImage = async (req, res) => {
 
   // Для модулей получаем полные данные (название, артикул, цвета)
   let moduleData = null;
-  let uploadDir = path.join(__dirname, "..", "public", "uploads");
+  let uploadDir = config.uploadsDir;
   let urlPath = "";
 
   if (entityType === "modules") {
@@ -436,7 +437,7 @@ const uploadImage = async (req, res) => {
     }
     
     const resolvedFolder = resolveExistingModuleFolder(moduleData.sku);
-    uploadDir = path.join(__dirname, "..", "public", "uploads", "modules", resolvedFolder);
+    uploadDir = path.join(config.uploadsDir, "modules", resolvedFolder);
     // Создаем папку если её нет
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -581,7 +582,7 @@ const deleteImage = async (req, res) => {
 
   // Удаляем файл из файловой системы
   const urlPath = url.startsWith("/") ? url.slice(1) : url;
-  const filePath = path.join(__dirname, "..", "public", urlPath);
+  const filePath = path.join(config.uploadsDir, urlPath.replace(/^uploads\//, ""));
   if (fs.existsSync(filePath)) {
     try {
       fs.unlinkSync(filePath);
