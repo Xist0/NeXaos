@@ -4,7 +4,7 @@ import SecureButton from "./SecureButton";
 import { formatCurrency } from "../../utils/format";
 import ColorBadge from "./ColorBadge";
 import FavoriteButton from "./FavoriteButton";
-import { getImageUrl } from "../../utils/image";
+import { getImageUrl, placeholderImage } from "../../utils/image";
 
 const ProductCard = memo(({ product, onAdd, className = "" }) => {
   const image = getImageUrl(product.image || product.images?.[0] || product.image_url || product.preview_url);
@@ -21,7 +21,17 @@ const ProductCard = memo(({ product, onAdd, className = "" }) => {
     <article className={`glass-card p-2 sm:p-3 h-full flex flex-col group transition-all overflow-hidden duration-300 ${className}`}>
       <Link to={href} className="block h-full flex flex-col focus:outline-none focus:ring-2 focus:ring-accent/50 rounded-lg" state={{ fromCatalog: true }}>
         <div className="relative w-full h-32 sm:h-40 md:h-48 flex-shrink-0 bg-gradient-to-br from-night-50 to-night-100 rounded-lg overflow-hidden mb-2 sm:mb-3 transition-transform duration-300 transform group-hover:scale-105">
-          <img src={image} alt={product.name} className="w-full h-full object-cover object-center" loading="lazy" />
+          <img
+            src={image}
+            alt={product.name}
+            className="w-full h-full object-cover object-center"
+            loading="lazy"
+            onError={(e) => {
+              if (e.currentTarget.src !== placeholderImage) {
+                e.currentTarget.src = placeholderImage;
+              }
+            }}
+          />
           {product.is_new && (
             <span className="absolute left-2 top-2 z-10 bg-gradient-to-r from-accent to-accent-dark text-white px-2 py-0.5 text-[10px] font-bold rounded-full shadow-lg">
               Новинка

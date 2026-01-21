@@ -3,8 +3,8 @@ import { login as loginRequest, register as registerRequest, refreshAccessToken 
 import { ROLES } from "../utils/constants";
 
 const ACCESS_TOKEN_KEY = "nexaos_access_token";
-const REFRESH_TOKEN_KEY = "nexaos_refresh_token";
 const USER_KEY = "nexaos_user";
+const CACHE_BUSTER_KEY = "nexaos_cache_buster";
 
 const loadUser = () => {
   try {
@@ -18,7 +18,7 @@ const initialUser = loadUser();
 
 const useAuthStore = create((set, get) => ({
   accessToken: localStorage.getItem(ACCESS_TOKEN_KEY),
-  refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY),
+  refreshToken: null,
   user: initialUser,
   role: initialUser?.roleName || ROLES.USER,
   pending: false,
@@ -38,14 +38,14 @@ const useAuthStore = create((set, get) => ({
       const data = await loginRequest(credentials);
       set({
         accessToken: data.accessToken,
-        refreshToken: data.refreshToken,
+        refreshToken: null,
         user: data.user,
         role: data.user?.roleName || ROLES.USER,
         authModalOpen: false,
       });
       localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-      localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      localStorage.setItem(CACHE_BUSTER_KEY, String(Date.now()));
     } catch (error) {
       set({
         error: error.response?.data?.message || "Не удалось войти",
@@ -73,14 +73,8 @@ const useAuthStore = create((set, get) => ({
   },
 
   refreshToken: async () => {
-    const refreshToken = get().refreshToken || localStorage.getItem(REFRESH_TOKEN_KEY);
-    if (!refreshToken) {
-      get().logout();
-      return null;
-    }
-
     try {
-      const data = await refreshAccessToken(refreshToken);
+      const data = await refreshAccessToken();
       set({
         accessToken: data.accessToken,
         user: data.user,
@@ -88,6 +82,7 @@ const useAuthStore = create((set, get) => ({
       });
       localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+      localStorage.setItem(CACHE_BUSTER_KEY, String(Date.now()));
       return data.accessToken;
     } catch (error) {
       get().logout();
@@ -97,8 +92,8 @@ const useAuthStore = create((set, get) => ({
 
   logout: () => {
     localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.setItem(CACHE_BUSTER_KEY, String(Date.now()));
     set({
       accessToken: null,
       refreshToken: null,

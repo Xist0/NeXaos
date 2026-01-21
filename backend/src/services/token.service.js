@@ -12,22 +12,26 @@ const REFRESH_TOKEN_SECRET =
   process.env.JWT_SECRET ||
   "your-refresh-secret-change-in-production";
 
+const ACCESS_TOKEN_EXPIRES_IN = process.env.ACCESS_TOKEN_EXPIRES_IN || process.env.JWT_EXPIRES_IN || "1d";
+const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS || 1);
+
 // Генерация refresh token (случайная строка)
 const generateRefreshToken = () => crypto.randomBytes(64).toString("hex");
 
-// Создание access token (JWT, 3 дня)
+// Создание access token (JWT)
 const createAccessToken = (userId, roleId, roleName) => {
   return jwt.sign(
     { userId, roleId, roleName, type: "access" },
     ACCESS_TOKEN_SECRET,
-    { expiresIn: "3d" }
+    { expiresIn: ACCESS_TOKEN_EXPIRES_IN }
   );
 };
 
-// Создание refresh token (30 дней)
+// Создание refresh token
 const createRefreshTokenRecord = async (userId) => {
   const token = generateRefreshToken();
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 дней
+  const ttlDays = Number.isFinite(REFRESH_TOKEN_TTL_DAYS) && REFRESH_TOKEN_TTL_DAYS > 0 ? REFRESH_TOKEN_TTL_DAYS : 1;
+  const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60 * 1000);
 
   const { rows } = await query(
     `INSERT INTO refresh_tokens (user_id, token, expires_at)
@@ -57,6 +61,8 @@ const verifyAccessToken = (token) => {
 const verifyRefreshToken = async (token) => {
   if (!token) return null;
 
+  const ttlDays = Number.isFinite(REFRESH_TOKEN_TTL_DAYS) && REFRESH_TOKEN_TTL_DAYS > 0 ? REFRESH_TOKEN_TTL_DAYS : 1;
+
   const { rows } = await query(
     `SELECT rt.*, u.id AS user_id, u.role_id, r.name AS role_name, u.email, u.full_name, u.is_active
      FROM refresh_tokens rt
@@ -65,8 +71,9 @@ const verifyRefreshToken = async (token) => {
      WHERE rt.token = $1 
        AND rt.revoked = false 
        AND rt.expires_at > NOW()
+       AND rt.expires_at <= NOW() + ($2 || ' days')::interval
        AND u.is_active = true`,
-    [token]
+    [token, ttlDays]
   );
 
   return rows[0] || null;

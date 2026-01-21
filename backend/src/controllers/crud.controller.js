@@ -2,6 +2,7 @@ const ApiError = require("../utils/api-error");
 const crudService = require("../services/crud.service");
 const path = require("path");
 const fs = require("fs");
+const config = require("../config/env");
 
 const normalizeSkuForFolder = (sku) => {
   const transliterate = (str) => {
@@ -61,65 +62,84 @@ const createCrudController = (entity) => {
     // Для модулей добавляем preview_url из первого изображения и данные о цветах
     if (entity.route === "modules" && Array.isArray(data)) {
       const { query } = require("../config/db");
-      for (const item of data) {
-        // Добавляем preview_url
+      const ids = data.map((item) => item.id).filter(Boolean);
+
+      if (ids.length > 0) {
         const { rows: imageRows } = await query(
-          `SELECT id, url FROM images 
-           WHERE entity_type = 'modules' AND entity_id = $1 
-           ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC LIMIT 1`,
-          [item.id]
+          `SELECT DISTINCT ON (entity_id) id, entity_id, url
+           FROM images
+           WHERE entity_type = 'modules' AND entity_id = ANY($1::int[])
+           ORDER BY entity_id, (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
+          [ids]
         );
-        if (imageRows[0]) {
-          let previewUrl = imageRows[0].url;
+
+        const imageByEntity = new Map(imageRows.map((row) => [row.entity_id, row]));
+        for (const item of data) {
+          const row = imageByEntity.get(item.id);
+          if (!row?.url) continue;
+
+          let previewUrl = row.url;
           if (previewUrl && item?.sku && previewUrl.startsWith("/uploads/modules/")) {
             const match = previewUrl.match(/^\/uploads\/modules\/([^/]+)\/(.+)$/);
             const correctFolder = normalizeSkuForFolder(item.sku);
             if (match && match[1] && match[2] && match[1] !== correctFolder) {
               const fixedUrl = `/uploads/modules/${correctFolder}/${match[2]}`;
-              const fixedPath = path.join(__dirname, "..", "public", fixedUrl.slice(1));
-              if (fs.existsSync(fixedPath)) {
-                await query(`UPDATE images SET url = $1 WHERE id = $2`, [fixedUrl, imageRows[0].id]);
+              const relative = fixedUrl.replace(/^\/uploads\//, "");
+              const fixedPath = path.join(config.uploadsDir, relative);
+              const legacyPath = config.legacyUploadsDir ? path.join(config.legacyUploadsDir, relative) : null;
+              if (fs.existsSync(fixedPath) || (legacyPath && fs.existsSync(legacyPath))) {
+                await query(`UPDATE images SET url = $1 WHERE id = $2`, [fixedUrl, row.id]);
                 previewUrl = fixedUrl;
               }
             }
           }
+
           item.preview_url = previewUrl;
         }
-        
-        // Добавляем данные о цветах
-        if (item.primary_color_id) {
-          const { rows: primaryColorRows } = await query(
-            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
-            [item.primary_color_id]
-          );
-          if (primaryColorRows[0]) {
-            item.primary_color = primaryColorRows[0];
+      }
+
+      const colorIds = Array.from(
+        new Set(
+          data
+            .flatMap((item) => [item.primary_color_id, item.secondary_color_id])
+            .filter(Boolean)
+            .map((v) => Number(v))
+            .filter((v) => Number.isFinite(v))
+        )
+      );
+
+      const colorSkus = Array.from(
+        new Set(
+          data
+            .flatMap((item) => [item.facade_color, item.corpus_color])
+            .filter(Boolean)
+            .map((v) => String(v))
+        )
+      );
+
+      if (colorIds.length > 0 || colorSkus.length > 0) {
+        const { rows: colorRows } = await query(
+          `SELECT id, name, sku, image_url
+           FROM colors
+           WHERE (cardinality($1::int[]) > 0 AND id = ANY($1::int[]))
+              OR (cardinality($2::text[]) > 0 AND sku = ANY($2::text[]))`,
+          [colorIds, colorSkus]
+        );
+
+        const byId = new Map(colorRows.map((row) => [row.id, row]));
+        const bySku = new Map(colorRows.map((row) => [row.sku, row]));
+
+        for (const item of data) {
+          if (item.primary_color_id) {
+            item.primary_color = byId.get(Number(item.primary_color_id));
+          } else if (item.facade_color) {
+            item.primary_color = bySku.get(String(item.facade_color));
           }
-        } else if (item.facade_color) {
-          const { rows: primaryColorRows } = await query(
-            `SELECT id, name, sku, image_url FROM colors WHERE sku = $1 LIMIT 1`,
-            [item.facade_color]
-          );
-          if (primaryColorRows[0]) {
-            item.primary_color = primaryColorRows[0];
-          }
-        }
-        
-        if (item.secondary_color_id) {
-          const { rows: secondaryColorRows } = await query(
-            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
-            [item.secondary_color_id]
-          );
-          if (secondaryColorRows[0]) {
-            item.secondary_color = secondaryColorRows[0];
-          }
-        } else if (item.corpus_color) {
-          const { rows: secondaryColorRows } = await query(
-            `SELECT id, name, sku, image_url FROM colors WHERE sku = $1 LIMIT 1`,
-            [item.corpus_color]
-          );
-          if (secondaryColorRows[0]) {
-            item.secondary_color = secondaryColorRows[0];
+
+          if (item.secondary_color_id) {
+            item.secondary_color = byId.get(Number(item.secondary_color_id));
+          } else if (item.corpus_color) {
+            item.secondary_color = bySku.get(String(item.corpus_color));
           }
         }
       }
@@ -128,25 +148,25 @@ const createCrudController = (entity) => {
     // Для готовых решений добавляем данные о цветах
     if (entity.route === "kit-solutions" && Array.isArray(data)) {
       const { query } = require("../config/db");
-      for (const item of data) {
-        if (item.primary_color_id) {
-          const { rows: primaryColorRows } = await query(
-            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
-            [item.primary_color_id]
-          );
-          if (primaryColorRows[0]) {
-            item.primary_color = primaryColorRows[0];
-          }
-        }
-        
-        if (item.secondary_color_id) {
-          const { rows: secondaryColorRows } = await query(
-            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
-            [item.secondary_color_id]
-          );
-          if (secondaryColorRows[0]) {
-            item.secondary_color = secondaryColorRows[0];
-          }
+      const colorIds = Array.from(
+        new Set(
+          data
+            .flatMap((item) => [item.primary_color_id, item.secondary_color_id])
+            .filter(Boolean)
+            .map((v) => Number(v))
+            .filter((v) => Number.isFinite(v))
+        )
+      );
+
+      if (colorIds.length > 0) {
+        const { rows: colorRows } = await query(
+          `SELECT id, name, sku, image_url FROM colors WHERE id = ANY($1::int[])`,
+          [colorIds]
+        );
+        const byId = new Map(colorRows.map((row) => [row.id, row]));
+        for (const item of data) {
+          if (item.primary_color_id) item.primary_color = byId.get(Number(item.primary_color_id));
+          if (item.secondary_color_id) item.secondary_color = byId.get(Number(item.secondary_color_id));
         }
       }
     }
@@ -154,25 +174,25 @@ const createCrudController = (entity) => {
     // Для фурнитуры добавляем данные о цветах
     if (entity.route === "hardware-extended" && Array.isArray(data)) {
       const { query } = require("../config/db");
-      for (const item of data) {
-        if (item.primary_color_id) {
-          const { rows: primaryColorRows } = await query(
-            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
-            [item.primary_color_id]
-          );
-          if (primaryColorRows[0]) {
-            item.primary_color = primaryColorRows[0];
-          }
-        }
-        
-        if (item.secondary_color_id) {
-          const { rows: secondaryColorRows } = await query(
-            `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
-            [item.secondary_color_id]
-          );
-          if (secondaryColorRows[0]) {
-            item.secondary_color = secondaryColorRows[0];
-          }
+      const colorIds = Array.from(
+        new Set(
+          data
+            .flatMap((item) => [item.primary_color_id, item.secondary_color_id])
+            .filter(Boolean)
+            .map((v) => Number(v))
+            .filter((v) => Number.isFinite(v))
+        )
+      );
+
+      if (colorIds.length > 0) {
+        const { rows: colorRows } = await query(
+          `SELECT id, name, sku, image_url FROM colors WHERE id = ANY($1::int[])`,
+          [colorIds]
+        );
+        const byId = new Map(colorRows.map((row) => [row.id, row]));
+        for (const item of data) {
+          if (item.primary_color_id) item.primary_color = byId.get(Number(item.primary_color_id));
+          if (item.secondary_color_id) item.secondary_color = byId.get(Number(item.secondary_color_id));
         }
       }
     }
@@ -202,7 +222,7 @@ const createCrudController = (entity) => {
             const filename = match[2];
             let resolvedFolder = null;
             for (const candidate of folderCandidates) {
-              const candidatePath = path.join(__dirname, "..", "public", "uploads", "modules", candidate, filename);
+              const candidatePath = path.join(config.uploadsDir, "modules", candidate, filename);
               if (fs.existsSync(candidatePath)) {
                 resolvedFolder = candidate;
                 break;
@@ -240,7 +260,7 @@ const createCrudController = (entity) => {
 
           let resolvedFolder = null;
           for (const candidate of folderCandidates) {
-            const candidatePath = path.join(__dirname, "..", "public", "uploads", "modules", candidate, filename);
+            const candidatePath = path.join(config.uploadsDir, "modules", candidate, filename);
             if (fs.existsSync(candidatePath)) {
               resolvedFolder = candidate;
               break;

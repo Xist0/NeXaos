@@ -1,8 +1,9 @@
+const ApiError = require("../utils/api-error");
 const { query } = require("../config/db");
 const logger = require("../utils/logger");
-const ApiError = require("../utils/api-error");
-const path = require("path");
 const fs = require("fs");
+const path = require("path");
+const config = require("../config/env");
 
 /**
  * Сервис для работы с готовыми решениями (комплектами кухни)
@@ -333,10 +334,20 @@ const removeKitSolution = async (kitSolutionId) => {
     const url = img.url;
     if (!url) continue;
     const urlPath = url.startsWith("/") ? url.slice(1) : url;
-    const filePath = path.join(__dirname, "..", "public", urlPath);
+    const relative = urlPath.replace(/^uploads\//, "");
+    const filePath = path.join(config.uploadsDir, relative);
+    const legacyPath = config.legacyUploadsDir ? path.join(config.legacyUploadsDir, relative) : null;
     if (fs.existsSync(filePath)) {
       try {
         fs.unlinkSync(filePath);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (legacyPath && fs.existsSync(legacyPath)) {
+      try {
+        fs.unlinkSync(legacyPath);
       } catch {
         // ignore
       }

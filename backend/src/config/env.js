@@ -19,8 +19,14 @@ const parseCsv = (value, fallback = []) =>
     : fallback;
 
 const isProd = process.env.NODE_ENV === "production";
-const legacyUploadsDir = path.resolve(path.join(process.cwd(), "src", "public", "uploads"));
-const defaultUploadsDir = isProd ? legacyUploadsDir : path.resolve(path.join(process.cwd(), "uploads"));
+const backendRootDir = path.resolve(__dirname, "..", "..");
+const legacyUploadsDir = path.resolve(path.join(backendRootDir, "src", "public", "uploads"));
+const defaultUploadsDir = isProd ? legacyUploadsDir : path.resolve(path.join(backendRootDir, "uploads"));
+const uploadsDirFromEnv = process.env.UPLOADS_DIR
+  ? (path.isAbsolute(process.env.UPLOADS_DIR)
+      ? process.env.UPLOADS_DIR
+      : path.resolve(path.join(backendRootDir, process.env.UPLOADS_DIR)))
+  : defaultUploadsDir;
 
 // Валидация обязательных переменных (строго только в production).
 // В dev даём разумные дефолты, чтобы проект можно было поднять сразу после git clone.
@@ -44,7 +50,7 @@ if (process.env.NODE_ENV === "production") {
 module.exports = {
   env: process.env.NODE_ENV || "development",
   host: process.env.HOST || "0.0.0.0",
-  port: process.env.PORT || 5000,
+  port: isProd ? (process.env.PORT || 5000) : (process.env.DEV_PORT || 5001),
   cors: {
     origins: parseCsv(process.env.CORS_ORIGINS, [
       "http://localhost:5173",
@@ -59,7 +65,7 @@ module.exports = {
     target: process.env.PROXY_TARGET || null,
     path: process.env.PROXY_PATH || "/proxy",
   },
-  uploadsDir: path.resolve(process.env.UPLOADS_DIR || defaultUploadsDir),
+  uploadsDir: path.resolve(uploadsDirFromEnv),
   legacyUploadsDir,
   db: {
     host: process.env.DB_HOST,

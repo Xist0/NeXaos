@@ -3,6 +3,7 @@ const ApiError = require("../utils/api-error");
 const { buildInsertQuery, buildUpdateQuery } = require("../utils/sql-builder");
 const fs = require("fs").promises;
 const path = require("path");
+const config = require("../config/env");
 
 const sanitizePayload = (entity, payload) => {
   const allowedFields = Object.entries(entity.columns)
@@ -218,12 +219,14 @@ const remove = async (entity, id) => {
 
     if (images.length > 0) {
       for (const image of images) {
-        const imagePath = path.join(
-          __dirname,
-          "..",
-          "public",
-          image.url
-        );
+        const relative = String(image.url || "")
+          .replace(/^\//, "")
+          .replace(/^uploads\//, "");
+
+        const imagePath = path.join(config.uploadsDir, relative);
+        const legacyPath = config.legacyUploadsDir
+          ? path.join(config.legacyUploadsDir, relative)
+          : null;
         try {
           await fs.unlink(imagePath);
         } catch (error) {
@@ -234,6 +237,14 @@ const remove = async (entity, id) => {
               `Error deleting file ${imagePath}:`,
               error
             );
+          }
+        }
+
+        if (legacyPath) {
+          try {
+            await fs.unlink(legacyPath);
+          } catch {
+            // ignore
           }
         }
       }

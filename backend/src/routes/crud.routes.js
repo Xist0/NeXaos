@@ -14,8 +14,10 @@ const moduleController = require("../controllers/module.controller");
 const kitSolutionController = require("../controllers/kit-solution.controller");
 
 // Кастомные роуты для orders
-router.get("/orders", authGuard, requireAdminOrManager, asyncHandler(orderController.list));
-router.get("/orders/:id", authGuard, requireAdminOrManager, asyncHandler(orderController.getById));
+router.get("/orders", authGuard, asyncHandler(orderController.list));
+router.get("/orders/:id", authGuard, asyncHandler(orderController.getById));
+router.get("/orders/:id/notes", authGuard, asyncHandler(orderController.listNotes));
+router.post("/orders/:id/notes", authGuard, asyncHandler(orderController.addNote));
 router.put(
   "/orders/:id",
   authGuard,
@@ -100,6 +102,41 @@ const imageFileFilter = (req, file, cb) => {
   }
 };
 
+const mediaFileFilter = (req, file, cb) => {
+  const allowedMimes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'video/mp4',
+    'video/webm',
+    'video/ogg',
+    'video/quicktime',
+  ];
+
+  const allowedExtensions = [
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.gif',
+    '.webp',
+    '.svg',
+    '.mp4',
+    '.webm',
+    '.ogg',
+    '.mov',
+  ];
+
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedMimes.includes(file.mimetype) || allowedExtensions.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Недопустимый тип файла. Разрешены изображения и видео (JPEG, PNG, GIF, WebP, SVG, MP4, WebM, OGG, MOV)'), false);
+  }
+};
+
 // Настройка multer для загрузки изображений с валидацией
 const upload = multer({
   storage,
@@ -109,7 +146,31 @@ const upload = multer({
   },
 });
 
-router.post("/upload", upload.single("file"), (req, res) => {
+const uploadMedia = multer({
+  storage,
+  fileFilter: mediaFileFilter,
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100MB максимум
+  },
+});
+
+const handleMulterErrorUpload = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      const apiError = ApiError.badRequest('Размер файла превышает допустимый (10MB)');
+      return next(apiError);
+    }
+    const apiError = ApiError.badRequest(`Ошибка загрузки файла: ${err.message}`);
+    return next(apiError);
+  }
+  if (err) {
+    const apiError = ApiError.badRequest(err.message || 'Ошибка загрузки файла');
+    return next(apiError);
+  }
+  next();
+};
+
+router.post("/upload", authGuard, requireAdminOrManager, upload.single("file"), handleMulterErrorUpload, (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: "Файл не получен" });
   }
@@ -147,7 +208,7 @@ const handleMulterError = (err, req, res, next) => {
 router.get("/images/:entityType/:entityId", optionalAuth, asyncHandler(imageController.getImages));
 
 // POST /api/images - загрузить новое изображение (multipart/form-data)
-router.post("/images", authGuard, requireAdminOrManager, upload.single("file"), handleMulterError, asyncHandler(imageController.uploadImage));
+router.post("/images", authGuard, requireAdminOrManager, uploadMedia.single("file"), handleMulterError, asyncHandler(imageController.uploadImage));
 
 // DELETE /api/images/:id - удалить изображение
 router.delete("/images/:id", authGuard, requireAdminOrManager, asyncHandler(imageController.deleteImage));
@@ -157,6 +218,84 @@ router.post("/images/reorder", authGuard, requireAdminOrManager, asyncHandler(im
 
 // POST /api/images/:id/set-preview - назначить изображение превью
 router.post("/images/:id/set-preview", authGuard, requireAdminOrManager, asyncHandler(imageController.setPreview));
+
+router.get("/public/hero-slides", optionalAuth, asyncHandler(async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const now = new Date().toISOString();
+  const { rows: slides } = await require("../config/db").query(
+    `SELECT id, title, description, publish_at, sort_order, is_active, created_at
+     FROM hero_slides
+     WHERE is_active = TRUE
+       AND (publish_at IS NULL OR publish_at <= $1)
+     ORDER BY sort_order ASC, id ASC`,
+    [now]
+  );
+
+  const ids = slides.map((s) => s.id);
+  let mediaByEntityId = {};
+  if (ids.length) {
+    const { rows: media } = await require("../config/db").query(
+      `SELECT id, entity_id, url, alt, sort_order, media_type, mime_type
+       FROM images
+       WHERE entity_type IN ('hero_slides', 'hero-slides')
+         AND entity_id = ANY($1::int[])
+       ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
+      [ids]
+    );
+
+    mediaByEntityId = media.reduce((acc, row) => {
+      acc[row.entity_id] = acc[row.entity_id] || [];
+      acc[row.entity_id].push(row);
+      return acc;
+    }, {});
+  }
+
+  res.status(200).json({
+    data: slides.map((slide) => ({
+      ...slide,
+      media: mediaByEntityId[slide.id] || [],
+    })),
+  });
+}));
+
+router.get("/public/works", optionalAuth, asyncHandler(async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  const now = new Date().toISOString();
+  const { rows: works } = await require("../config/db").query(
+    `SELECT id, title, description, publish_at, sort_order, is_active, created_at
+     FROM works
+     WHERE is_active = TRUE
+       AND (publish_at IS NULL OR publish_at <= $1)
+     ORDER BY sort_order ASC, id ASC`,
+    [now]
+  );
+
+  const ids = works.map((w) => w.id);
+  let mediaByEntityId = {};
+  if (ids.length) {
+    const { rows: media } = await require("../config/db").query(
+      `SELECT id, entity_id, url, alt, sort_order, media_type, mime_type
+       FROM images
+       WHERE entity_type = 'works'
+         AND entity_id = ANY($1::int[])
+       ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
+      [ids]
+    );
+
+    mediaByEntityId = media.reduce((acc, row) => {
+      acc[row.entity_id] = acc[row.entity_id] || [];
+      acc[row.entity_id].push(row);
+      return acc;
+    }, {});
+  }
+
+  res.status(200).json({
+    data: works.map((work) => ({
+      ...work,
+      media: mediaByEntityId[work.id] || [],
+    })),
+  });
+}));
 
 // Роуты для работы с модулями
 // POST /api/modules/calculate-countertop - рассчитать длину столешницы

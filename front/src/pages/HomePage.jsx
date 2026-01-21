@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import useApi from "../hooks/useApi";
 import useCart from "../hooks/useCart";
 import ProductCard from "../components/ui/ProductCard";
+import HeroSlider from "../components/HeroSlider";
 
 const categories = [
   { title: "Гостинные", description: "Стенки и ТВ-зоны" },
@@ -42,6 +43,9 @@ const HomePage = () => {
 
   return (
     <div className="space-y-8 sm:space-y-12 md:space-y-16 pb-16">
+      {/* Hero Slider */}
+      <HeroSlider />
+
       <section className="bg-white">
         <div className="shop-container grid gap-8 py-8 md:py-12 lg:py-16 lg:grid-cols-2 lg:items-center">
           <div className="space-y-6">

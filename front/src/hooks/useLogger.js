@@ -1,5 +1,5 @@
 // hooks/useLogger.js
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 const useLogger = () => {
     const pushToast = useCallback((type, message) => {
@@ -32,7 +32,7 @@ const useLogger = () => {
         [pushToast]
     );
 
-    return { info, warn, error };
+    return useMemo(() => ({ info, warn, error }), [info, warn, error]);
 };
 
 export default useLogger;

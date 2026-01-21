@@ -8,6 +8,7 @@ import { ROLES } from "../../utils/constants";
 const navLinks = [
   { label: "Главная", to: "/" },
   { label: "Каталог", to: "/catalog" },
+  { label: "Наши работы", to: "/works" },
   { label: "Избранное", to: "/favorites" },
 ];
 
@@ -33,6 +34,22 @@ const AppLayout = () => {
             {link.label}
           </NavLink>
         ))}
+        {user ? (
+          <NavLink to="/account" onClick={closeMenu} className={({ isActive }) => `px-4 py-3 rounded-lg text-lg transition ${isActive ? "bg-night-100 font-semibold text-night-900" : "hover:bg-night-50"}`}>
+            Личный профиль
+          </NavLink>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              closeMenu();
+              requireAuth("/account");
+            }}
+            className="px-4 py-3 rounded-lg text-lg transition text-left hover:bg-night-50"
+          >
+            Войти
+          </button>
+        )}
          <NavLink to="/cart" onClick={closeMenu} className={({ isActive }) => `px-4 py-3 rounded-lg text-lg transition ${isActive ? "bg-night-100 font-semibold text-night-900" : "hover:bg-night-50"}`}>
             Корзина
           </NavLink>
@@ -40,6 +57,18 @@ const AppLayout = () => {
           <NavLink to="/admin" onClick={closeMenu} className="px-4 py-3 rounded-lg text-lg transition text-accent-dark font-semibold hover:bg-accent/10">
             Админ
           </NavLink>
+        )}
+        {user && (
+          <button
+            type="button"
+            onClick={() => {
+              closeMenu();
+              logout();
+            }}
+            className="px-4 py-3 rounded-lg text-lg transition text-left text-night-700 hover:bg-night-50"
+          >
+            Выйти
+          </button>
         )}
       </nav>
     </div>

@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
-import { getImageUrl } from "../../utils/image";
-import { FaEdit, FaTrash, FaPlus, FaSave, FaTimes } from "react-icons/fa";
+import { FaPlus, FaSave, FaTimes } from "react-icons/fa";
+import useHeroWorksMedia from "./entityManager/useHeroWorksMedia";
+import HeroWorksMediaSection from "./entityManager/HeroWorksMediaSection";
+import HeroWorksMediaModal from "./entityManager/HeroWorksMediaModal";
+import useDragSort from "./entityManager/useDragSort";
+import EntityTable from "./entityManager/EntityTable";
+import EntityFormFields from "./entityManager/EntityFormFields";
 
 const defaultField = (field) => ({
   type: "text",
@@ -53,6 +58,16 @@ const EntityManager = ({ title, endpoint, fields }) => {
 
   const [availableModuleCategories, setAvailableModuleCategories] = useState([]);
   const moduleCategoriesLoadedRef = useRef(false);
+
+  const heroWorksMedia = useHeroWorksMedia({
+    endpoint,
+    editingId,
+    request,
+    get,
+    post,
+    del,
+    logger,
+  });
 
   const slugify = (input) => {
     const map = {
@@ -134,21 +149,30 @@ const EntityManager = ({ title, endpoint, fields }) => {
     return normalizedFields;
   }, [endpoint, normalizedFields, fieldsBySection, activeSection]);
 
-  const fetchItems = async () => {
-    if (!endpoint) return;
-    setLoading(true);
-    try {
-      const response = await get(endpoint);
-      const items = response?.data || [];
-      // Принимаем все элементы, даже без ID (они могут появиться после создания)
-      setItems(items.filter(item => item != null));
-    } catch (error) {
-      logger.error("Не удалось загрузить данные", error);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetchItems = useCallback(
+    async ({ active } = {}) => {
+      if (!endpoint) return;
+      const isActive = typeof active === "function" ? active : () => true;
+      if (!isActive()) return;
+
+      setLoading(true);
+      try {
+        const response = await get(endpoint);
+        const items = response?.data || [];
+        if (!isActive()) return;
+        // Принимаем все элементы, даже без ID (они могут появиться после создания)
+        setItems(items.filter((item) => item != null));
+      } catch (error) {
+        if (!isActive()) return;
+        logger.error("Не удалось загрузить данные", error);
+        setItems([]);
+      } finally {
+        if (!isActive()) return;
+        setLoading(false);
+      }
+    },
+    [endpoint, get, logger]
+  );
 
   const runKitCalculations = async () => {
     if (endpoint !== "/kit-solutions") return;
@@ -237,7 +261,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
     };
 
     loadModules();
-  }, [endpoint, get]);
+  }, [endpoint, get, logger]);
 
   // Загружаем подтипы/описания модулей для выбора description_id в модулях
   useEffect(() => {
@@ -322,6 +346,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
     setItems([]);
     setForm({});
     setEditingId(null);
+    heroWorksMedia.resetAll();
     setSearch("");
     setFilterBaseSku("");
     setFilterModuleCategoryId("");
@@ -329,35 +354,14 @@ const EntityManager = ({ title, endpoint, fields }) => {
     
     let active = true;
 
-    const load = async () => {
-      setLoading(true);
-      try {
-        const response = await get(endpoint);
-        if (active) {
-          const items = response?.data || [];
-          // Принимаем все элементы, даже без ID
-          setItems(items.filter(item => item != null));
-        }
-      } catch (error) {
-        if (active) {
-          logger.error("Не удалось загрузить данные", error);
-          setItems([]);
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    };
-
     if (endpoint) {
-      load();
+      fetchItems({ active: () => active });
     }
 
     return () => {
       active = false;
     };
-  }, [endpoint, get]);
+  }, [endpoint, fetchItems]);
 
   const handleEdit = (item) => {
     if (!item || !item.id) {
@@ -402,12 +406,8 @@ const EntityManager = ({ title, endpoint, fields }) => {
     } else {
       setForm(item);
     }
-    // Обновляем изображения после начала редактирования
-    setTimeout(() => {
-      if (endpoint === "/modules") {
-        // Небольшая задержка чтобы убедиться что editingId установлен
-      }
-    }, 100);
+
+    heroWorksMedia.resetPending();
   };
 
   const handleDelete = async (id, item) => {
@@ -465,6 +465,11 @@ const EntityManager = ({ title, endpoint, fields }) => {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (!editingId && heroWorksMedia.requireMediaForCreate && !heroWorksMedia.hasPendingMedia) {
+      logger.error("Сначала выберите фотографию");
+      return;
+    }
     
     // Собираем payload из всех полей (включая все секции для модулей)
     const allFields = endpoint === "/modules" 
@@ -479,6 +484,25 @@ const EntityManager = ({ title, endpoint, fields }) => {
         field.type === "number" ? Number(rawValue) : rawValue;
       return acc;
     }, {});
+
+    if (!editingId) {
+      const missingFields = allFields.filter((field) => {
+        if (endpoint === "/module-descriptions" && field.name === "module_category_id") return false;
+        const rawValue = form[field.name];
+        if (rawValue === undefined || rawValue === "") return true;
+        if (field.type === "number") {
+          const n = Number(rawValue);
+          return !Number.isFinite(n);
+        }
+        return false;
+      });
+
+      if (missingFields.length > 0) {
+        const missingNames = missingFields.map((f) => f.label).join(", ");
+        logger.error(`Не заполнены поля: ${missingNames}`);
+        return;
+      }
+    }
 
     if (endpoint === "/module-categories") {
       if (payload.name != null) {
@@ -594,14 +618,14 @@ const EntityManager = ({ title, endpoint, fields }) => {
     }
     
     // Валидация: проверяем обязательные поля
-    const requiredFields = allFields.filter(f => f.required);
-    const missingFields = requiredFields.filter(field => {
+    const requiredFields = allFields.filter((f) => f.required);
+    const missingRequiredFields = requiredFields.filter((field) => {
       const value = payload[field.name];
       return value === undefined || value === "" || (field.type === "number" && isNaN(value));
     });
 
-    if (missingFields.length > 0) {
-      const missingNames = missingFields.map(f => f.label).join(", ");
+    if (missingRequiredFields.length > 0) {
+      const missingNames = missingRequiredFields.map((f) => f.label).join(", ");
       logger.error(`Не заполнены обязательные поля: ${missingNames}`);
       return;
     }
@@ -629,6 +653,18 @@ const EntityManager = ({ title, endpoint, fields }) => {
         const createdItem = response?.data || response;
         if (!createdItem || !createdItem.id) {
           logger.warn("Созданная запись не содержит ID в ответе", { response, createdItem });
+        } else if (heroWorksMedia.isHeroOrWorks) {
+          try {
+            await heroWorksMedia.uploadPendingToEntity(createdItem.id);
+          } catch (e) {
+            try {
+              await del(`${endpoint}/${createdItem.id}`);
+            } catch {
+              // ignore
+            }
+            logger.error("Не удалось загрузить медиа. Запись не создана.", e);
+            return;
+          }
         } else {
           logger.info("Запись создана", { id: createdItem.id });
         }
@@ -636,6 +672,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
 
       setForm({});
       setEditingId(null);
+      heroWorksMedia.resetAll();
       // Небольшая задержка перед обновлением списка, чтобы сервер успел обработать
       setTimeout(() => {
         fetchItems();
@@ -685,7 +722,15 @@ const EntityManager = ({ title, endpoint, fields }) => {
     }
     
     return filtered;
-  }, [items, search, filterBaseSku, endpoint, filterModuleCategoryId]);
+  }, [items, search, normalizedFields, filterBaseSku, selectedModuleCategory]);
+
+  const dragSort = useDragSort({
+    endpoint,
+    items: filteredItems,
+    put,
+    fetchItems,
+    logger,
+  });
 
   return (
     <section className="glass-card p-6 space-y-4">
@@ -1062,311 +1107,50 @@ const EntityManager = ({ title, endpoint, fields }) => {
           </div>
         )}
 
-        {(endpoint === "/module-descriptions" && !filterModuleCategoryId ? [] : currentFields).map((field) => (
-          <label key={field.name} className="text-sm text-night-700 space-y-1">
-            <span>{field.label}</span>
-            {field.inputType === "image" ? (
-              <div className="space-y-2">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(event) =>
-                    handleUpload(field.name, event.target.files?.[0] || null)
-                  }
-                  className="block w-full text-xs text-night-600 file:mr-3 file:rounded-full file:border-0 file:bg-night-900 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-night-800"
-                />
-                {form[field.name] && (
-                  <img
-                    src={getImageUrl(form[field.name])}
-                    alt={field.label}
-                    className="h-20 w-20 rounded-md object-cover border border-night-100"
-                    crossOrigin="anonymous"
-                    onError={(e) => {
-                      console.error("Ошибка загрузки изображения:", form[field.name]);
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                )}
-                {uploadingField === field.name && (
-                  <p className="text-xs text-night-400">Загружаем файл...</p>
-                )}
-              </div>
-            ) : field.type === "select" ? (
-              <select
-                value={form[field.name] ?? ""}
-                onChange={(e) =>
-                  setForm((prev) => ({ ...prev, [field.name]: e.target.value }))
-                }
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-                required={field.required}
-              >
-                <option value="">Выберите...</option>
-                {field.options?.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ) : field.type === "moduleCategory" ? (
-              <select
-                value={form[field.name] ?? ""}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    [field.name]: e.target.value ? Number(e.target.value) : "",
-                  }))
-                }
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-                required={field.required}
-              >
-                <option value="">Выберите...</option>
-                {availableModuleCategories
-                  .slice()
-                  .sort((a, b) => Number(a.id) - Number(b.id))
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </select>
-            ) : field.type === "color" ? (
-              <div className="space-y-2">
-                <select
-                  value={form[field.name] ?? ""}
-                  onChange={(e) =>
-                    setForm((prev) => ({ ...prev, [field.name]: e.target.value ? Number(e.target.value) : "" }))
-                  }
-                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-                  required={field.required}
-                >
-                  <option value="">Выберите цвет...</option>
-                  {colors.map((color) => (
-                    <option key={color.id} value={color.id}>
-                      {color.name}
-                    </option>
-                  ))}
-                </select>
-                {form[field.name] && (() => {
-                  const selectedColor = colors.find(c => c.id === Number(form[field.name]));
-                  if (selectedColor && selectedColor.image_url) {
-                    const imageUrl = getImageUrl(selectedColor.image_url);
-                    return (
-                      <div className="flex items-center gap-3 p-2 border border-night-200 rounded-lg bg-night-50">
-                        <img
-                          src={imageUrl}
-                          alt={selectedColor.name}
-                          className="h-12 w-12 rounded object-cover border border-night-200"
-                          crossOrigin="anonymous"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
-                        <div>
-                          <p className="text-sm font-medium text-night-900">{selectedColor.name}</p>
-                          {selectedColor.sku && (
-                            <p className="text-xs text-night-500">Артикул: {selectedColor.sku}</p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-              </div>
-            ) : endpoint === "/modules" && field.name === "description_id" ? (
-              <select
-                value={form[field.name] ?? ""}
-                onChange={(e) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    [field.name]: e.target.value ? Number(e.target.value) : "",
-                  }))
-                }
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-              >
-                <option value="">Не выбран</option>
-                {availableModuleDescriptions.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    #{d.id} {d.base_sku} — {d.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              (() => {
-                const isMmNumberField =
-                  field.type === "number" &&
-                  typeof field.name === "string" &&
-                  field.name.endsWith("_mm");
+        <EntityFormFields
+          endpoint={endpoint}
+          filterModuleCategoryId={filterModuleCategoryId}
+          currentFields={currentFields}
+          form={form}
+          setForm={setForm}
+          handleUpload={handleUpload}
+          uploadingField={uploadingField}
+          availableModuleCategories={availableModuleCategories}
+          colors={colors}
+          availableModuleDescriptions={availableModuleDescriptions}
+          selectedCategoryPrefix={selectedCategoryPrefix}
+          sizePresetTabByField={sizePresetTabByField}
+          setSizePresetTabByField={setSizePresetTabByField}
+          sizePresetsByField={sizePresetsByField}
+          setSizePresetsByField={setSizePresetsByField}
+          getSizePresetStorageKey={getSizePresetStorageKey}
+        />
 
-                if (endpoint === "/module-descriptions" && field.name === "base_sku") {
-                  const current = String(form[field.name] ?? "").toUpperCase();
-                  const prefix = selectedCategoryPrefix ? String(selectedCategoryPrefix).toUpperCase() : "";
+        <div className="md:col-span-2">
+          <HeroWorksMediaSection
+            endpoint={endpoint}
+            editingId={editingId}
+            existingMedia={heroWorksMedia.existingMedia}
+            mediaLoading={heroWorksMedia.mediaLoading}
+            pendingMediaPreviewUrls={heroWorksMedia.pendingMediaPreviewUrls}
+            pendingMediaFiles={heroWorksMedia.pendingMediaFiles}
+            openMediaModal={heroWorksMedia.openMediaModal}
+            deleteExistingMediaItem={heroWorksMedia.deleteExistingMediaItem}
+            setExistingMediaPreview={heroWorksMedia.setExistingMediaPreview}
+            removePendingMediaFile={heroWorksMedia.removePendingMediaFile}
+            setPendingPreview={heroWorksMedia.setPendingPreview}
+          />
+        </div>
 
-                  return (
-                    <SecureInput
-                      type={field.type}
-                      value={current}
-                      onChange={(value) => {
-                        const raw = String(value ?? "").toUpperCase();
-                        if (!prefix) {
-                          setForm((prev) => ({ ...prev, [field.name]: raw }));
-                          return;
-                        }
-                        const normalized = raw.startsWith(prefix)
-                          ? raw
-                          : `${prefix}${raw.replace(/^\s+/, "")}`;
-                        setForm((prev) => ({ ...prev, [field.name]: normalized }));
-                      }}
-                      placeholder={prefix ? `${prefix}...` : field.placeholder}
-                      required={field.required}
-                    />
-                  );
-                }
-
-                if (!isMmNumberField) {
-                  return (
-                    <SecureInput
-                      type={field.type}
-                      value={form[field.name] ?? ""}
-                      onChange={(value) =>
-                        setForm((prev) => ({ ...prev, [field.name]: value }))
-                      }
-                      placeholder={field.placeholder}
-                      required={field.required}
-                    />
-                  );
-                }
-
-                const activeTab = sizePresetTabByField[field.name] || "input";
-                const presets = sizePresetsByField[field.name] || [];
-                const currentValue = form[field.name] ?? "";
-                const numericValue = Number(currentValue);
-                const canSave = Number.isFinite(numericValue) && numericValue > 0;
-
-                const savePreset = () => {
-                  if (!canSave) return;
-                  const next = Array.from(new Set([numericValue, ...presets])).sort((a, b) => a - b);
-                  setSizePresetsByField((prev) => ({ ...prev, [field.name]: next }));
-                  try {
-                    localStorage.setItem(getSizePresetStorageKey(field.name), JSON.stringify(next));
-                  } catch {
-                    // ignore
-                  }
-                };
-
-                const removePreset = (valueToRemove) => {
-                  const next = presets.filter((v) => Number(v) !== Number(valueToRemove));
-                  setSizePresetsByField((prev) => ({ ...prev, [field.name]: next }));
-                  try {
-                    localStorage.setItem(getSizePresetStorageKey(field.name), JSON.stringify(next));
-                  } catch {
-                    // ignore
-                  }
-                };
-
-                return (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <SecureButton
-                        type="button"
-                        variant={activeTab === "input" ? "primary" : "outline"}
-                        className="px-3 py-2 text-xs"
-                        onClick={() =>
-                          setSizePresetTabByField((prev) => ({ ...prev, [field.name]: "input" }))
-                        }
-                      >
-                        Ввод
-                      </SecureButton>
-                      <SecureButton
-                        type="button"
-                        variant={activeTab === "presets" ? "primary" : "outline"}
-                        className="px-3 py-2 text-xs"
-                        onClick={() =>
-                          setSizePresetTabByField((prev) => ({ ...prev, [field.name]: "presets" }))
-                        }
-                      >
-                        Шаблоны
-                      </SecureButton>
-                    </div>
-
-                    {activeTab === "input" ? (
-                      <div className="space-y-2">
-                        <SecureInput
-                          type={field.type}
-                          value={currentValue}
-                          onChange={(value) =>
-                            setForm((prev) => ({ ...prev, [field.name]: value }))
-                          }
-                          placeholder={field.placeholder}
-                          required={field.required}
-                        />
-                        <SecureButton
-                          type="button"
-                          variant="outline"
-                          disabled={!canSave}
-                          className="px-3 py-2 text-xs"
-                          onClick={savePreset}
-                        >
-                          Сохранить как шаблон
-                        </SecureButton>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <select
-                          value={""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            if (!v) return;
-                            setForm((prev) => ({ ...prev, [field.name]: Number(v) }));
-                          }}
-                          className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-                        >
-                          <option value="">Выберите размер...</option>
-                          {presets.map((v) => (
-                            <option key={v} value={v}>
-                              {v} мм
-                            </option>
-                          ))}
-                        </select>
-
-                        {presets.length > 0 && (
-                          <div className="flex flex-wrap gap-2">
-                            {presets.map((v) => (
-                              <div
-                                key={`preset-${field.name}-${v}`}
-                                className="flex items-center gap-1 border border-night-200 rounded-lg px-2 py-1 bg-white"
-                              >
-                                <button
-                                  type="button"
-                                  className="text-xs text-night-900"
-                                  onClick={() =>
-                                    setForm((prev) => ({ ...prev, [field.name]: Number(v) }))
-                                  }
-                                >
-                                  {v} мм
-                                </button>
-                                <button
-                                  type="button"
-                                  className="text-xs text-red-600"
-                                  onClick={() => removePreset(v)}
-                                  aria-label="Удалить шаблон"
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()
-            )}
-          </label>
-        ))}
         <div className="md:col-span-2 flex gap-3">
-          <SecureButton type="submit" className="px-6 py-3 flex items-center gap-2">
+          <SecureButton
+            type="submit"
+            disabled={
+              (!editingId && heroWorksMedia.requireMediaForCreate && !heroWorksMedia.hasPendingMedia) ||
+              heroWorksMedia.mediaUploading
+            }
+            className="px-6 py-3 flex items-center gap-2"
+          >
             {editingId ? (
               <>
                 <FaSave />
@@ -1414,105 +1198,29 @@ const EntityManager = ({ title, endpoint, fields }) => {
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
-          <thead>
-            <tr className="text-night-400">
-              <th className="py-3 pr-4">ID</th>
-              {normalizedFields.map((field) => (
-                <th key={field.name} className="py-3 pr-4">
-                  {field.label}
-                </th>
-              ))}
-              <th className="py-3 pr-4">Действия</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredItems.map((item, index) => (
-              <tr
-                key={item.id || `item-${index}`}
-                className="border-t border-night-100 text-night-900"
-              >
-                <td className="py-3 pr-4 font-semibold">#{item.id || '—'}</td>
-                {normalizedFields.map((field) => (
-                  <td key={field.name} className="py-3 pr-4">
-                    {field.inputType === "image" && item[field.name] ? (
-                      <img
-                        src={getImageUrl(item[field.name])}
-                        alt={field.label}
-                        className="h-10 w-10 rounded object-cover border border-night-100"
-                        crossOrigin="anonymous"
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                        }}
-                      />
-                    ) : field.type === "color" && item[field.name] ? (
-                      (() => {
-                        const colorId = Number(item[field.name]);
-                        const color = colors.find(c => c.id === colorId);
-                        if (color) {
-                          const imageUrl = getImageUrl(color.image_url);
-                          return (
-                            <div className="flex items-center gap-2">
-                              {imageUrl && (
-                                <img
-                                  src={imageUrl}
-                                  alt={color.name}
-                                  className="h-8 w-8 rounded object-cover border border-night-200"
-                                  crossOrigin="anonymous"
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                  }}
-                                />
-                              )}
-                              <span className="text-sm text-night-900">{color.name}</span>
-                            </div>
-                          );
-                        }
-                        return item[field.name] ?? "—";
-                      })()
-                    ) : (
-                      item[field.name] ?? "—"
-                    )}
-                  </td>
-                ))}
-                <td className="py-3 pr-4">
-                  <div className="flex gap-2">
-                    <SecureButton
-                      variant="outline"
-                      className="px-3 py-2 text-xs flex items-center gap-1.5"
-                      onClick={() => handleEdit(item)}
-                      title="Редактировать"
-                    >
-                      <FaEdit />
-                      Редактировать
-                    </SecureButton>
-                    <SecureButton
-                      variant="ghost"
-                      className="px-3 py-2 text-xs flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => handleDelete(item.id, item)}
-                      title="Удалить"
-                    >
-                      <FaTrash />
-                      Удалить
-                    </SecureButton>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!filteredItems.length && !loading && (
-              <tr>
-                <td
-                  colSpan={normalizedFields.length + 2}
-                  className="py-6 text-center text-night-400"
-                >
-                  Нет записей
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <EntityTable
+        items={filteredItems}
+        loading={loading}
+        normalizedFields={normalizedFields}
+        colors={colors}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        dragSort={dragSort}
+      />
+
+      <HeroWorksMediaModal
+        endpoint={endpoint}
+        editingId={editingId}
+        mediaModalOpen={heroWorksMedia.mediaModalOpen}
+        closeMediaModal={heroWorksMedia.closeMediaModal}
+        onMediaInputChange={heroWorksMedia.onMediaInputChange}
+        modalMediaPreviewUrls={heroWorksMedia.modalMediaPreviewUrls}
+        mediaModalFiles={heroWorksMedia.mediaModalFiles}
+        mediaUploading={heroWorksMedia.mediaUploading}
+        removeMediaModalFile={heroWorksMedia.removeMediaModalFile}
+        setMediaModalPreview={heroWorksMedia.setMediaModalPreview}
+        submitMediaModal={heroWorksMedia.submitMediaModal}
+      />
     </section>
   );
 };

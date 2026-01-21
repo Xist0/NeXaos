@@ -12,13 +12,15 @@ import useLogger from "../hooks/useLogger";
 
 const AccountPage = () => {
   const { user, token } = useAuth();
-  const { get, put } = useApi();
+  const { get, post, put } = useApi();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("orders");
   const [orders, setOrders] = useState([]);
   const [orderDetails, setOrderDetails] = useState({});
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState(null);
+  const [messageByOrderId, setMessageByOrderId] = useState({});
+  const [sendingByOrderId, setSendingByOrderId] = useState({});
   const [form, setForm] = useState({ fullName: user?.fullName || "", phone: user?.phone || "", email: user?.email || "" });
   const [saving, setSaving] = useState(false);
   const logger = useLogger();
@@ -43,9 +45,7 @@ const AccountPage = () => {
     setOrdersLoading(true);
     try {
       const response = await get("/orders");
-      const allOrders = response?.data || [];
-      const userOrders = allOrders.filter((order) => order.user_id === user?.id);
-      setOrders(userOrders);
+      setOrders(response?.data || []);
     } catch (error) {
       logger.error("Не удалось загрузить заказы");
       setOrders([]);
@@ -61,6 +61,31 @@ const AccountPage = () => {
       setOrderDetails((prev) => ({ ...prev, [orderId]: response?.data || response }));
     } catch (error) {
       logger.error("Не удалось загрузить детали заказа");
+    }
+  };
+
+  const refreshOrderDetails = async (orderId) => {
+    try {
+      const response = await get(`/orders/${orderId}`);
+      setOrderDetails((prev) => ({ ...prev, [orderId]: response?.data || response }));
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSendMessage = async (orderId) => {
+    const note = String(messageByOrderId[orderId] || "").trim();
+    if (!note) return;
+
+    setSendingByOrderId((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      await post(`/orders/${orderId}/notes`, { note });
+      setMessageByOrderId((prev) => ({ ...prev, [orderId]: "" }));
+      await refreshOrderDetails(orderId);
+    } catch (error) {
+      logger.error("Не удалось отправить сообщение");
+    } finally {
+      setSendingByOrderId((prev) => ({ ...prev, [orderId]: false }));
     }
   };
 
@@ -110,7 +135,21 @@ const AccountPage = () => {
       </div>
 
       <div>
-        {activeTab === "orders" && <OrdersTab orders={orders} loading={ordersLoading} expandedId={expandedOrderId} onToggle={handleToggleOrder} details={orderDetails} getStatusLabel={getStatusLabel} getStatusColor={getStatusColor} />}
+        {activeTab === "orders" && (
+          <OrdersTab
+            orders={orders}
+            loading={ordersLoading}
+            expandedId={expandedOrderId}
+            onToggle={handleToggleOrder}
+            details={orderDetails}
+            getStatusLabel={getStatusLabel}
+            getStatusColor={getStatusColor}
+            messageByOrderId={messageByOrderId}
+            setMessageByOrderId={setMessageByOrderId}
+            sendingByOrderId={sendingByOrderId}
+            onSendMessage={handleSendMessage}
+          />
+        )}
         {activeTab === "profile" && <ProfileTab form={form} onChange={handleChange} onSave={handleSave} saving={saving} />}
       </div>
     </div>
@@ -125,7 +164,19 @@ const TabButton = ({ id, activeTab, setActiveTab, children }) => (
   </button>
 );
 
-const OrdersTab = ({ orders, loading, expandedId, onToggle, details, getStatusLabel, getStatusColor }) => (
+const OrdersTab = ({
+  orders,
+  loading,
+  expandedId,
+  onToggle,
+  details,
+  getStatusLabel,
+  getStatusColor,
+  messageByOrderId,
+  setMessageByOrderId,
+  sendingByOrderId,
+  onSendMessage,
+}) => (
   <div>
     <h2 className="text-xl sm:text-2xl font-semibold text-night-900 mb-4">Мои заказы</h2>
     {loading ? (
@@ -134,13 +185,38 @@ const OrdersTab = ({ orders, loading, expandedId, onToggle, details, getStatusLa
       <div className="glass-card p-8 text-center text-night-500">У вас пока нет заказов</div>
     ) : (
       <div className="space-y-4">
-        {orders.map(order => <OrderCard key={order.id} order={order} isExpanded={expandedId === order.id} onToggle={onToggle} details={details[order.id]} getStatusLabel={getStatusLabel} getStatusColor={getStatusColor} />)}
+        {orders.map((order) => (
+          <OrderCard
+            key={order.id}
+            order={order}
+            isExpanded={expandedId === order.id}
+            onToggle={onToggle}
+            details={details[order.id]}
+            getStatusLabel={getStatusLabel}
+            getStatusColor={getStatusColor}
+            messageValue={messageByOrderId[order.id] || ""}
+            setMessageValue={(value) => setMessageByOrderId((prev) => ({ ...prev, [order.id]: value }))}
+            sending={Boolean(sendingByOrderId[order.id])}
+            onSend={() => onSendMessage(order.id)}
+          />
+        ))}
       </div>
     )}
   </div>
 );
 
-const OrderCard = ({ order, isExpanded, onToggle, details, getStatusLabel, getStatusColor }) => (
+const OrderCard = ({
+  order,
+  isExpanded,
+  onToggle,
+  details,
+  getStatusLabel,
+  getStatusColor,
+  messageValue,
+  setMessageValue,
+  sending,
+  onSend,
+}) => (
   <div className="glass-card rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200">
     <div className="p-4 cursor-pointer" onClick={() => onToggle(order.id)}>
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -167,13 +243,39 @@ const OrderCard = ({ order, isExpanded, onToggle, details, getStatusLabel, getSt
             <div className="space-y-2">{details.items.map(item => <div key={item.id} className="bg-white rounded p-2 flex justify-between text-sm"><span>{item.module_name || `Модуль #${item.module_id}`} × {item.qty}</span><span className="font-medium">{formatCurrency((item.price || 0) * (item.qty || 0))}</span></div>)}</div>
           </div>
         )}
-        {details.notes?.length > 0 && (
-          <div>
-            <h4 className="font-semibold text-night-900 mb-2">Заметки:</h4>
-            <div className="space-y-2">{details.notes.map(note => <div key={note.id} className="bg-white rounded p-3 text-sm border-l-4 border-accent"><p className="text-night-900">{note.note}</p><p className="text-xs text-night-500 mt-1">{new Date(note.created_at).toLocaleString("ru-RU")} {note.author_name && `• ${note.author_name}`}</p></div>)}</div>
+        <div>
+          <h4 className="font-semibold text-night-900 mb-2">Чат по заказу:</h4>
+          {details.notes?.length > 0 ? (
+            <div className="space-y-2">
+              {details.notes.map((note) => (
+                <div key={note.id} className="bg-white rounded p-3 text-sm border-l-4 border-accent">
+                  <p className="text-night-900 whitespace-pre-wrap">{note.note}</p>
+                  <p className="text-xs text-night-500 mt-1">
+                    {new Date(note.created_at).toLocaleString("ru-RU")} {note.author_name && `• ${note.author_name}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-night-500">Сообщений пока нет</p>
+          )}
+
+          <div className="mt-4">
+            <label className="text-sm font-medium text-night-700">Ваше сообщение</label>
+            <textarea
+              value={messageValue}
+              onChange={(e) => setMessageValue(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-lg border border-night-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent/40"
+              placeholder="Напишите сообщение менеджеру..."
+            />
+            <div className="mt-2 flex justify-end">
+              <SecureButton onClick={onSend} disabled={sending || !String(messageValue || "").trim()} className="px-4 py-2 text-sm">
+                {sending ? "Отправка..." : "Отправить"}
+              </SecureButton>
+            </div>
           </div>
-        )}
-        {!details.notes?.length && <p className="text-sm text-night-500">Заметок пока нет</p>}
+        </div>
       </div>
     )}
   </div>

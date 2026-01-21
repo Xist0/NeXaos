@@ -5,9 +5,18 @@ import useAuthStore from "../../store/authStore";
 import SecureButton from "../ui/SecureButton";
 import { FaSpinner, FaUpload, FaImage, FaCheckCircle, FaTrash } from "react-icons/fa";
 import { API_BASE_URL } from "../../utils/constants";
-import { getImageUrl } from "../../utils/image";
+import { getImageUrl, placeholderImage } from "../../utils/image";
 
-const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
+const ImageManager = ({
+  entityType,
+  entityId,
+  onUpdate,
+  onPreviewUpdate,
+  onCreateTemp,
+  onDeleteTemp,
+  onMediaChange,
+  fileInputId,
+}) => {
   const { get, del, post } = useApi();
   const logger = useLogger();
 
@@ -25,38 +34,53 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
     fetchImages();
   }, [entityId, entityType]);
 
-  const fetchImages = useCallback(async () => {
-    if (!entityId) {
+  const fetchImages = useCallback(async (overrideEntityId) => {
+    const effectiveEntityId = overrideEntityId ?? entityId;
+    if (!effectiveEntityId) {
       setImages([]);
+      onMediaChange?.(0);
       return;
     }
     setLoading(true);
     try {
-      const response = await get(`/images/${entityType}/${entityId}`);
-      setImages(Array.isArray(response?.data) ? response.data : []);
+      const response = await get(`/images/${entityType}/${effectiveEntityId}`);
+      const nextImages = Array.isArray(response?.data) ? response.data : [];
+      setImages(nextImages);
+      onMediaChange?.(nextImages.length);
       if (response?.data?.[0]?.url) {
         onPreviewUpdate?.(response.data[0].url);
       }
     } catch (error) {
       logger.error("Ошибка загрузки изображений:", error?.message || error);
       setImages([]);
+      onMediaChange?.(0);
     } finally {
       setLoading(false);
     }
-  }, [entityId, entityType, get, logger, onPreviewUpdate]);
+  }, [entityId, entityType, get, logger, onPreviewUpdate, onMediaChange]);
 
   const handleUpload = async (event) => {
-    if (!entityId) {
-      logger.warn("Нет entityId для загрузки");
-      return;
-    }
-
-    const files = Array.from(event.target.files);
-    if (files.length === 0) return;
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
 
     const token = useAuthStore.getState().accessToken;
     if (!token) {
       logger.error("❌ Вы не авторизованы. Логин требуется.");
+      return;
+    }
+
+    let actualEntityId = entityId;
+    let tempCreatedHere = false;
+    if (!actualEntityId && onCreateTemp) {
+      const tempId = await onCreateTemp();
+      if (tempId) {
+        actualEntityId = tempId;
+        tempCreatedHere = true;
+      }
+    }
+
+    if (!actualEntityId) {
+      logger.warn("Не удалось создать запись для загрузки медиа");
       return;
     }
 
@@ -71,7 +95,7 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
           const formData = new FormData();
           formData.append("file", file);
           formData.append("entityType", entityType);
-          formData.append("entityId", String(entityId));
+          formData.append("entityId", String(actualEntityId));
           formData.append("alt", file.name.split(".")[0]);
 
           const response = await fetch(`${API_BASE_URL}/images`, {
@@ -101,8 +125,10 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
 
       if (successCount > 0) {
         logger.info(`✅ ${successCount} файл(ов) загружено`);
-        await fetchImages();
+        await fetchImages(actualEntityId);
         onUpdate?.();
+      } else if (tempCreatedHere && onDeleteTemp) {
+        await onDeleteTemp(actualEntityId);
       }
     } finally {
       setUploading(false);
@@ -141,19 +167,17 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
   };
 
   const getPreviewUrl = (url) => {
-    if (!url) return "https://via.placeholder.com/300x200?text=Нет+изображения";
+    if (!url) return placeholderImage;
     return getImageUrl(url);
   };
 
-  if (!entityId || entityId === "null") {
-    return (
-      <div className="border-4 border-dashed border-accent/50 bg-accent/5 rounded-3xl p-12 text-center">
-        <FaImage className="w-20 h-20 text-accent/70 mx-auto mb-6" />
-        <div className="text-xl font-bold text-night-900 mb-2">⏳ Модуль создаётся…</div>
-        <div className="text-night-600 text-sm">Фото доступны после создания модуля</div>
-      </div>
-    );
-  }
+  const isVideoMedia = (item) => {
+    if (!item) return false;
+    if (item.media_type && String(item.media_type).toLowerCase() === "video") return true;
+    if (item.mime_type && String(item.mime_type).toLowerCase().startsWith("video/")) return true;
+    const url = String(item.url || "").toLowerCase();
+    return url.endsWith(".mp4") || url.endsWith(".webm") || url.endsWith(".ogg") || url.endsWith(".mov");
+  };
 
   return (
     <div className="space-y-6">
@@ -174,10 +198,11 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
             }`}
           />
           <div className="font-bold text-xl text-night-900 mb-1">
-            {uploading ? `Загружаем… ${Math.round(uploadProgress)}%` : "Загрузить фото"}
+            {uploading ? `Загружаем… ${Math.round(uploadProgress)}%` : "Загрузить медиа"}
           </div>
           <div className="text-sm text-night-600">
-            PNG, JPG, WebP до 10MB | несколько файлов
+            Фото и видео до 100MB | несколько файлов
+            {!entityId && onCreateTemp ? " | запись будет создана автоматически" : ""}
           </div>
 
           {uploading && uploadProgress > 0 && (
@@ -190,10 +215,11 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
           )}
 
           <input
+            id={fileInputId}
             ref={fileInputRef}
             type="file"
             multiple
-            accept="image/*"
+            accept="image/*,video/*"
             onChange={handleUpload}
             disabled={uploading}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -225,11 +251,25 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
               }`}
             >
               <div className="relative w-full h-36 overflow-hidden bg-night-100">
-                <img
-                  src={getPreviewUrl(image.url)}
-                  alt={image.alt || `Image ${idx + 1}`}
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                />
+                {isVideoMedia(image) ? (
+                  <video
+                    src={getPreviewUrl(image.url)}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                    muted
+                    playsInline
+                    preload="metadata"
+                    controls
+                  />
+                ) : (
+                  <img
+                    src={getPreviewUrl(image.url)}
+                    alt={image.alt || `Image ${idx + 1}`}
+                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                    onError={(e) => {
+                      e.target.src = placeholderImage;
+                    }}
+                  />
+                )}
 
                 <div className="absolute top-2 right-2 bg-night-900/80 text-white px-2 py-1 rounded text-xs font-bold backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity">
                   {idx + 1}
@@ -258,7 +298,7 @@ const ImageManager = ({ entityType, entityId, onUpdate, onPreviewUpdate }) => {
                     className="flex-1 text-xs h-7 px-2"
                     disabled={image.is_preview}
                   >
-                    {image.is_preview ? "Превью ✓" : "Выбрать"}
+                    {image.is_preview ? "Превью ✓" : "Превью"}
                   </SecureButton>
                   <SecureButton
                     size="sm"

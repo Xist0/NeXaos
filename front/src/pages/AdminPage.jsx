@@ -39,6 +39,15 @@ const adminSections = [
     ],
   },
   {
+    id: "content",
+    label: "Контент",
+    icon: FaEdit,
+    items: [
+      { id: "heroSlides", label: "Hero-слайды", endpoint: "/hero-slides" },
+      { id: "works", label: "Наши работы", endpoint: "/works" },
+    ],
+  },
+  {
     id: "other",
     label: "Прочее",
     icon: FaCog,
@@ -223,6 +232,26 @@ const entityConfigs = {
       { name: "unit_id", label: "ID единицы", type: "number" },
     ],
   },
+  heroSlides: {
+    title: "Hero-слайды",
+    endpoint: "/hero-slides",
+    fields: [
+      { name: "title", label: "Заголовок", required: true },
+      { name: "description", label: "Описание" },
+      { name: "publish_at", label: "Дата публикации", type: "date" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  works: {
+    title: "Наши работы",
+    endpoint: "/works",
+    fields: [
+      { name: "title", label: "Заголовок", required: true },
+      { name: "description", label: "Описание" },
+      { name: "publish_at", label: "Дата публикации", type: "date" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
 };
 
 const AdminPage = () => {
@@ -232,6 +261,7 @@ const AdminPage = () => {
     orders: true,
     materials: false,
     catalog: false,
+    content: false,
     other: false,
   });
 

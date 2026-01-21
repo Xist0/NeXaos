@@ -48,8 +48,13 @@ rawClient.interceptors.response.use(
     const originalRequest = error.config;
     const status = error.response?.status;
 
+    const url = String(originalRequest?.url || "");
+    const isAuthRefresh = url.includes("/auth/refresh");
+    const isAuthLogin = url.includes("/auth/login");
+    const isAuthRegister = url.includes("/auth/register");
+
     // Если ошибка 401 и это не запрос на refresh/login
-    if (status === 401 && !originalRequest._retry && !originalRequest.url?.includes("/auth/")) {
+    if (status === 401 && !originalRequest._retry && !isAuthRefresh && !isAuthLogin && !isAuthRegister) {
       if (isRefreshing) {
         // Если уже идет обновление токена, ждем
         return new Promise((resolve, reject) => {
@@ -66,9 +71,9 @@ rawClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = useAuthStore.getState().refreshToken || localStorage.getItem("nexaos_refresh_token");
-        if (refreshToken) {
-          const data = await refreshAccessToken(refreshToken);
+        // Refresh token хранится в httpOnly cookie; тело можно отправлять пустым.
+        const data = await refreshAccessToken();
+        if (data?.accessToken) {
           useAuthStore.setState({
             accessToken: data.accessToken,
             user: data.user,
@@ -80,10 +85,10 @@ rawClient.interceptors.response.use(
           processQueue(null, data.accessToken);
           originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
           return rawClient(originalRequest);
-        } else {
-          processQueue(error, null);
-          useAuthStore.getState().logout();
         }
+
+        processQueue(error, null);
+        useAuthStore.getState().logout();
       } catch (refreshError) {
         processQueue(refreshError, null);
         useAuthStore.getState().logout();

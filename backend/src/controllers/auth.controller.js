@@ -51,6 +51,14 @@ const login = async (req, res) => {
     user.role_name || "user"
   );
 
+  res.cookie("nexaos_refresh_token", refreshTokenRecord.token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: req.app.get("env") === "production",
+    path: "/api/auth",
+    expires: refreshTokenRecord.expires_at,
+  });
+
   res.status(200).json({
     accessToken,
     refreshToken: refreshTokenRecord.token,
@@ -60,7 +68,7 @@ const login = async (req, res) => {
 };
 
 const refresh = async (req, res) => {
-  const { refreshToken } = req.body;
+  const refreshToken = req.cookies?.nexaos_refresh_token || req.body?.refreshToken;
 
   if (!refreshToken) {
     throw ApiError.badRequest("Refresh token не указан");
@@ -92,7 +100,7 @@ const refresh = async (req, res) => {
 };
 
 const logout = async (req, res) => {
-  const { refreshToken } = req.body;
+  const refreshToken = req.cookies?.nexaos_refresh_token || req.body?.refreshToken;
 
   if (refreshToken) {
     await revokeRefreshToken(refreshToken);
@@ -101,6 +109,8 @@ const logout = async (req, res) => {
   if (req.user?.id) {
     await revokeAllUserRefreshTokens(req.user.id);
   }
+
+  res.clearCookie("nexaos_refresh_token", { path: "/api/auth" });
 
   res.status(204).send();
 };

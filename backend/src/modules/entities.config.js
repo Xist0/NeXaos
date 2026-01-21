@@ -445,6 +445,32 @@
       ],
     },
     {
+      route: "hero-slides",
+      table: "hero_slides",
+      idColumn: "id",
+      columns: {
+        title: { type: "string", required: true },
+        description: { type: "string", allowNull: true },
+        publish_at: { type: "date", allowNull: true },
+        sort_order: { type: "integer", default: 0 },
+        is_active: { type: "boolean", default: true },
+      },
+      selectFields: ["id", "title", "description", "publish_at", "sort_order", "is_active", "created_at", "updated_at"],
+    },
+    {
+      route: "works",
+      table: "works",
+      idColumn: "id",
+      columns: {
+        title: { type: "string", required: true },
+        description: { type: "string", allowNull: true },
+        publish_at: { type: "date", allowNull: true },
+        sort_order: { type: "integer", default: 0 },
+        is_active: { type: "boolean", default: true },
+      },
+      selectFields: ["id", "title", "description", "publish_at", "sort_order", "is_active", "created_at", "updated_at"],
+    },
+    {
       route: "material-classes",
       table: "material_classes",
       idColumn: "id",

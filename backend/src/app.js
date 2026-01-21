@@ -1,5 +1,6 @@
 // src/app.js
 const express = require("express");
+const crypto = require("crypto");
 const path = require("path");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -14,6 +15,14 @@ const crudRoutes = require("./routes/crud.routes");
 const app = express();
 
 app.disable("x-powered-by");
+
+app.use((req, res, next) => {
+  const incoming = req.headers["x-request-id"];
+  const requestId = typeof incoming === "string" && incoming.trim() ? incoming.trim() : crypto.randomBytes(16).toString("hex");
+  req.requestId = requestId;
+  res.setHeader("X-Request-Id", requestId);
+  next();
+});
 
 // Настраиваем Helmet для разрешения загрузки изображений
 const allowedOrigins = new Set([
@@ -68,8 +77,8 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 app.use(cookieParser());
 
 // Статика для загруженных файлов с CORS заголовками

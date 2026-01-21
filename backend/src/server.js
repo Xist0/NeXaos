@@ -27,35 +27,24 @@ const startServer = async () => {
     // Инициализация БД при старте
     await initDatabase();
 
-    const basePort = Number.isFinite(PORT) ? PORT : 5000;
-    const maxAttempts = config.env === "production" ? 1 : 20;
+    const port = Number.isFinite(PORT) ? PORT : 5000;
+    const server = app.listen(port, HOST, () => {
+      console.log(`🚀 Сервер запущен в режиме ${config.env} на порту ${port}`);
+      const healthHost = HOST === "0.0.0.0" ? "localhost" : HOST;
+      console.log(`🔗 Проверка работоспособности: http://${healthHost}:${port}/api/health`);
+    });
 
-    const listenOnPort = (port, attempt = 1) => {
-      const server = app.listen(port, HOST, () => {
-        console.log(`🚀 Сервер запущен в режиме ${config.env} на порту ${port}`);
-        const healthHost = HOST === "0.0.0.0" ? "localhost" : HOST;
-        console.log(`🔗 Проверка работоспособности: http://${healthHost}:${port}/api/health`);
-      });
+    currentServer = server;
 
-      currentServer = server;
-
-      server.on("error", (err) => {
-        if (err && err.code === "EADDRINUSE") {
-          if (config.env !== "production" && attempt < maxAttempts) {
-            const nextPort = port + 1;
-            console.warn(`⚠️ Порт ${port} занят. Пробуем ${nextPort}...`);
-            return listenOnPort(nextPort, attempt + 1);
-          }
-          console.error(`❌ Порт ${port} уже занят. Укажи другой PORT или останови процесс, который слушает этот порт.`);
-          process.exit(1);
-        }
-
-        console.error("❌ Ошибка запуска сервера:", err);
+    server.on("error", (err) => {
+      if (err && err.code === "EADDRINUSE") {
+        console.error(`❌ Порт ${port} уже занят. Укажи другой PORT или останови процесс, который слушает этот порт.`);
         process.exit(1);
-      });
-    };
+      }
 
-    listenOnPort(basePort);
+      console.error("❌ Ошибка запуска сервера:", err);
+      process.exit(1);
+    });
 
   } catch (error) {
     console.error("❌ Не удалось запустить сервер:", error);

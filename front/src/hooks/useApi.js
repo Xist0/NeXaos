@@ -6,6 +6,51 @@ import logger from "../services/logger";
 const inFlightGets = new Map();
 const getCache = new Map();
 
+const GET_PERSIST_TTL_MS =
+  Number(
+    (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GET_CACHE_TTL_MS) ||
+      undefined
+  ) ||
+  60 * 1000;
+
+const getCacheBuster = () => {
+  try {
+    return localStorage.getItem("nexaos_cache_buster") || "";
+  } catch {
+    return "";
+  }
+};
+
+const buildPersistKey = (key) => {
+  const buster = getCacheBuster();
+  return `nexaos_get_cache:${buster}:${key}`;
+};
+
+const readPersisted = (key) => {
+  try {
+    const raw = localStorage.getItem(buildPersistKey(key));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!parsed.ts || Date.now() - Number(parsed.ts) > GET_PERSIST_TTL_MS) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const writePersisted = (key, response) => {
+  try {
+    if (!response) return;
+    localStorage.setItem(
+      buildPersistKey(key),
+      JSON.stringify({ ts: Date.now(), status: response.status, data: response.data })
+    );
+  } catch {
+    // ignore
+  }
+};
+
 const buildGetKey = (url, params) => {
   if (!params) return `GET ${url}`;
   try {
@@ -18,6 +63,18 @@ const buildGetKey = (url, params) => {
 const useApi = () => {
   const request = useCallback(async (config) => {
     try {
+      const method = (config.method || "GET").toUpperCase();
+
+      if (method === "GET") {
+        const key = buildGetKey(config.url, config.params);
+        const persisted = readPersisted(key);
+        if (persisted) {
+          const resp = { status: persisted.status || 200, data: persisted.data };
+          getCache.set(key, resp);
+          return resp;
+        }
+      }
+
       const response = await apiClient(config);
 
       // Нормализация: многие endpoints возвращают обертку вида { data: ... }
@@ -32,14 +89,29 @@ const useApi = () => {
         response.data = response.data.data;
       }
 
-      const method = (config.method || "GET").toUpperCase();
       if (method === "GET") {
         const key = buildGetKey(config.url, config.params);
         if (response?.status === 304) {
           const cached = getCache.get(key);
           if (cached) return cached;
+
+          const persisted = readPersisted(key);
+          if (persisted) {
+            const resp = { status: persisted.status || 200, data: persisted.data };
+            getCache.set(key, resp);
+            return resp;
+          }
         }
         getCache.set(key, response);
+        writePersisted(key, response);
+      } else {
+        try {
+          localStorage.setItem("nexaos_cache_buster", String(Date.now()));
+        } catch {
+          // ignore
+        }
+        getCache.clear();
+        inFlightGets.clear();
       }
 
       return response;

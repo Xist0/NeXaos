@@ -5,8 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
+    "dev": "DEV_PORT=5001 nodemon src/server.js",
     "lint": "eslint .",
+    "cleanup:uploads": "node src/scripts/cleanup-uploads.js",
     "test": "jest"
   },
   "keywords": [

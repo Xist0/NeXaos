@@ -293,7 +293,7 @@ const getImages = async (req, res) => {
 
   // Получаем все изображения для указанной сущности
   const { rows } = await query(
-    `SELECT id, url, alt, sort_order, 
+    `SELECT id, url, alt, sort_order, media_type, mime_type,
      (sort_order = 0) as is_preview
      FROM images 
      WHERE entity_type = $1 AND entity_id = $2 
@@ -319,19 +319,15 @@ const getImages = async (req, res) => {
 
             let resolvedFolder = null;
             for (const candidate of folderCandidates) {
-              const candidatePath = path.join(
-                __dirname,
-                "..",
-                "public",
-                "uploads",
-                "modules",
-                candidate,
-                filename
-              );
-              if (fs.existsSync(candidatePath)) {
-                resolvedFolder = candidate;
-                break;
+              const baseDirs = [config.uploadsDir, config.legacyUploadsDir].filter(Boolean);
+              for (const baseDir of baseDirs) {
+                const candidatePath = path.join(baseDir, "modules", candidate, filename);
+                if (fs.existsSync(candidatePath)) {
+                  resolvedFolder = candidate;
+                  break;
+                }
               }
+              if (resolvedFolder) break;
             }
 
             if (!resolvedFolder) return;

@@ -11,7 +11,8 @@ export const register = async (payload) => {
 };
 
 export const refreshAccessToken = async (refreshToken) => {
-  const { data } = await apiClient.post("/auth/refresh", { refreshToken });
+  const payload = refreshToken ? { refreshToken } : {};
+  const { data } = await apiClient.post("/auth/refresh", payload);
   return data;
 };
 

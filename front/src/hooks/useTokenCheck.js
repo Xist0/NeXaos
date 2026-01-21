@@ -105,6 +105,7 @@ if (typeof window !== "undefined") {
 
 const useTokenCheck = () => {
   const tokenRef = useRef(null);
+  const triedSilentRefreshRef = useRef(false);
 
   useEffect(() => {
     const token = useAuthStore.getState().accessToken;
@@ -119,6 +120,32 @@ const useTokenCheck = () => {
       // Проверяем токен сразу при монтировании
       checkToken();
     } else {
+      const user = useAuthStore.getState().user || (() => {
+        try {
+          return JSON.parse(localStorage.getItem("nexaos_user") || "null");
+        } catch {
+          return null;
+        }
+      })();
+
+      if (user && !triedSilentRefreshRef.current) {
+        triedSilentRefreshRef.current = true;
+        useAuthStore
+          .getState()
+          .refreshToken()
+          .then((newToken) => {
+            if (newToken) {
+              if (!tokenCheckTimer) {
+                startTokenCheckTimer();
+              }
+              checkToken();
+            }
+          })
+          .catch(() => {
+            // ignore
+          });
+      }
+
       // Останавливаем таймер если токена нет
       if (tokenCheckTimer) {
         clearInterval(tokenCheckTimer);

@@ -9,6 +9,7 @@ import FavoritesPage from "../pages/FavoritesPage";
 import CartPage from "../pages/CartPage";
 import AccountPage from "../pages/AccountPage";
 import AdminPage from "../pages/AdminPage";
+import WorksPage from "../pages/WorksPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import { ROLES } from "../utils/constants";
 
@@ -20,6 +21,7 @@ export const router = createBrowserRouter([
       { path: "catalog", element: <CatalogPage /> },
       { path: "catalog/:id", element: <ProductPage /> },
       { path: "catalog/kit/:id", element: <KitSolutionPage /> },
+      { path: "works", element: <WorksPage /> },
       { path: "favorites", element: <FavoritesPage /> },
       { path: "cart", element: <CartPage /> },
       {

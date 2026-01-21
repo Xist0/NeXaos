@@ -18,6 +18,7 @@ const placeholderImage =
   );
 
 const getBackendOrigin = () => {
+  if (import.meta.env.DEV) return "";
   const raw = import.meta.env.VITE_API_URL;
   if (!raw) return "";
   try {
