@@ -48,6 +48,14 @@ rawClient.interceptors.response.use(
     const originalRequest = error.config;
     const status = error.response?.status;
 
+    const responseData = error.response?.data;
+    const requestId =
+      responseData?.requestId ||
+      error.response?.headers?.["x-request-id"] ||
+      error.response?.headers?.["X-Request-Id"];
+    const backendMessage = responseData?.message;
+    const validationDetails = responseData?.details;
+
     const url = String(originalRequest?.url || "");
     const isAuthRefresh = url.includes("/auth/refresh");
     const isAuthLogin = url.includes("/auth/login");
@@ -98,7 +106,14 @@ rawClient.interceptors.response.use(
       }
     }
 
-    logger.error("API interceptor caught error", { status });
+    logger.error("API interceptor caught error", {
+      status,
+      method: originalRequest?.method,
+      url: originalRequest?.url,
+      message: backendMessage,
+      requestId,
+      details: validationDetails,
+    });
     return Promise.reject(error);
   }
 );

@@ -339,11 +339,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
       return null;
     }
 
-    if (moduleIdsPayload.length === 0) {
-      loggerRef.current?.error("Выберите состав (минимум один модуль)");
-      return null;
-    }
-
     createLockRef.current = true;
     setLoading(true);
 

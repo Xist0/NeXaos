@@ -300,12 +300,10 @@ const KitSolutionPage = () => {
       </div>
 
       <div className="space-y-6 mb-12">
-        <div className="glass-card p-8 space-y-6">
-          <h3 className="font-bold text-night-900 text-lg">Компоненты</h3>
-          {compositionSections.length === 0 ? (
-            <p className="text-sm text-night-500">Состав не указан.</p>
-          ) : (
-            compositionSections.map(({ title, items }) => (
+        {compositionSections.length > 0 ? (
+          <div className="glass-card p-8 space-y-6">
+            <h3 className="font-bold text-night-900 text-lg">Компоненты</h3>
+            {compositionSections.map(({ title, items }) => (
               <div key={title} className="space-y-3">
                 <h4 className="text-sm font-semibold text-night-700 uppercase tracking-wide">{title}</h4>
                 <div className="space-y-2">
@@ -342,9 +340,9 @@ const KitSolutionPage = () => {
                   ))}
                 </div>
               </div>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        ) : null}
 
         <div className="glass-card p-8">
           <div className="flex items-center justify-between gap-4 mb-6">

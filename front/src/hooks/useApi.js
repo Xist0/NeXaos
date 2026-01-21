@@ -121,11 +121,20 @@ const useApi = () => {
         error.response?.data?.message ||
         "Произошла ошибка при выполнении запроса";
 
+      const requestId =
+        error.response?.data?.requestId ||
+        error.response?.headers?.["x-request-id"] ||
+        error.response?.headers?.["X-Request-Id"];
+
+      const details = error.response?.data?.details;
+
       logger.error("Ошибка при выполнении запроса", {
         url: config.url,
         method: config.method || "GET",
         status,
         message,
+        requestId,
+        details,
       });
       throw error;
     }

@@ -34,7 +34,7 @@ const ImageManager = ({
     fetchImages();
   }, [entityId, entityType]);
 
-  const fetchImages = useCallback(async (overrideEntityId) => {
+  const fetchImages = useCallback(async (overrideEntityId, { bypassCache = false } = {}) => {
     const effectiveEntityId = overrideEntityId ?? entityId;
     if (!effectiveEntityId) {
       setImages([]);
@@ -43,7 +43,8 @@ const ImageManager = ({
     }
     setLoading(true);
     try {
-      const response = await get(`/images/${entityType}/${effectiveEntityId}`);
+      const params = bypassCache ? { _ts: Date.now() } : undefined;
+      const response = await get(`/images/${entityType}/${effectiveEntityId}`, params);
       const nextImages = Array.isArray(response?.data) ? response.data : [];
       setImages(nextImages);
       onMediaChange?.(nextImages.length);
@@ -125,7 +126,7 @@ const ImageManager = ({
 
       if (successCount > 0) {
         logger.info(`✅ ${successCount} файл(ов) загружено`);
-        await fetchImages(actualEntityId);
+        await fetchImages(actualEntityId, { bypassCache: true });
         onUpdate?.();
       } else if (tempCreatedHere && onDeleteTemp) {
         await onDeleteTemp(actualEntityId);
@@ -145,7 +146,7 @@ const ImageManager = ({
     try {
       await del(`/images/${imageId}`);
       logger.info("✅ Изображение удалено");
-      await fetchImages();
+      await fetchImages(undefined, { bypassCache: true });
       onUpdate?.();
     } catch (error) {
       logger.error("❌ Ошибка удаления:", error?.message || error);
@@ -160,7 +161,7 @@ const ImageManager = ({
       if (previewImage?.url) {
         onPreviewUpdate?.(previewImage.url);
       }
-      await fetchImages();
+      await fetchImages(undefined, { bypassCache: true });
     } catch (error) {
       logger.error("❌ Ошибка установки превью:", error?.message || error);
     }
