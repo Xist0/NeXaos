@@ -293,7 +293,7 @@ const getImages = async (req, res) => {
 
   // Получаем все изображения для указанной сущности
   const { rows } = await query(
-    `SELECT id, url, alt, sort_order, media_type, mime_type,
+    `SELECT id, url, alt, sort_order, 
      (sort_order = 0) as is_preview
      FROM images 
      WHERE entity_type = $1 AND entity_id = $2 
@@ -512,11 +512,13 @@ const uploadImage = async (req, res) => {
   }
 
   // Сохраняем запись в БД
+  const mimeType = req.file?.mimetype || null;
+  const mediaType = mimeType && String(mimeType).startsWith("video/") ? "video" : "image";
   const { rows } = await query(
-    `INSERT INTO images (entity_type, entity_id, url, alt, sort_order)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, url, alt, sort_order`,
-    [entityType, parsedId, urlPath, req.body.alt || null, sortOrder]
+    `INSERT INTO images (entity_type, entity_id, url, alt, sort_order, media_type, mime_type)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id, url, alt, sort_order, media_type, mime_type`,
+    [entityType, parsedId, urlPath, req.body.alt || null, sortOrder, mediaType, mimeType]
   );
 
   // Логируем успешную загрузку
