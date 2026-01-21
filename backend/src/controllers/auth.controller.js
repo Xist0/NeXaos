@@ -54,7 +54,7 @@ const login = async (req, res) => {
   res.cookie("nexaos_refresh_token", refreshTokenRecord.token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: req.app.get("env") === "production",
+    secure: req.secure,
     path: "/api/auth",
     expires: refreshTokenRecord.expires_at,
   });

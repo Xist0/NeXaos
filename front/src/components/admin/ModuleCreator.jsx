@@ -19,6 +19,26 @@ import ImageManager from "./ImageManager";
 import { formatCurrency } from "../../utils/format";
 import { getImageUrl, placeholderImage } from "../../utils/image";
 
+const toOptionalInt = (value) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string" && value.trim() === "") return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+};
+
+const toOptionalNumber = (value) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string" && value.trim() === "") return undefined;
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+};
+
+const toOptionalString = (value) => {
+  if (value === null || value === undefined) return undefined;
+  const str = String(value).trim();
+  return str ? str : undefined;
+};
+
 const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
@@ -300,22 +320,22 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
       // Собираем payload строго по columns modules. [file:84]
       const payload = {
         name: String(form.name || "").trim(),
-        sku: String(form.sku || "").trim(),
+        sku: toOptionalString(form.sku),
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url || null,
 
-        base_sku: form.baseSku || null,
-        description_id: Number(form.description_id) || null,
+        base_sku: toOptionalString(form.baseSku),
+        description_id: toOptionalInt(form.description_id),
 
-        length_mm: Number(form.length_mm) || null,
-        depth_mm: Number(form.depth_mm) || null,
-        height_mm: Number(form.height_mm) || null,
+        length_mm: toOptionalInt(form.length_mm),
+        depth_mm: toOptionalInt(form.depth_mm),
+        height_mm: toOptionalInt(form.height_mm),
 
         facade_color: form.facade_color || null,
         corpus_color: form.corpus_color || null,
 
-        primary_color_id: form.primary_color_id ? Number(form.primary_color_id) : null,
-        secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
+        primary_color_id: toOptionalInt(form.primary_color_id),
+        secondary_color_id: toOptionalInt(form.secondary_color_id),
 
         // цена будет установлена позже
         final_price: 0,
@@ -325,7 +345,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         is_active: false,
 
         // если у тебя это обязательно на UI — оставляем
-        module_category_id: form.module_category_id ? Number(form.module_category_id) : null
+        module_category_id: toOptionalInt(form.module_category_id)
       };
 
       // При create schema требуются только "name". Остальное опционально. [file:84]
@@ -376,24 +396,24 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     try {
       const payload = {
         name: String(form.name || "").trim(),
-        sku: String(form.sku || "").trim(),
+        sku: toOptionalString(form.sku),
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url,
 
-        base_sku: form.baseSku || null,
-        description_id: Number(form.description_id) || null,
+        base_sku: toOptionalString(form.baseSku),
+        description_id: toOptionalInt(form.description_id),
 
-        length_mm: Number(form.length_mm) || null,
-        depth_mm: Number(form.depth_mm) || null,
-        height_mm: Number(form.height_mm) || null,
+        length_mm: toOptionalInt(form.length_mm),
+        depth_mm: toOptionalInt(form.depth_mm),
+        height_mm: toOptionalInt(form.height_mm),
 
         facade_color: form.facade_color || null,
         corpus_color: form.corpus_color || null,
 
-        module_category_id: form.module_category_id ? Number(form.module_category_id) : null,
+        module_category_id: toOptionalInt(form.module_category_id),
 
-        final_price: Number(form.final_price),
-        price: Number(form.final_price),
+        final_price: toOptionalNumber(form.final_price),
+        price: toOptionalNumber(form.final_price),
         is_active: true,
       };
 

@@ -6,10 +6,10 @@
     let field;
     switch (config.type) {
       case "integer":
-        field = Joi.number().integer();
+        field = Joi.number().integer().empty("");
         break;
       case "number":
-        field = Joi.number();
+        field = Joi.number().empty("");
         if (config.precision) {
           field = field.precision(config.precision);
         }
