@@ -18,7 +18,7 @@ const defaultField = (field) => ({
   ...field,
 });
 
-const EntityManager = ({ title, endpoint, fields }) => {
+const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
   const { request, get, post, put, del } = useApi();
   const logger = useLogger();
   const [items, setItems] = useState([]);
@@ -32,6 +32,8 @@ const EntityManager = ({ title, endpoint, fields }) => {
   const [filterModuleCategoryId, setFilterModuleCategoryId] = useState("");
   const [colors, setColors] = useState([]);
   const colorsLoadedRef = useRef(false);
+  const [collections, setCollections] = useState([]);
+  const collectionsLoadedRef = useRef(false);
   const [sizePresetTabByField, setSizePresetTabByField] = useState({});
   const [sizePresetsByField, setSizePresetsByField] = useState({});
 
@@ -157,7 +159,10 @@ const EntityManager = ({ title, endpoint, fields }) => {
 
       setLoading(true);
       try {
-        const response = await get(endpoint);
+        const response = await get(endpoint, {
+          ...(fixedValues || {}),
+          limit: 500,
+        });
         const items = response?.data || [];
         if (!isActive()) return;
         // Принимаем все элементы, даже без ID (они могут появиться после создания)
@@ -171,7 +176,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
         setLoading(false);
       }
     },
-    [endpoint, get, logger]
+    [endpoint, get, logger, fixedValues]
   );
 
   const runKitCalculations = async () => {
@@ -243,6 +248,24 @@ const EntityManager = ({ title, endpoint, fields }) => {
       loadColors();
     }
   }, [normalizedFields, get]);
+
+  // Загружаем коллекции (бренды), если есть поля типа "collection"
+  useEffect(() => {
+    const hasCollectionFields = normalizedFields.some((f) => f.type === "collection");
+    if (hasCollectionFields && !collectionsLoadedRef.current) {
+      const loadCollections = async () => {
+        try {
+          const response = await get("/collections", { limit: 500, isActive: true });
+          setCollections(Array.isArray(response?.data) ? response.data : []);
+          collectionsLoadedRef.current = true;
+        } catch (error) {
+          logger.error("Не удалось загрузить коллекции", error);
+          setCollections([]);
+        }
+      };
+      loadCollections();
+    }
+  }, [normalizedFields, get, logger]);
 
   // Загружаем модули для комплекта (готовых решений)
   useEffect(() => {
@@ -463,8 +486,8 @@ const EntityManager = ({ title, endpoint, fields }) => {
     }
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
     if (!editingId && heroWorksMedia.requireMediaForCreate && !heroWorksMedia.hasPendingMedia) {
       logger.error("Сначала выберите фотографию");
@@ -477,21 +500,28 @@ const EntityManager = ({ title, endpoint, fields }) => {
       : normalizedFields;
     
     const payload = allFields.reduce((acc, field) => {
-      const rawValue = form[field.name];
+      // пропускаем виртуальные/скрытые поля
+      if (field.virtual) return acc;
       // Пропускаем undefined и пустые строки, но сохраняем 0 для чисел
+      const rawValue = form[field.name];
       if (rawValue === undefined || rawValue === "") return acc;
       acc[field.name] =
         field.type === "number" ? Number(rawValue) : rawValue;
       return acc;
     }, {});
 
+    // Жестко фиксируем значения (например, category_group для вкладок каталога)
+    if (fixedValues && typeof fixedValues === "object") {
+      Object.assign(payload, fixedValues);
+    }
+
     if (!editingId) {
       const missingFields = allFields.filter((field) => {
         if (endpoint === "/module-descriptions" && field.name === "module_category_id") return false;
-        const rawValue = form[field.name];
-        if (rawValue === undefined || rawValue === "") return true;
+        const value = payload[field.name];
+        if (value === undefined || value === "") return true;
         if (field.type === "number") {
-          const n = Number(rawValue);
+          const n = Number(value);
           return !Number.isFinite(n);
         }
         return false;
@@ -700,6 +730,12 @@ const EntityManager = ({ title, endpoint, fields }) => {
       return [];
     }
     
+    if (fixedValues && typeof fixedValues === "object") {
+      filtered = filtered.filter((item) => {
+        return Object.entries(fixedValues).every(([k, v]) => String(item?.[k] ?? "") === String(v ?? ""));
+      });
+    }
+
     // Фильтрация по подтипу модуля
     if (endpoint === "/modules" && filterBaseSku) {
       filtered = filtered.filter((item) => item.base_sku === filterBaseSku);
@@ -722,7 +758,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
     }
     
     return filtered;
-  }, [items, search, normalizedFields, filterBaseSku, selectedModuleCategory]);
+  }, [items, search, normalizedFields, filterBaseSku, selectedModuleCategory, fixedValues, endpoint, filterModuleCategoryId]);
 
   const dragSort = useDragSort({
     endpoint,
@@ -1117,6 +1153,7 @@ const EntityManager = ({ title, endpoint, fields }) => {
           uploadingField={uploadingField}
           availableModuleCategories={availableModuleCategories}
           colors={colors}
+          collections={collections}
           availableModuleDescriptions={availableModuleDescriptions}
           selectedCategoryPrefix={selectedCategoryPrefix}
           sizePresetTabByField={sizePresetTabByField}

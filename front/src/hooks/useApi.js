@@ -6,12 +6,44 @@ import logger from "../services/logger";
 const inFlightGets = new Map();
 const getCache = new Map();
 
+let lastPersistCleanupAt = 0;
+
 const GET_PERSIST_TTL_MS =
   Number(
     (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_GET_CACHE_TTL_MS) ||
       undefined
   ) ||
-  60 * 1000;
+  60 * 60 * 1000;
+
+const cleanupPersistedCache = () => {
+  const now = Date.now();
+  if (now - lastPersistCleanupAt < 10 * 60 * 1000) return;
+  lastPersistCleanupAt = now;
+
+  try {
+    const prefix = "nexaos_get_cache:";
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(prefix)) continue;
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object" || !parsed.ts) {
+          localStorage.removeItem(key);
+          continue;
+        }
+        if (Date.now() - Number(parsed.ts) > GET_PERSIST_TTL_MS) {
+          localStorage.removeItem(key);
+        }
+      } catch {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // ignore
+  }
+};
 
 const getCacheBuster = () => {
   try {
@@ -28,6 +60,7 @@ const buildPersistKey = (key) => {
 
 const readPersisted = (key) => {
   try {
+    cleanupPersistedCache();
     const raw = localStorage.getItem(buildPersistKey(key));
     if (!raw) return null;
     const parsed = JSON.parse(raw);

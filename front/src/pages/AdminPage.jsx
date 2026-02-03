@@ -35,6 +35,36 @@ const adminSections = [
     items: [
       { id: "kitSolutions", label: "Готовые решения", endpoint: "/kit-solutions", special: "kitSolutionCreator" },
       { id: "modules", label: "Модули", endpoint: "/modules", special: "moduleCreator" },
+      { id: "catalogHallwayReady", label: "Прихожая — Готовые прихожие", endpoint: "/catalog-items" },
+      { id: "catalogHallwayWardrobes", label: "Прихожая — Шкафы", endpoint: "/catalog-items" },
+      { id: "catalogHallwayShoeracks", label: "Прихожая — Обувницы", endpoint: "/catalog-items" },
+      { id: "catalogHallwayDressers", label: "Прихожая — Комоды", endpoint: "/catalog-items" },
+      { id: "catalogHallwayWallCabinets", label: "Прихожая — Тумбы подвесные", endpoint: "/catalog-items" },
+      { id: "catalogHallwaySlats", label: "Прихожая — Рейки", endpoint: "/catalog-items" },
+      { id: "catalogHallwayTopCabinets", label: "Прихожая — Верхние шкафы", endpoint: "/catalog-items" },
+      { id: "catalogHallwayAccessories", label: "Прихожая — Аксессуары", endpoint: "/catalog-items" },
+      { id: "catalogHallwayFillers", label: "Прихожая — Доборные элементы", endpoint: "/catalog-items" },
+
+      { id: "catalogLivingroomWalls", label: "Гостиная — Стенки", endpoint: "/catalog-items" },
+      { id: "catalogLivingroomTvZones", label: "Гостиная — ТВ зоны", endpoint: "/catalog-items" },
+      { id: "catalogLivingroomWardrobes", label: "Гостиная — Шкафы", endpoint: "/catalog-items" },
+      { id: "catalogLivingroomShelving", label: "Гостиная — Стеллажи", endpoint: "/catalog-items" },
+      { id: "catalogLivingroomDressers", label: "Гостиная — Комоды", endpoint: "/catalog-items" },
+      { id: "catalogLivingroomWallShelves", label: "Гостиная — Настенные полки", endpoint: "/catalog-items" },
+      { id: "catalogLivingroomCoffeeTables", label: "Гостиная — Журнальные столики", endpoint: "/catalog-items" },
+
+      { id: "kitchenModulesBottom", label: "Кухня — Модули — Нижние", component: "kitchenModulesBottom" },
+      { id: "kitchenModulesTop", label: "Кухня — Модули — Верхние", component: "kitchenModulesTop" },
+      { id: "kitchenModulesMezzanine", label: "Кухня — Модули — Антресольные", component: "kitchenModulesMezzanine" },
+      { id: "kitchenModulesTall", label: "Кухня — Модули — Пеналы", component: "kitchenModulesTall" },
+      { id: "catalogKitchenCountertops", label: "Кухня — Столешницы", endpoint: "/catalog-items" },
+      { id: "catalogKitchenFillers", label: "Кухня — Доборные элементы", endpoint: "/catalog-items" },
+      { id: "catalogKitchenAccessories", label: "Кухня — Аксессуары", endpoint: "/catalog-items" },
+
+      { id: "catalogBedroomSets", label: "Спальня — Комплект мебели", endpoint: "/catalog-items" },
+      { id: "catalogBedroomBeds", label: "Спальня — Кровати", endpoint: "/catalog-items" },
+      { id: "catalogBedroomDressingTables", label: "Спальня — Туалетные столики", endpoint: "/catalog-items" },
+      { id: "catalogBedroomBedside", label: "Спальня — Прикроватные тумбы", endpoint: "/catalog-items" },
       { id: "hardwareExtended", label: "Фурнитура", endpoint: "/hardware-extended" },
     ],
   },
@@ -54,6 +84,7 @@ const adminSections = [
     items: [
       { id: "calculationParameters", label: "Параметры расчета", endpoint: "/calculation-parameters" },
       { id: "materialPrices", label: "Цена материалов", endpoint: "/material-prices" },
+      { id: "collections", label: "Коллекции", endpoint: "/collections" },
       { id: "moduleCategories", label: "Типы модулей", endpoint: "/module-categories" },
       { id: "moduleDescriptions", label: "Подтипы модулей", endpoint: "/module-descriptions", special: "moduleDescriptionCreator" },
       { id: "kitchenTypes", label: "Тип кухни", endpoint: "/kitchen-types" },
@@ -65,21 +96,603 @@ const adminSections = [
 
 // Полные конфигурации для EntityManager (ВСЕ БЕЗ ИЗМЕНЕНИЙ)
 const entityConfigs = {
- colors: {
-  title: "Цвета",
-  endpoint: "/colors",
-  fields: [
-    { name: "name", label: "Название цвета", required: true },
-    { name: "sku", label: "Артикул" },
-    { name: "type", label: "Тип цвета", type: "select", options: [
-      { value: "facade", label: "Фасад (основной)" },
-      { value: "corpus", label: "Корпус (дополнительный)" },
-      { value: "", label: "Универсальный" }
-    ]},
-    { name: "image_url", label: "Фотография", inputType: "image" },
-    { name: "is_active", label: "Активен", type: "checkbox" },
-  ],
-},
+  colors: {
+    title: "Цвета",
+    endpoint: "/colors",
+    fields: [
+      { name: "name", label: "Название цвета", required: true },
+      { name: "sku", label: "Артикул" },
+      { name: "type", label: "Тип цвета", type: "select", options: [
+        { value: "facade", label: "Фасад (основной)" },
+        { value: "corpus", label: "Корпус (дополнительный)" },
+        { value: "", label: "Универсальный" }
+      ]},
+      { name: "image_url", label: "Фотография", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  collections: {
+    title: "Коллекции",
+    endpoint: "/collections",
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "Артикул" },
+      { name: "image_url", label: "Изображение", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+
+  catalogHallwayReady: {
+    title: "Каталог — Прихожая — Готовые прихожие",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Готовые прихожие" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallwayWardrobes: {
+    title: "Каталог — Прихожая — Шкафы",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Шкафы" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallwayShoeracks: {
+    title: "Каталог — Прихожая — Обувницы",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Обувницы" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallwayDressers: {
+    title: "Каталог — Прихожая — Комоды",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Комоды" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallwayWallCabinets: {
+    title: "Каталог — Прихожая — Тумбы подвесные",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Тумбы подвесные" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallwaySlats: {
+    title: "Каталог — Прихожая — Рейки",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Рейки" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallwayTopCabinets: {
+    title: "Каталог — Прихожая — Верхние шкафы",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Верхние шкафы" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallwayAccessories: {
+    title: "Каталог — Прихожая — Аксессуары",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Аксессуары для прихожей" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallwayFillers: {
+    title: "Каталог — Прихожая — Доборные элементы",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая", category: "Доборные элементы" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+
+  catalogLivingroomWalls: {
+    title: "Каталог — Гостиная — Стенки",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Гостиная", category: "Стенки для гостиной" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogLivingroomTvZones: {
+    title: "Каталог — Гостиная — ТВ зоны",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Гостиная", category: "ТВ зоны" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogLivingroomWardrobes: {
+    title: "Каталог — Гостиная — Шкафы",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Гостиная", category: "Шкафы" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogLivingroomShelving: {
+    title: "Каталог — Гостиная — Стеллажи",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Гостиная", category: "Стеллажи" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogLivingroomDressers: {
+    title: "Каталог — Гостиная — Комоды",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Гостиная", category: "Комоды" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogLivingroomWallShelves: {
+    title: "Каталог — Гостиная — Настенные полки",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Гостиная", category: "Настенные полки" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogLivingroomCoffeeTables: {
+    title: "Каталог — Гостиная — Журнальные столики",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Гостиная", category: "Журнальные столики" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+
+  catalogKitchenReady: {
+    title: "Каталог — Кухня — Готовые кухни",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Кухня", category: "Готовые кухни" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogKitchenCountertops: {
+    title: "Каталог — Кухня — Столешницы",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Кухня", category: "Столешницы" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogKitchenFillers: {
+    title: "Каталог — Кухня — Доборные элементы",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Кухня", category: "Доборные элементы" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogKitchenAccessories: {
+    title: "Каталог — Кухня — Аксессуары",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Кухня", category: "Аксессуары для кухни" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+
+  catalogBedroomSets: {
+    title: "Каталог — Спальня — Комплект мебели",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Спальня", category: "Комплект мебели для спальни" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogBedroomBeds: {
+    title: "Каталог — Спальня — Кровати",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Спальня", category: "Кровати" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogBedroomDressingTables: {
+    title: "Каталог — Спальня — Туалетные столики",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Спальня", category: "Туалетные столики" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogBedroomBedside: {
+    title: "Каталог — Спальня — Прикроватные тумбы",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Спальня", category: "Прикроватные тумбы" },
+    fields: [
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogHallway: {
+    title: "Каталог — Прихожая",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Прихожая" },
+    fields: [
+      { name: "category_group", label: "Группа", required: true },
+      { name: "category", label: "Категория" },
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogLivingroom: {
+    title: "Каталог — Гостиная",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Гостиная" },
+    fields: [
+      { name: "category_group", label: "Группа", required: true },
+      { name: "category", label: "Категория" },
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogKitchen: {
+    title: "Каталог — Кухня",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Кухня" },
+    fields: [
+      { name: "category_group", label: "Группа", required: true },
+      { name: "category", label: "Категория" },
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
+  catalogBedroom: {
+    title: "Каталог — Спальня",
+    endpoint: "/catalog-items",
+    fixedValues: { category_group: "Спальня" },
+    fields: [
+      { name: "category_group", label: "Группа", required: true },
+      { name: "category", label: "Категория" },
+      { name: "name", label: "Название", required: true },
+      { name: "sku", label: "SKU" },
+      { name: "description", label: "Описание" },
+      { name: "collection_id", label: "Коллекция", type: "collection" },
+      { name: "primary_color_id", label: "Основной цвет", type: "color" },
+      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
+      { name: "length_mm", label: "Длина (мм)", type: "number" },
+      { name: "depth_mm", label: "Глубина (мм)", type: "number" },
+      { name: "height_mm", label: "Высота (мм)", type: "number" },
+      { name: "base_price", label: "Базовая цена", type: "number" },
+      { name: "final_price", label: "Итоговая цена", type: "number" },
+      { name: "preview_url", label: "Превью", inputType: "image" },
+      { name: "is_active", label: "Активен", type: "checkbox" },
+    ],
+  },
   moduleCategories: {
     title: "Типы модулей",
     endpoint: "/module-categories",
@@ -264,11 +877,25 @@ const AdminPage = () => {
     content: false,
     other: false,
   });
+  const [expandedCatalogGroups, setExpandedCatalogGroups] = useState({
+    hallway: false,
+    livingroom: false,
+    kitchen: false,
+    kitchenModules: false,
+    bedroom: false,
+  });
 
   const toggleSection = (sectionId) => {
     setExpandedSections((prev) => ({
       ...prev,
       [sectionId]: !prev[sectionId],
+    }));
+  };
+
+  const toggleCatalogGroup = (groupId) => {
+    setExpandedCatalogGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
     }));
   };
 
@@ -283,6 +910,12 @@ const AdminPage = () => {
   const isModuleCreator = currentItem?.special === "moduleCreator";
   const isKitSolutionCreator = currentItem?.special === "kitSolutionCreator";
   const isModuleDescriptionCreator = currentItem?.special === "moduleDescriptionCreator";
+  const isKitchenModuleTab = [
+    "kitchenModulesBottom",
+    "kitchenModulesTop",
+    "kitchenModulesMezzanine",
+    "kitchenModulesTall",
+  ].includes(activeTab);
 
   return (
     <div className="shop-container py-12 space-y-6">
@@ -331,19 +964,232 @@ const AdminPage = () => {
                   </button>
                   {isExpanded && (
                     <div className="ml-8 space-y-1 animate-in slide-in-from-left duration-300">
-                      {section.items.map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => handleTabClick(item.id, { sectionId: section.id })}
-                          className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                            activeTab === item.id
-                              ? "bg-accent text-white font-semibold shadow-md scale-[1.02] translate-y-[-1px]"
-                              : "text-night-600 hover:bg-night-50 hover:shadow-sm hover:translate-x-1"
-                          }`}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
+                      {section.id === "catalog" ? (
+                        <div className="space-y-1">
+                          <button
+                            onClick={() => toggleCatalogGroup("hallway")}
+                            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                              expandedCatalogGroups.hallway ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                            }`}
+                          >
+                            <span>Прихожая</span>
+                            {expandedCatalogGroups.hallway ? (
+                              <FaChevronDown className="text-[10px] transition-transform rotate-180" />
+                            ) : (
+                              <FaChevronRight className="text-[10px]" />
+                            )}
+                          </button>
+                          {expandedCatalogGroups.hallway && (
+                            <div className="ml-4 space-y-1">
+                              {[
+                                { id: "catalogHallwayReady", label: "Готовые прихожие" },
+                                { id: "catalogHallwayWardrobes", label: "Шкафы" },
+                                { id: "catalogHallwayShoeracks", label: "Обувницы" },
+                                { id: "catalogHallwayDressers", label: "Комоды" },
+                                { id: "catalogHallwayWallCabinets", label: "Тумбы подвесные" },
+                                { id: "catalogHallwaySlats", label: "Рейки" },
+                                { id: "catalogHallwayTopCabinets", label: "Верхние шкафы" },
+                                { id: "catalogHallwayAccessories", label: "Аксессуары для прихожей" },
+                                { id: "catalogHallwayFillers", label: "Доборные элементы" },
+                              ].map((item) => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => handleTabClick(item.id, { sectionId: section.id })}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                                    activeTab === item.id
+                                      ? "bg-accent text-white font-semibold shadow-md"
+                                      : "text-night-600 hover:bg-night-50 hover:shadow-sm"
+                                  }`}
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => toggleCatalogGroup("livingroom")}
+                            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                              expandedCatalogGroups.livingroom ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                            }`}
+                          >
+                            <span>Гостиная</span>
+                            {expandedCatalogGroups.livingroom ? (
+                              <FaChevronDown className="text-[10px] transition-transform rotate-180" />
+                            ) : (
+                              <FaChevronRight className="text-[10px]" />
+                            )}
+                          </button>
+                          {expandedCatalogGroups.livingroom && (
+                            <div className="ml-4 space-y-1">
+                              {[
+                                { id: "catalogLivingroomWalls", label: "Стенки для гостиной" },
+                                { id: "catalogLivingroomTvZones", label: "ТВ зоны" },
+                                { id: "catalogLivingroomWardrobes", label: "Шкафы" },
+                                { id: "catalogLivingroomShelving", label: "Стеллажи" },
+                                { id: "catalogLivingroomDressers", label: "Комоды" },
+                                { id: "catalogLivingroomWallShelves", label: "Настенные полки" },
+                                { id: "catalogLivingroomCoffeeTables", label: "Журнальные столики" },
+                              ].map((item) => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => handleTabClick(item.id, { sectionId: section.id })}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                                    activeTab === item.id
+                                      ? "bg-accent text-white font-semibold shadow-md"
+                                      : "text-night-600 hover:bg-night-50 hover:shadow-sm"
+                                  }`}
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => toggleCatalogGroup("kitchen")}
+                            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                              expandedCatalogGroups.kitchen ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                            }`}
+                          >
+                            <span>Кухня</span>
+                            {expandedCatalogGroups.kitchen ? (
+                              <FaChevronDown className="text-[10px] transition-transform rotate-180" />
+                            ) : (
+                              <FaChevronRight className="text-[10px]" />
+                            )}
+                          </button>
+                          {expandedCatalogGroups.kitchen && (
+                            <div className="ml-4 space-y-1">
+                              <button
+                                onClick={() => handleTabClick("kitSolutions", { sectionId: section.id })}
+                                className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                                  activeTab === "kitSolutions"
+                                    ? "bg-accent text-white font-semibold shadow-md"
+                                    : "text-night-600 hover:bg-night-50 hover:shadow-sm"
+                                }`}
+                              >
+                                Готовые решения
+                              </button>
+
+                              <button
+                                onClick={() => toggleCatalogGroup("kitchenModules")}
+                                className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                                  expandedCatalogGroups.kitchenModules ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                                }`}
+                              >
+                                <span>Модули</span>
+                                {expandedCatalogGroups.kitchenModules ? (
+                                  <FaChevronDown className="text-[10px] transition-transform rotate-180" />
+                                ) : (
+                                  <FaChevronRight className="text-[10px]" />
+                                )}
+                              </button>
+                              {expandedCatalogGroups.kitchenModules && (
+                                <div className="ml-4 space-y-1">
+                                  {[
+                                    { id: "kitchenModulesBottom", label: "Нижние модули" },
+                                    { id: "kitchenModulesTop", label: "Верхние модули" },
+                                    { id: "kitchenModulesMezzanine", label: "Антресольные модули" },
+                                    { id: "kitchenModulesTall", label: "Пеналы" },
+                                  ].map((item) => (
+                                    <button
+                                      key={item.id}
+                                      onClick={() => handleTabClick(item.id, { sectionId: section.id })}
+                                      className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                                        activeTab === item.id
+                                          ? "bg-accent text-white font-semibold shadow-md"
+                                          : "text-night-600 hover:bg-night-50 hover:shadow-sm"
+                                      }`}
+                                    >
+                                      {item.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+
+                              {[
+                                { id: "catalogKitchenCountertops", label: "Столешницы" },
+                                { id: "catalogKitchenFillers", label: "Доборные элементы" },
+                                { id: "catalogKitchenAccessories", label: "Аксессуары для кухни" },
+                              ].map((item) => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => handleTabClick(item.id, { sectionId: section.id })}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                                    activeTab === item.id
+                                      ? "bg-accent text-white font-semibold shadow-md"
+                                      : "text-night-600 hover:bg-night-50 hover:shadow-sm"
+                                  }`}
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => toggleCatalogGroup("bedroom")}
+                            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                              expandedCatalogGroups.bedroom ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                            }`}
+                          >
+                            <span>Спальня</span>
+                            {expandedCatalogGroups.bedroom ? (
+                              <FaChevronDown className="text-[10px] transition-transform rotate-180" />
+                            ) : (
+                              <FaChevronRight className="text-[10px]" />
+                            )}
+                          </button>
+                          {expandedCatalogGroups.bedroom && (
+                            <div className="ml-4 space-y-1">
+                              {[
+                                { id: "catalogBedroomSets", label: "Комплект мебели для спальни" },
+                                { id: "catalogBedroomBeds", label: "Кровати" },
+                                { id: "catalogBedroomDressingTables", label: "Туалетные столики" },
+                                { id: "catalogBedroomBedside", label: "Прикроватные тумбы" },
+                              ].map((item) => (
+                                <button
+                                  key={item.id}
+                                  onClick={() => handleTabClick(item.id, { sectionId: section.id })}
+                                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                                    activeTab === item.id
+                                      ? "bg-accent text-white font-semibold shadow-md"
+                                      : "text-night-600 hover:bg-night-50 hover:shadow-sm"
+                                  }`}
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => handleTabClick("hardwareExtended", { sectionId: section.id })}
+                            className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                              activeTab === "hardwareExtended"
+                                ? "bg-accent text-white font-semibold shadow-md scale-[1.02] translate-y-[-1px]"
+                                : "text-night-600 hover:bg-night-50 hover:shadow-sm hover:translate-x-1"
+                            }`}
+                          >
+                            Фурнитура
+                          </button>
+                        </div>
+                      ) : (
+                        section.items.map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => handleTabClick(item.id, { sectionId: section.id })}
+                            className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                              activeTab === item.id
+                                ? "bg-accent text-white font-semibold shadow-md scale-[1.02] translate-y-[-1px]"
+                                : "text-night-600 hover:bg-night-50 hover:shadow-sm hover:translate-x-1"
+                            }`}
+                          >
+                            {item.label}
+                          </button>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
@@ -356,6 +1202,19 @@ const AdminPage = () => {
         <div className="lg:col-span-3">
           {/* Заказы */}
           {activeTab === "orders" && <OrdersTable />}
+
+          {activeTab === "kitchenModulesBottom" && (
+            <ModulesAdmin title="Кухня — Модули — Нижние" fixedModuleCategoryId={1} />
+          )}
+          {activeTab === "kitchenModulesTop" && (
+            <ModulesAdmin title="Кухня — Модули — Верхние" fixedModuleCategoryId={2} />
+          )}
+          {activeTab === "kitchenModulesMezzanine" && (
+            <ModulesAdmin title="Кухня — Модули — Антресольные" fixedModuleCategoryId={2} />
+          )}
+          {activeTab === "kitchenModulesTall" && (
+            <ModulesAdmin title="Кухня — Модули — Пеналы" fixedModuleCategoryId={3} />
+          )}
           
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ МОДУЛЕЙ */}
           {isModuleCreator && <ModulesAdmin />}
@@ -367,7 +1226,7 @@ const AdminPage = () => {
           {isModuleDescriptionCreator && <ModuleDescriptionsAdmin />}
           
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
-          {entityConfig && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && (
+          {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && (
             <EntityManager key={entityConfig.endpoint} {...entityConfig} />
           )}
         </div>

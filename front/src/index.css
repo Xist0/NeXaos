@@ -87,4 +87,33 @@
   .toast--success {
     @apply border-green-200 text-green-600;
   }
+
+  .btn-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: -40% -60%;
+    background: linear-gradient(120deg, transparent 40%, rgba(255, 255, 255, 0.55) 50%, transparent 60%);
+    transform: translateX(-60%) rotate(8deg);
+    animation: btnShimmer 2.2s linear infinite;
+    pointer-events: none;
+  }
+
+  @keyframes btnShimmer {
+    0% {
+      transform: translateX(-60%) rotate(8deg);
+      opacity: 0.25;
+    }
+    40% {
+      opacity: 0.6;
+    }
+    100% {
+      transform: translateX(60%) rotate(8deg);
+      opacity: 0.25;
+    }
+  }
 }

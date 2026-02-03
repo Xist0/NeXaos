@@ -9,6 +9,7 @@ import ColorBadge from "../components/ui/ColorBadge";
 import FavoriteButton from "../components/ui/FavoriteButton";
 import useLogger from "../hooks/useLogger";
 import { getImageUrl, placeholderImage } from "../utils/image";
+import ProductGallery from "../components/ui/ProductGallery";
 
 const KitSolutionPage = () => {
   const { id } = useParams();
@@ -23,6 +24,12 @@ const KitSolutionPage = () => {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [similarItems, setSimilarItems] = useState([]);
   const [similarLoading, setSimilarLoading] = useState(false);
+
+  const sizeRowRef = useRef(null);
+  const colorRowRef = useRef(null);
+  const [sizeRowScroll, setSizeRowScroll] = useState({ canLeft: false, canRight: false, hasOverflow: false });
+  const [colorRowScroll, setColorRowScroll] = useState({ canLeft: false, canRight: false, hasOverflow: false });
+  const [variantsModalOpen, setVariantsModalOpen] = useState(false);
 
   const similarRequestRef = useRef({ inFlight: false, lastForId: null });
 
@@ -73,12 +80,64 @@ const KitSolutionPage = () => {
     };
   }, [id, navigate]);
 
-  const mainImage = useMemo(() => {
-    if (Array.isArray(images) && images.length > 0) {
-      return getImageUrl(images[selectedImageIndex]?.url);
+  // NOTE: we intentionally keep rows left-aligned on first render (no auto-centering)
+
+  const updateRowScrollState = useCallback((rowRef, setState) => {
+    const el = rowRef.current;
+    if (!el) return;
+    const maxScrollLeft = Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+    const left = el.scrollLeft || 0;
+    const epsilon = 2;
+    const hasOverflow = maxScrollLeft > epsilon;
+    setState({
+      hasOverflow,
+      canLeft: hasOverflow && left > epsilon,
+      canRight: hasOverflow && left < maxScrollLeft - epsilon,
+    });
+  }, []);
+
+  const scrollByRow = useCallback(
+    (rowRef, setState, delta) => {
+      const el = rowRef.current;
+      if (!el) return;
+      el.scrollBy({ left: delta, behavior: "smooth" });
+      requestAnimationFrame(() => updateRowScrollState(rowRef, setState));
+      setTimeout(() => updateRowScrollState(rowRef, setState), 180);
+    },
+    [updateRowScrollState]
+  );
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      updateRowScrollState(sizeRowRef, setSizeRowScroll);
+      updateRowScrollState(colorRowRef, setColorRowScroll);
+    });
+
+    const sizeEl = sizeRowRef.current;
+    const colorEl = colorRowRef.current;
+    if (!sizeEl && !colorEl) return;
+
+    let ro = null;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(() => {
+        updateRowScrollState(sizeRowRef, setSizeRowScroll);
+        updateRowScrollState(colorRowRef, setColorRowScroll);
+      });
+      if (sizeEl) ro.observe(sizeEl);
+      if (colorEl) ro.observe(colorEl);
     }
-    return getImageUrl(kit?.preview_url);
-  }, [images, selectedImageIndex, kit?.preview_url]);
+
+    const onWindowResize = () => {
+      updateRowScrollState(sizeRowRef, setSizeRowScroll);
+      updateRowScrollState(colorRowRef, setColorRowScroll);
+    };
+    window.addEventListener("resize", onWindowResize);
+
+    return () => {
+      window.removeEventListener("resize", onWindowResize);
+      if (ro) ro.disconnect();
+    };
+  }, [updateRowScrollState, kit?.id, similarItems.length]);
 
   const handleAddToCart = () => {
     if (!kit) return;
@@ -129,6 +188,25 @@ const KitSolutionPage = () => {
     }
   }, [id, similarItems.length]);
 
+  const variantItems = useMemo(() => {
+    const list = [kit, ...(Array.isArray(similarItems) ? similarItems : [])].filter(Boolean);
+    const unique = new Map();
+    list.forEach((x) => {
+      if (!x?.id) return;
+      unique.set(String(x.id), x);
+    });
+    const arr = Array.from(unique.values());
+    arr.sort((a, b) => {
+      const as = String(a?.sku || "");
+      const bs = String(b?.sku || "");
+      if (as && bs) return as.localeCompare(bs, "ru");
+      if (as) return -1;
+      if (bs) return 1;
+      return Number(a?.id || 0) - Number(b?.id || 0);
+    });
+    return arr;
+  }, [kit, similarItems]);
+
   useEffect(() => {
     if (!id) return;
     loadSimilar();
@@ -143,6 +221,27 @@ const KitSolutionPage = () => {
     if (!kit?.secondary_color_name) return null;
     return { name: kit.secondary_color_name, image_url: kit.secondary_color_image };
   }, [kit?.secondary_color_name, kit?.secondary_color_image]);
+
+  const fullCharacteristics = useMemo(() => {
+    const list = [];
+    if (!kit) return list;
+
+    if (kit.sku) list.push({ label: "Артикул", value: String(kit.sku) });
+    if (kit.category_group) list.push({ label: "Категория", value: String(kit.category_group) });
+    if (kit.category) list.push({ label: "Подкатегория", value: String(kit.category) });
+
+    if (kit.primary_color_name) list.push({ label: "Цвет (основной)", value: String(kit.primary_color_name) });
+    if (kit.secondary_color_name) list.push({ label: "Цвет (доп.)", value: String(kit.secondary_color_name) });
+
+    if (kit.total_length_mm) list.push({ label: "Длина", value: `${kit.total_length_mm} мм` });
+    if (kit.total_depth_mm) list.push({ label: "Глубина", value: `${kit.total_depth_mm} мм` });
+    if (kit.total_height_mm) list.push({ label: "Высота", value: `${kit.total_height_mm} мм` });
+
+    if (kit.base_price) list.push({ label: "Базовая цена", value: formatCurrency(kit.base_price) });
+    if (kit.final_price) list.push({ label: "Итоговая цена", value: formatCurrency(kit.final_price) });
+
+    return list;
+  }, [kit]);
 
   if (loading) {
     return <div className="shop-container py-12"><div className="glass-card p-6 text-night-500">Загружаем...</div></div>;
@@ -160,106 +259,239 @@ const KitSolutionPage = () => {
         <span className="font-medium">{kit.name}</span>
       </nav>
 
-      <div className="grid gap-8 lg:gap-12 lg:grid-cols-2 mb-12">
-        <div className="space-y-4">
-          <div className="relative aspect-[4/3] bg-night-50 rounded-2xl overflow-hidden border border-night-200 group shadow-lg">
-            <button
-              type="button"
-              onClick={handleFindSimilar}
-              className="absolute right-4 top-4 z-20 rounded-full bg-white/90 hover:bg-white shadow-lg px-4 py-2 text-xs font-semibold text-night-700 hover:text-accent transition"
-            >
-              Похожие
-            </button>
-            <img
-              src={mainImage}
-              alt={kit.name}
-              className="w-full h-full object-contain p-6 transition-all group-hover:p-4 lg:p-8"
-              crossOrigin="anonymous"
-              onError={(e) => { if (e.target.src !== placeholderImage) e.target.src = placeholderImage; }}
-              loading="eager"
-            />
+      <div className="grid gap-8 lg:gap-10 lg:grid-cols-[540px_minmax(0,1fr)_320px] lg:items-start mb-8 sm:mb-12">
+        <ProductGallery
+          title={kit.name}
+          images={images}
+          selectedIndex={selectedImageIndex}
+          onSelect={setSelectedImageIndex}
+          onOpenSimilar={handleFindSimilar}
+          showSimilarButton
+          isNew={false}
+          getImageUrl={getImageUrl}
+          className="lg:self-start"
+        />
 
-            {images.length > 1 && (
-              <>
-                <button
-                  onClick={() =>
-                    setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1))
-                  }
-                  className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white shadow-lg rounded-full p-2 opacity-0 group-hover:opacity-100 transition-all z-20"
-                  aria-label="Предыдущее"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() =>
-                    setSelectedImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0))
-                  }
-                  className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white shadow-lg rounded-full p-2 opacity-0 group-hover:opacity-100 transition-all z-20"
-                  aria-label="Следующее"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </>
-            )}
-          </div>
+        {/* Центр: варианты + характеристики */}
+        <div className="space-y-4 sm:space-y-6 lg:pt-0 lg:self-start min-w-0">
+          {variantItems.length > 1 && (
+            <div>
+              {(() => {
+                const selectedSize = kit?.total_length_mm ? Number(kit.total_length_mm) : null;
+                const selectedColor = kit?.primary_color_name || kit?.primary_color?.name || "";
 
-          {images.length > 1 && (
-            <div className="grid grid-cols-5 gap-2 px-1">
-              {images.map((img, index) => (
-                <button
-                  key={img.id || index}
-                  onClick={() => setSelectedImageIndex(index)}
-                  className={`aspect-square rounded-xl overflow-hidden border-2 transition-all ${
-                    selectedImageIndex === index
-                      ? "border-accent shadow-md ring-2 ring-accent/50 scale-105"
-                      : "border-night-200 hover:border-night-300 hover:scale-105"
-                  }`}
-                >
-                  <img
-                    src={getImageUrl(img.url)}
-                    alt={`${kit.name} ${index + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </button>
-              ))}
+                const sizes = Array.from(
+                  new Set(
+                    variantItems
+                      .map((v) => (v.total_length_mm ? Number(v.total_length_mm) : null))
+                      .filter((x) => x !== null)
+                  )
+                ).sort((a, b) => a - b);
+
+                const colors = Array.from(
+                  new Map(
+                    variantItems.map((v) => {
+                      const label = v.primary_color_name || v.primary_color?.name || "";
+                      const imgUrl = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
+                      return [label || String(v.id), { label, imgUrl, sample: v }];
+                    })
+                  ).values()
+                );
+
+                const scrollToCenterSmooth = (container, target) => {
+                  if (!container || !target) return;
+                  const left = target.offsetLeft - (container.clientWidth - target.clientWidth) / 2;
+                  container.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+                };
+
+                return (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <div className="text-night-500 text-sm">
+                        Выбран размер: <span className="text-night-900 font-medium">{selectedSize ? `${Math.round(selectedSize / 10)} см` : "—"}</span>
+                      </div>
+                      <div className="relative overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => scrollByRow(sizeRowRef, setSizeRowScroll, -260)}
+                          className={`hidden sm:flex absolute left-1 top-1/2 -translate-y-1/2 z-10 w-8 h-8 items-center justify-center rounded-full bg-white/95 border border-night-200 shadow-sm hover:shadow-md ${
+                            sizeRowScroll.hasOverflow && sizeRowScroll.canLeft ? "" : "sm:hidden"
+                          }`}
+                          aria-label="Размеры: влево"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollByRow(sizeRowRef, setSizeRowScroll, 260)}
+                          className={`hidden sm:flex absolute right-1 top-1/2 -translate-y-1/2 z-10 w-8 h-8 items-center justify-center rounded-full bg-white/95 border border-night-200 shadow-sm hover:shadow-md ${
+                            sizeRowScroll.hasOverflow && sizeRowScroll.canRight ? "" : "sm:hidden"
+                          }`}
+                          aria-label="Размеры: вправо"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+
+                        <div
+                          ref={sizeRowRef}
+                          onScroll={() => updateRowScrollState(sizeRowRef, setSizeRowScroll)}
+                          className="flex gap-2 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth px-1"
+                          style={{ scrollbarWidth: "none" }}
+                        >
+                        {sizes.map((len) => {
+                          const isActive = selectedSize !== null && Number(selectedSize) === Number(len);
+                          return (
+                            <button
+                              key={len}
+                              type="button"
+                              data-size={len}
+                              onClick={(e) => {
+                                const currentColor = selectedColor;
+                                const candidates = variantItems.filter((v) => Number(v.total_length_mm) === Number(len));
+                                const next =
+                                  candidates.find((v) => (v.primary_color_name || v.primary_color?.name || "") === currentColor) ||
+                                  candidates[0];
+                                if (!next || String(next.id) === String(kit.id)) return;
+                                scrollToCenterSmooth(sizeRowRef.current, e.currentTarget);
+                                navigate(`/catalog/kit/${next.id}`);
+                              }}
+                              className={`snap-center flex-shrink-0 w-[88px] h-12 rounded-xl border text-lg font-medium transition ${
+                                isActive ? "border-accent text-accent bg-accent/5" : "border-night-200 hover:border-night-300"
+                              }`}
+                            >
+                              {Math.round(Number(len) / 10)}
+                            </button>
+                          );
+                        })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-night-500 text-sm">
+                        Выбран цвет: <span className="text-night-900 font-medium">{selectedColor || "—"}</span>
+                      </div>
+                      <div className="relative overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => scrollByRow(colorRowRef, setColorRowScroll, -260)}
+                          className={`hidden sm:flex absolute left-1 top-1/2 -translate-y-1/2 z-10 w-8 h-8 items-center justify-center rounded-full bg-white/95 border border-night-200 shadow-sm hover:shadow-md ${
+                            colorRowScroll.hasOverflow && colorRowScroll.canLeft ? "" : "sm:hidden"
+                          }`}
+                          aria-label="Цвета: влево"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => scrollByRow(colorRowRef, setColorRowScroll, 260)}
+                          className={`hidden sm:flex absolute right-1 top-1/2 -translate-y-1/2 z-10 w-8 h-8 items-center justify-center rounded-full bg-white/95 border border-night-200 shadow-sm hover:shadow-md ${
+                            colorRowScroll.hasOverflow && colorRowScroll.canRight ? "" : "sm:hidden"
+                          }`}
+                          aria-label="Цвета: вправо"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+
+                        <div
+                          ref={colorRowRef}
+                          onScroll={() => updateRowScrollState(colorRowRef, setColorRowScroll)}
+                          className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth px-1"
+                          style={{ scrollbarWidth: "none" }}
+                        >
+                        {colors.map(({ label, imgUrl, sample }) => {
+                          const isActive = Boolean(selectedColor) && selectedColor === label;
+                          const safeLabel = encodeURIComponent(label || String(sample?.id || ""));
+                          return (
+                            <button
+                              key={label || sample?.id}
+                              type="button"
+                              data-color={safeLabel}
+                              onClick={(e) => {
+                                const currentLen = selectedSize !== null ? Number(selectedSize) : null;
+                                const candidates = currentLen
+                                  ? variantItems.filter((x) => Number(x.total_length_mm) === Number(currentLen))
+                                  : variantItems;
+                                const next =
+                                  candidates.find((x) => (x.primary_color_name || x.primary_color?.name || "") === label) ||
+                                  variantItems.find((x) => (x.primary_color_name || x.primary_color?.name || "") === label) ||
+                                  sample;
+                                if (!next || String(next.id) === String(kit.id)) return;
+                                scrollToCenterSmooth(colorRowRef.current, e.currentTarget);
+                                navigate(`/catalog/kit/${next.id}`);
+                              }}
+                              className={`snap-center flex-shrink-0 rounded-xl border bg-white transition p-1 ${
+                                isActive ? "border-accent ring-2 ring-accent/40" : "border-night-200 hover:border-night-300"
+                              }`}
+                              aria-label={label || "Цвет"}
+                              title={label || ""}
+                            >
+                              <div className="w-11 h-14 rounded-md overflow-hidden">
+                                {imgUrl ? (
+                                  <img
+                                    src={getImageUrl(imgUrl)}
+                                    alt={label || kit.name}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                    decoding="async"
+                                  />
+                                ) : null}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => setVariantsModalOpen(true)}
+                        className="text-xs font-semibold text-night-500 hover:text-accent hover:underline"
+                      >
+                        Показать больше
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
-        </div>
-
-        <div className="space-y-6 lg:pt-4">
-          <div>
-            <div className="flex items-start justify-between gap-4">
-              <h1 className="text-4xl font-bold text-night-900 mb-3 leading-tight">{kit.name}</h1>
-              <FavoriteButton product={{ ...kit, __type: 'kitSolution' }} className="flex-shrink-0 mt-2" />
-            </div>
-            {kit.sku && <p className="text-sm text-night-500">Артикул: <span className="font-medium text-night-700">{kit.sku}</span></p>}
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-baseline gap-2 bg-night-50 rounded-xl p-4 border border-night-200">
-              <span className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-accent to-accent-dark bg-clip-text text-transparent">
-                {formatCurrency(kit.final_price || 0)}
-              </span>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <SecureButton
-                onClick={handleAddToCart}
-                className="flex-1 h-12 text-base bg-gradient-to-r from-accent to-accent-dark hover:from-accent-dark hover:to-accent text-white font-semibold shadow-lg hover:shadow-xl rounded-xl"
-              >
-                В корзину
-              </SecureButton>
-            </div>
-          </div>
 
           {(kit.total_length_mm || kit.total_depth_mm || kit.total_height_mm || kit.primary_color_name || kit.secondary_color_name) && (
             <div className="glass-card p-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {(kit.total_length_mm || kit.total_depth_mm || kit.total_height_mm) && (
+              <div className="space-y-4">
+                {(kit.primary_color_name || kit.secondary_color_name) && (
                   <div>
+                    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Цвета</div>
+                    <div className="space-y-2">
+                      {primaryColorData && (
+                        <div className="grid grid-cols-[88px_1fr] items-center gap-3">
+                          <span className="text-night-500 text-sm">Основной:</span>
+                          <ColorBadge colorData={primaryColorData} />
+                        </div>
+                      )}
+                      {secondaryColorData && (
+                        <div className="grid grid-cols-[88px_1fr] items-center gap-3">
+                          <span className="text-night-500 text-sm">Доп.:</span>
+                          <ColorBadge colorData={secondaryColorData} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {(kit.total_length_mm || kit.total_depth_mm || kit.total_height_mm) && (
+                  <div className={kit.primary_color_name || kit.secondary_color_name ? "border-t border-night-200 pt-4" : ""}>
                     <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Габариты</div>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
@@ -277,32 +509,107 @@ const KitSolutionPage = () => {
                     </div>
                   </div>
                 )}
-                {(kit.primary_color_name || kit.secondary_color_name) && (
-                  <div>
-                    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Цвета</div>
-                    <div className="flex flex-wrap gap-2">
-                      {primaryColorData && <ColorBadge labelPrefix="Основной:" colorData={primaryColorData} />}
-                      {secondaryColorData && <ColorBadge labelPrefix="Доп.:" colorData={secondaryColorData} />}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
         </div>
+
+        {/* Право: название + цена + действия */}
+        <div className="glass-card p-5 sm:p-6 space-y-4 lg:self-start min-w-0 overflow-hidden">
+          <div className="space-y-2 pt-1">
+            <h1 className="text-xl sm:text-2xl font-bold text-night-900 leading-tight break-words">{kit.name}</h1>
+          </div>
+
+          <div>
+            <span className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-accent to-accent-dark bg-clip-text text-transparent">
+              {formatCurrency(kit.final_price || 0)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <FavoriteButton
+              product={{ ...kit, __type: 'kitSolution' }}
+              className="mt-0 bg-white/90 hover:bg-accent/15 shadow-sm hover:shadow-md border border-night-200 p-1.5"
+            />
+            <SecureButton
+              onClick={handleAddToCart}
+              className="btn-shimmer !h-11 !px-6 !text-base !rounded-xl !bg-gradient-to-r !from-accent !via-accent-dark !to-accent !text-white !font-semibold !shadow-lg hover:!shadow-xl whitespace-nowrap"
+            >
+              В корзину
+            </SecureButton>
+          </div>
+        </div>
       </div>
 
-      <div className="glass-card p-8 mb-12">
-        <h3 className="font-bold text-night-900 mb-4 text-2xl">Описание</h3>
-        <div className="text-night-700 leading-relaxed text-lg whitespace-pre-line">
+      {variantsModalOpen && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setVariantsModalOpen(false)} />
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-4xl max-h-[85vh] overflow-hidden glass-card p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div className="text-lg font-bold text-night-900">Варианты</div>
+              <button type="button" onClick={() => setVariantsModalOpen(false)} className="text-night-500 hover:text-night-900 text-2xl leading-none">&times;</button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {variantItems.map((v) => {
+                  const isActive = String(v.id) === String(kit.id);
+                  const vImg = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
+                  const primaryColorLabel = v.primary_color_name || v.primary_color?.name || "";
+                  const sizeLabel = v.total_length_mm ? String(v.total_length_mm) : "";
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => {
+                        if (isActive) return;
+                        setVariantsModalOpen(false);
+                        navigate(`/catalog/kit/${v.id}`);
+                      }}
+                      className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${isActive ? "border-accent bg-accent/5" : "border-night-200 hover:border-night-300"}`}
+                    >
+                      <div className="w-14 h-16 rounded-lg bg-night-50 overflow-hidden border border-night-200 flex-shrink-0">
+                        {vImg ? (
+                          <img src={getImageUrl(vImg)} alt={v.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
+                        ) : null}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-night-900 truncate">{sizeLabel ? `${sizeLabel} мм` : v.sku || v.name}</div>
+                        <div className="text-xs text-night-500 truncate">{primaryColorLabel || ""}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12">
+        <h3 className="font-bold text-night-900 mb-3 sm:mb-4 text-lg sm:text-2xl">Описание</h3>
+        <div className="text-night-700 leading-relaxed text-base sm:text-lg whitespace-pre-line">
           {kit.description || "Описание не указано"}
         </div>
       </div>
 
+      {fullCharacteristics.length > 0 && (
+        <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12">
+          <h3 className="font-bold text-night-900 mb-3 sm:mb-6 text-lg sm:text-2xl">Характеристики</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {fullCharacteristics.map((row) => (
+              <div key={row.label} className="rounded-xl border border-night-100 bg-white/60 p-4">
+                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">{row.label}</div>
+                <div className="mt-1 text-night-900 font-semibold break-words">{row.value || "—"}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-6 mb-12">
         {compositionSections.length > 0 ? (
-          <div className="glass-card p-8 space-y-6">
-            <h3 className="font-bold text-night-900 text-lg">Компоненты</h3>
+          <div className="glass-card p-4 sm:p-8 space-y-6">
+            <h3 className="font-bold text-night-900 text-base sm:text-lg">Компоненты</h3>
             {compositionSections.map(({ title, items }) => (
               <div key={title} className="space-y-3">
                 <h4 className="text-sm font-semibold text-night-700 uppercase tracking-wide">{title}</h4>
@@ -344,13 +651,13 @@ const KitSolutionPage = () => {
           </div>
         ) : null}
 
-        <div className="glass-card p-8">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <h3 className="font-bold text-night-900 text-2xl">Похожие</h3>
+        <div className="glass-card p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <h3 className="font-bold text-night-900 text-base sm:text-xl">Похожие</h3>
             <SecureButton
               variant="outline"
               onClick={handleFindSimilar}
-              className="text-sm px-4 py-2"
+              className="text-xs sm:text-sm px-3 py-2 w-full sm:w-auto"
             >
               Показать больше
             </SecureButton>
@@ -361,9 +668,9 @@ const KitSolutionPage = () => {
           ) : similarItems.length === 0 ? (
             <div className="text-night-500 text-center py-12">Похожие не найдены</div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4 auto-rows-fr">
               {similarItems.map((product) => (
-                <ProductCard key={product.id} product={{ ...product, __type: "kitSolution" }} onAdd={(item) => addItem(item, 1)} />
+                <ProductCard key={product.id} product={{ ...product, __type: "kitSolution" }} onAdd={(item) => addItem(item, 1)} compact />
               ))}
             </div>
           )}

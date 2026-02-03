@@ -36,6 +36,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
     kitchenTypes: [],
     materials: [],
     colors: [],
+    collections: [],
     modules: [],
     moduleCategories: [],
     isLoaded: false,
@@ -49,6 +50,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
 
     kitchen_type_id: "",
     material_id: "",
+    collection_id: "",
     primary_color_id: "",
     secondary_color_id: "",
 
@@ -92,10 +94,11 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
       if (referenceData.isLoaded) return;
       setLoading(true);
       try {
-        const [kitchenTypesRes, materialsRes, colorsRes, modulesRes, moduleCategoriesRes] = await Promise.all([
+        const [kitchenTypesRes, materialsRes, colorsRes, collectionsRes, modulesRes, moduleCategoriesRes] = await Promise.all([
           getRef.current("/kitchen-types", { limit: 500, isActive: true }),
           getRef.current("/materials", { limit: 500, isActive: true }),
           getRef.current("/colors", { limit: 500, is_active: true }),
+          getRef.current("/collections", { limit: 500, isActive: true }),
           getRef.current("/modules", { limit: 500, isActive: true }),
           getRef.current("/module-categories", { limit: 200 }),
         ]);
@@ -104,6 +107,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
           kitchenTypes: Array.isArray(kitchenTypesRes?.data) ? kitchenTypesRes.data : [],
           materials: Array.isArray(materialsRes?.data) ? materialsRes.data : [],
           colors: Array.isArray(colorsRes?.data) ? colorsRes.data : [],
+          collections: Array.isArray(collectionsRes?.data) ? collectionsRes.data : [],
           modules: Array.isArray(modulesRes?.data) ? modulesRes.data : [],
           moduleCategories: Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [],
           isLoaded: true,
@@ -114,6 +118,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
           kitchenTypes: [],
           materials: [],
           colors: [],
+          collections: [],
           modules: [],
           moduleCategories: [],
           isLoaded: true,
@@ -154,6 +159,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
           description: data.description || "",
           kitchen_type_id: data.kitchen_type_id ?? "",
           material_id: data.material_id ?? "",
+          collection_id: data.collection_id ?? "",
           primary_color_id: data.primary_color_id ?? "",
           secondary_color_id: data.secondary_color_id ?? "",
           total_length_mm: data.total_length_mm != null ? String(data.total_length_mm) : "",
@@ -349,6 +355,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
         description: String(form.description).trim(),
         kitchen_type_id: Number(form.kitchen_type_id) || null,
         material_id: Number(form.material_id) || null,
+        collection_id: form.collection_id ? Number(form.collection_id) : null,
         primary_color_id: Number(form.primary_color_id) || null,
         secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
 
@@ -405,6 +412,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
         description: String(form.description).trim(),
         kitchen_type_id: Number(form.kitchen_type_id) || null,
         material_id: Number(form.material_id) || null,
+        collection_id: form.collection_id ? Number(form.collection_id) : null,
         primary_color_id: Number(form.primary_color_id) || null,
         secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
 
@@ -435,6 +443,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
         description: "",
         kitchen_type_id: "",
         material_id: "",
+        collection_id: "",
         primary_color_id: "",
         secondary_color_id: "",
         total_length_mm: "",
@@ -557,6 +566,25 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
                     #{m.id} {m.name}
                   </option>
                 ))}
+              </select>
+            </label>
+
+            <label className="space-y-2">
+              <div className="text-xs font-semibold text-night-700">Коллекция</div>
+              <select
+                value={form.collection_id}
+                onChange={(e) => setForm((p) => ({ ...p, collection_id: e.target.value }))}
+                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+              >
+                <option value="">Не выбрана</option>
+                {referenceData.collections
+                  .slice()
+                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
               </select>
             </label>
 

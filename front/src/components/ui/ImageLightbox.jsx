@@ -13,13 +13,25 @@ const ImageLightbox = ({ images, startIndex = 0, onClose, getImageUrl }) => {
   }, [images.length]);
 
   useEffect(() => {
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
+
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') handlePrev();
       if (e.key === 'ArrowRight') handleNext();
       if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+    };
   }, [handlePrev, handleNext, onClose]);
 
   if (!images || images.length === 0) {
@@ -29,25 +41,26 @@ const ImageLightbox = ({ images, startIndex = 0, onClose, getImageUrl }) => {
   return (
     <div 
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-md"
-      onClick={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 sm:top-6 sm:right-6 text-white text-4xl leading-none hover:text-night-200 transition-colors"
+        aria-label="Закрыть"
+      >
+        &times;
+      </button>
+
       <div 
-        className="relative w-full h-full max-w-4xl max-h-[90vh] flex flex-col items-center justify-center"
-        onClick={e => e.stopPropagation()}
+        className="relative max-w-5xl max-h-[90vh] flex flex-col items-center justify-center px-4"
       >
         <img
           src={getImageUrl(images[currentIndex].url)}
           alt={`Изображение ${currentIndex + 1}`}
           className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
         />
-
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white text-4xl hover:text-night-300 transition-colors"
-          aria-label="Закрыть"
-        >
-          &times;
-        </button>
 
         {images.length > 1 && (
           <>

@@ -39,7 +39,7 @@ const toOptionalString = (value) => {
   return str ? str : undefined;
 };
 
-const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
+const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
   const getRef = useRef(get);
@@ -61,6 +61,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     description_id: null,
     module_category_id: "",
 
+    collection_id: "",
+
     sku: "",
     name: "",
     short_desc: "",
@@ -79,10 +81,26 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
     final_price: ""
   });
 
+  useEffect(() => {
+    if (!fixedModuleCategoryId) return;
+    setForm((prev) => {
+      const next = String(fixedModuleCategoryId);
+      if (String(prev.module_category_id || "") === next) return prev;
+      return {
+        ...prev,
+        module_category_id: next,
+        baseSku: "",
+        description_id: null,
+        sku: "",
+      };
+    });
+  }, [fixedModuleCategoryId]);
+
   const [referenceData, setReferenceData] = useState({
     baseSkus: [],
     colorsFacade: [],
     colorsCorpus: [],
+    collections: [],
     moduleCategories: [],
     isLoaded: false
   });
@@ -115,6 +133,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
           baseSku: data.base_sku || "",
           description_id: data.description_id ?? null,
           module_category_id: data.module_category_id ?? "",
+          collection_id: data.collection_id != null ? String(data.collection_id) : "",
           sku: data.sku || "",
           name: data.name || "",
           short_desc: data.short_desc || "",
@@ -147,10 +166,11 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
       if (referenceData.isLoaded) return;
       setIsLoadingReferences(true);
       try {
-        const [descriptionsRes, allColorsRes, moduleCategoriesRes] = await Promise.all([
+        const [descriptionsRes, allColorsRes, moduleCategoriesRes, collectionsRes] = await Promise.all([
           getRef.current("/module-descriptions", { limit: 200 }),
           getRef.current("/colors", { limit: 500, is_active: true }),
-          getRef.current("/module-categories", { limit: 200 })
+          getRef.current("/module-categories", { limit: 200 }),
+          getRef.current("/collections", { limit: 500, isActive: true })
         ]);
 
         const baseSkus = Array.isArray(descriptionsRes?.data)
@@ -169,7 +189,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         const colorsCorpus = allColors.filter((c) => c.type === "corpus");
 
         const moduleCategories = Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [];
-        setReferenceData({ baseSkus, colorsFacade, colorsCorpus, moduleCategories, isLoaded: true });
+        const collections = Array.isArray(collectionsRes?.data) ? collectionsRes.data : [];
+        setReferenceData({ baseSkus, colorsFacade, colorsCorpus, collections, moduleCategories, isLoaded: true });
       } catch (e) {
         loggerRef.current?.error("Ошибка загрузки справочников:", e);
       } finally {
@@ -327,6 +348,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
 
+        collection_id: toOptionalInt(form.collection_id),
+
         length_mm: toOptionalInt(form.length_mm),
         depth_mm: toOptionalInt(form.depth_mm),
         height_mm: toOptionalInt(form.height_mm),
@@ -403,6 +426,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
 
+        collection_id: toOptionalInt(form.collection_id),
+
         length_mm: toOptionalInt(form.length_mm),
         depth_mm: toOptionalInt(form.depth_mm),
         height_mm: toOptionalInt(form.height_mm),
@@ -427,6 +452,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
         baseSku: "",
         description_id: null,
         module_category_id: "",
+
+        collection_id: "",
         sku: "",
         name: "",
         short_desc: "",
@@ -457,6 +484,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
       baseSku: "",
       description_id: null,
       module_category_id: "",
+
+      collection_id: "",
       sku: "",
       name: "",
       short_desc: "",
@@ -576,21 +605,23 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
             ) : (
               <>
                 <div className="flex items-start gap-4 mb-8">
-                  <button
-                    onClick={() =>
-                      setForm((prev) => ({
-                        ...prev,
-                        module_category_id: "",
-                        baseSku: "",
-                        description_id: null,
-                        sku: "",
-                        name: "",
-                      }))
-                    }
-                    className="flex items-center gap-2 text-night-600 hover:text-night-900 p-3 -m-3 rounded-xl hover:bg-night-100"
-                  >
-                    <FaArrowLeft /> Сменить категорию
-                  </button>
+                  {!fixedModuleCategoryId && (
+                    <button
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          module_category_id: "",
+                          baseSku: "",
+                          description_id: null,
+                          sku: "",
+                          name: "",
+                        }))
+                      }
+                      className="flex items-center gap-2 text-night-600 hover:text-night-900 p-3 -m-3 rounded-xl hover:bg-night-100"
+                    >
+                      <FaArrowLeft /> Сменить категорию
+                    </button>
+                  )}
                   <div className="flex-1 border-b-4 border-accent" />
                 </div>
 
@@ -678,6 +709,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
                     }));
                     setStep(1);
                   }}
+                  disabled={Boolean(fixedModuleCategoryId)}
                   className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
                 >
                   <option value="">Выберите категорию…</option>
@@ -687,6 +719,25 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, onDone }) => {
                     .map((c) => (
                       <option key={c.id} value={String(c.id)}>
                         {c.name}{c.sku_prefix ? ` (${String(c.sku_prefix).toUpperCase()})` : ""}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="mt-6">
+                <label className="block text-sm font-semibold text-night-700 mb-3">Коллекция</label>
+                <select
+                  value={form.collection_id ?? ""}
+                  onChange={(e) => setForm((prev) => ({ ...prev, collection_id: e.target.value }))}
+                  className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
+                >
+                  <option value="">Не выбрана</option>
+                  {(referenceData.collections || [])
+                    .slice()
+                    .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                    .map((c) => (
+                      <option key={c.id} value={String(c.id)}>
+                        {c.name}
                       </option>
                     ))}
                 </select>

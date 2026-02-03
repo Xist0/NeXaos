@@ -6,6 +6,25 @@ const ACCESS_TOKEN_KEY = "nexaos_access_token";
 const USER_KEY = "nexaos_user";
 const CACHE_BUSTER_KEY = "nexaos_cache_buster";
 
+const clearPersistedGetCache = () => {
+  try {
+    const prefix = "nexaos_get_cache:";
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefix)) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // ignore
+  }
+};
+
+const redirectIfOnProtectedRoute = () => {
+  if (typeof window === "undefined") return;
+  window.location.replace("/");
+};
+
 const loadUser = () => {
   try {
     return JSON.parse(localStorage.getItem(USER_KEY) || "null");
@@ -94,6 +113,7 @@ const useAuthStore = create((set, get) => ({
     localStorage.removeItem(ACCESS_TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.setItem(CACHE_BUSTER_KEY, String(Date.now()));
+    clearPersistedGetCache();
     set({
       accessToken: null,
       refreshToken: null,
@@ -101,6 +121,7 @@ const useAuthStore = create((set, get) => ({
       role: ROLES.USER,
       authModalOpen: false,
     });
+    redirectIfOnProtectedRoute();
   },
 
   get token() {

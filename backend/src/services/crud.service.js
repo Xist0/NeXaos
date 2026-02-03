@@ -124,6 +124,39 @@ const list = async (entity, queryParams = {}) => {
     
     sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(safeLimit, safeOffset);
+  } else if (entity.table === "catalog_items") {
+    // Поиск по названию и артикулу
+    if (search) {
+      conditions.push(`(name ILIKE $${params.length + 1} OR sku ILIKE $${params.length + 1})`);
+      params.push(`%${search}%`);
+    }
+
+    if (queryParams.categoryGroup) {
+      conditions.push(`category_group = $${params.length + 1}`);
+      params.push(String(queryParams.categoryGroup));
+    }
+
+    if (queryParams.category) {
+      conditions.push(`category = $${params.length + 1}`);
+      params.push(String(queryParams.category));
+    }
+
+    if (queryParams.collectionId) {
+      conditions.push(`collection_id = $${params.length + 1}`);
+      params.push(parseInt(queryParams.collectionId, 10));
+    }
+
+    if (queryParams.isActive !== undefined) {
+      conditions.push(`is_active = $${params.length + 1}`);
+      params.push(queryParams.isActive === 'true' || queryParams.isActive === true);
+    }
+
+    if (conditions.length > 0) {
+      sql += ` WHERE ${conditions.join(' AND ')}`;
+    }
+
+    sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(safeLimit, safeOffset);
   } else {
     // Для других таблиц
     if (search) {

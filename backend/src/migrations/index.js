@@ -18,5 +18,6 @@ module.exports = [
   require("./017_backfill_module_descriptions_category_id"),
   require("./018_add_type_to_colors"),
   require("./019_create_hero_slides_and_works"),
+  require("./020_create_collections_and_catalog_items"),
 ];
 

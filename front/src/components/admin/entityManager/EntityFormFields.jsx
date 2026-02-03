@@ -12,6 +12,7 @@ const EntityFormFields = ({
   uploadingField,
   availableModuleCategories,
   colors,
+  collections,
   availableModuleDescriptions,
   selectedCategoryPrefix,
   sizePresetTabByField,
@@ -133,6 +134,28 @@ const EntityFormFields = ({
                   return null;
                 })()}
             </div>
+          ) : field.type === "collection" ? (
+            <select
+              value={form[field.name] ?? ""}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  [field.name]: e.target.value ? Number(e.target.value) : "",
+                }))
+              }
+              className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              required={field.required}
+            >
+              <option value="">Не выбрана</option>
+              {(collections || [])
+                .slice()
+                .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
           ) : endpoint === "/modules" && field.name === "description_id" ? (
             <select
               value={form[field.name] ?? ""}

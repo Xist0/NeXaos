@@ -77,6 +77,29 @@
     return payload;
   };
 
+  const normalizeSkuPart = (value) => {
+    const s = String(value || "").trim();
+    return s.replace(/\s+/g, "");
+  };
+
+  const shortColorPartFromSku = (colorSku) => {
+    const lettersOnly = String(colorSku || "")
+      .replace(/[^\p{L}]+/gu, "")
+      .trim();
+    if (!lettersOnly) return "";
+    const part = lettersOnly.slice(0, 3);
+    return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+  };
+
+  const buildAutoSku = ({ baseSku, colorSku, size }) => {
+    const base = normalizeSkuPart(baseSku);
+    const color = normalizeSkuPart(colorSku);
+    const sizePart = normalizeSkuPart(size);
+    if (!base || !color || !sizePart) return null;
+    const own = `${base}${shortColorPartFromSku(color)}${sizePart}`;
+    return `${base}-${color}-${sizePart}-${own}`;
+  };
+
   // Хук для автоматической установки role_id = "user" если не указан
   const userCreateHook = async (payload, req) => {
     // Сначала обрабатываем пароль
@@ -259,6 +282,7 @@
         module_category_id: { type: "integer" },
         base_sku: { type: "string", max: 50 },
         description_id: { type: "integer" },
+        collection_id: { type: "integer" },
         length_mm: { type: "integer" },
         depth_mm: { type: "integer" },
         height_mm: { type: "integer" },
@@ -297,6 +321,38 @@
         margin_pct: { type: "number", precision: 2 },
         final_price: { type: "number", precision: 2 },
         is_active: { type: "boolean" },
+      },
+      beforeCreate: async (payload) => {
+        const next = { ...payload };
+        if (!next.sku) {
+          const baseSku = next.base_sku;
+          const size = next.length_mm;
+          let colorSku = next.facade_color;
+          if (!colorSku && next.primary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.primary_color_id]);
+            colorSku = rows?.[0]?.sku || null;
+          }
+          const generated = buildAutoSku({ baseSku, colorSku, size });
+          if (generated) next.sku = generated;
+        }
+        return next;
+      },
+      beforeUpdate: async (payload) => {
+        const next = { ...payload };
+        const baseSku = next.base_sku;
+        const size = next.length_mm;
+        const hasSkuInPayload = Object.prototype.hasOwnProperty.call(next, "sku") && next.sku;
+
+        if (!hasSkuInPayload && (baseSku || size || next.facade_color || next.primary_color_id)) {
+          let colorSku = next.facade_color;
+          if (!colorSku && next.primary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.primary_color_id]);
+            colorSku = rows?.[0]?.sku || null;
+          }
+          const generated = buildAutoSku({ baseSku, colorSku, size });
+          if (generated) next.sku = generated;
+        }
+        return next;
       },
     },
     {
@@ -561,6 +617,17 @@
       },
     },
     {
+      route: "collections",
+      table: "collections",
+      idColumn: "id",
+      columns: {
+        name: { type: "string", required: true, max: 255 },
+        sku: { type: "string", max: 255, allowNull: true },
+        image_url: { type: "string", allowNull: true },
+        is_active: { type: "boolean" },
+      },
+    },
+    {
       route: "kit-solutions",
       table: "kit_solutions",
       idColumn: "id",
@@ -579,6 +646,29 @@
         base_price: { type: "number", precision: 2 },
         final_price: { type: "number", precision: 2 },
         preview_url: { type: "string", allowNull: true },
+        collection_id: { type: "integer" },
+        is_active: { type: "boolean" },
+      },
+    },
+    {
+      route: "catalog-items",
+      table: "catalog_items",
+      idColumn: "id",
+      columns: {
+        sku: { type: "string", max: 255, allowNull: true },
+        name: { type: "string", required: true, max: 255 },
+        description: { type: "string", allowNull: true },
+        category_group: { type: "string", max: 255, allowNull: true },
+        category: { type: "string", max: 255, allowNull: true },
+        primary_color_id: { type: "integer" },
+        secondary_color_id: { type: "integer" },
+        length_mm: { type: "integer" },
+        depth_mm: { type: "integer" },
+        height_mm: { type: "integer" },
+        base_price: { type: "number", precision: 2 },
+        final_price: { type: "number", precision: 2 },
+        preview_url: { type: "string", allowNull: true },
+        collection_id: { type: "integer" },
         is_active: { type: "boolean" },
       },
     },

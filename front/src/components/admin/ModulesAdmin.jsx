@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SecureButton from "../ui/SecureButton";
 import ModuleCreator from "./ModuleCreator";
 import useApi from "../../hooks/useApi";
@@ -6,7 +6,7 @@ import useLogger from "../../hooks/useLogger";
 import { FaArrowLeft, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
 import { getImageUrl } from "../../utils/image";
 
-const ModulesAdmin = () => {
+const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) => {
   const { get, del } = useApi();
   const logger = useLogger();
   const [mode, setMode] = useState("list");
@@ -69,6 +69,11 @@ const ModulesAdmin = () => {
     setMode("edit");
   };
 
+  const filteredItems = useMemo(() => {
+    if (!fixedModuleCategoryId) return items;
+    return items.filter((m) => Number(m?.module_category_id) === Number(fixedModuleCategoryId));
+  }, [items, fixedModuleCategoryId]);
+
   if (mode === "create") {
     return (
       <div className="space-y-6">
@@ -82,6 +87,7 @@ const ModulesAdmin = () => {
           </SecureButton>
         </div>
         <ModuleCreator
+          fixedModuleCategoryId={fixedModuleCategoryId}
           onDone={async () => {
             setMode("list");
             hasLoadedRef.current = false;
@@ -114,6 +120,7 @@ const ModulesAdmin = () => {
         </div>
         <ModuleCreator
           moduleId={editingId}
+          fixedModuleCategoryId={fixedModuleCategoryId}
           onDone={async () => {
             setEditingId(null);
             setMode("list");
@@ -129,7 +136,7 @@ const ModulesAdmin = () => {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-xl font-semibold text-night-900">Модули</h2>
+          <h2 className="text-xl font-semibold text-night-900">{title}</h2>
           <p className="text-sm text-night-500">Список созданных модулей. Здесь можно редактировать и удалять.</p>
         </div>
         <SecureButton type="button" onClick={() => setMode("create")} className="px-4 py-2 flex items-center gap-2">
@@ -139,7 +146,7 @@ const ModulesAdmin = () => {
       <div className="glass-card p-4">
         {loading ? (
           <div className="text-night-600">Загрузка...</div>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="text-night-600">Модули не найдены</div>
         ) : (
           <div className="overflow-x-auto">
@@ -155,7 +162,7 @@ const ModulesAdmin = () => {
                 </tr>
               </thead>
               <tbody>
-                {items.map((m) => {
+                {filteredItems.map((m) => {
                   const img = getImageUrl(m.preview_url);
                   return (
                     <tr key={m.id} className="border-t border-night-100">

@@ -15,6 +15,19 @@ const rawClient = axios.create({
 let isRefreshing = false;
 let failedQueue = [];
 
+const hasAccessToken = () => {
+  try {
+    return Boolean(useAuthStore.getState().accessToken || localStorage.getItem("nexaos_access_token"));
+  } catch {
+    return Boolean(useAuthStore.getState().accessToken);
+  }
+};
+
+const redirectIfOnProtectedRoute = () => {
+  if (typeof window === "undefined") return;
+  window.location.replace("/");
+};
+
 const processQueue = (error, token = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -60,9 +73,26 @@ rawClient.interceptors.response.use(
     const isAuthRefresh = url.includes("/auth/refresh");
     const isAuthLogin = url.includes("/auth/login");
     const isAuthRegister = url.includes("/auth/register");
+    const isAuthMe = url.includes("/auth/me");
 
-    // Если ошибка 401 и это не запрос на refresh/login
+    // /auth/me используется как проверка авторизации.
+    // Если получили 401 — сессию нужно чистить сразу, без попыток сохранять "битое" состояние.
+    if (status === 401 && isAuthMe) {
+      useAuthStore.getState().logout();
+      redirectIfOnProtectedRoute();
+      return Promise.reject(error);
+    }
+
+    // Если 401 и это не refresh/login/register:
+    // - без access token не запускаем refresh (публичные страницы должны жить)
+    // - с access token пробуем refresh
     if (status === 401 && !originalRequest._retry && !isAuthRefresh && !isAuthLogin && !isAuthRegister) {
+      if (!hasAccessToken()) {
+        useAuthStore.getState().logout();
+        redirectIfOnProtectedRoute();
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         // Если уже идет обновление токена, ждем
         return new Promise((resolve, reject) => {
@@ -97,9 +127,11 @@ rawClient.interceptors.response.use(
 
         processQueue(error, null);
         useAuthStore.getState().logout();
+        redirectIfOnProtectedRoute();
       } catch (refreshError) {
         processQueue(refreshError, null);
         useAuthStore.getState().logout();
+        redirectIfOnProtectedRoute();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

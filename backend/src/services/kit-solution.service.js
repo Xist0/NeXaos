@@ -5,6 +5,29 @@ const fs = require("fs");
 const path = require("path");
 const config = require("../config/env");
 
+const normalizeSkuPart = (value) => {
+  const s = String(value || "").trim();
+  return s.replace(/\s+/g, "");
+};
+
+const shortColorPartFromSku = (colorSku) => {
+  const lettersOnly = String(colorSku || "")
+    .replace(/[^\p{L}]+/gu, "")
+    .trim();
+  if (!lettersOnly) return "";
+  const part = lettersOnly.slice(0, 3);
+  return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+};
+
+const buildAutoSku = ({ baseSku, colorSku, size }) => {
+  const base = normalizeSkuPart(baseSku);
+  const color = normalizeSkuPart(colorSku);
+  const sizePart = normalizeSkuPart(size);
+  if (!base || !color || !sizePart) return null;
+  const own = `${base}${shortColorPartFromSku(color)}${sizePart}`;
+  return `${base}-${color}-${sizePart}-${own}`;
+};
+
 /**
  * Сервис для работы с готовыми решениями (комплектами кухни)
  */
@@ -175,6 +198,7 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     sku,
     description,
     kitchen_type_id,
+    collection_id,
     primary_color_id,
     secondary_color_id,
     material_id,
@@ -188,6 +212,19 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     preview_url,
     is_active,
   } = kitData;
+
+  let resolvedSku = sku;
+  if (!resolvedSku) {
+    const baseCandidate = kitData.base_sku || kitData.sku_base || kitData.baseSku || kitData.skuBase;
+    const baseSku = baseCandidate || "";
+    let colorSku = null;
+    if (primary_color_id) {
+      const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [primary_color_id]);
+      colorSku = rows?.[0]?.sku || null;
+    }
+    const generated = buildAutoSku({ baseSku, colorSku, size: total_length_mm });
+    if (generated) resolvedSku = generated;
+  }
 
   // Нормализуем material_id: если пусто/не число/не существует — сохраняем NULL
   let normalizedMaterialId = null;
@@ -219,18 +256,20 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
       `UPDATE kit_solutions 
        SET name = $1, sku = $2, description = $3,
            kitchen_type_id = $4,
-           primary_color_id = $5, secondary_color_id = $6, material_id = $7,
-           total_length_mm = $8, total_depth_mm = $9, total_height_mm = $10,
-           countertop_length_mm = $11, countertop_depth_mm = $12,
-           base_price = $13, final_price = $14, preview_url = $15,
-           is_active = $16,
+           collection_id = $5,
+           primary_color_id = $6, secondary_color_id = $7, material_id = $8,
+           total_length_mm = $9, total_depth_mm = $10, total_height_mm = $11,
+           countertop_length_mm = $12, countertop_depth_mm = $13,
+           base_price = $14, final_price = $15, preview_url = $16,
+           is_active = $17,
            updated_at = now()
-       WHERE id = $17`,
+       WHERE id = $18`,
       [
         name,
-        sku,
+        resolvedSku,
         description,
         normalizedKitchenTypeId,
+        collection_id ?? null,
         primary_color_id,
         secondary_color_id,
         normalizedMaterialId,
@@ -254,17 +293,18 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     // Создание нового решения
     const { rows } = await query(
       `INSERT INTO kit_solutions 
-       (name, sku, description, kitchen_type_id,
+       (name, sku, description, kitchen_type_id, collection_id,
         primary_color_id, secondary_color_id, material_id,
         total_length_mm, total_depth_mm, total_height_mm,
         countertop_length_mm, countertop_depth_mm, base_price, final_price, preview_url, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
        RETURNING id`,
       [
         name,
-        sku,
+        resolvedSku,
         description,
         normalizedKitchenTypeId,
+        collection_id ?? null,
         primary_color_id,
         secondary_color_id,
         normalizedMaterialId,
