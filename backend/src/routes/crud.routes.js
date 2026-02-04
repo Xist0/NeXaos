@@ -142,7 +142,7 @@ const upload = multer({
   storage,
   fileFilter: imageFileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB максимум
+    fileSize: 30 * 1024 * 1024, // 30MB максимум
   },
 });
 
@@ -157,7 +157,7 @@ const uploadMedia = multer({
 const handleMulterErrorUpload = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      const apiError = ApiError.badRequest('Размер файла превышает допустимый (10MB)');
+      const apiError = ApiError.badRequest('Размер файла превышает допустимый (30MB)');
       return next(apiError);
     }
     const apiError = ApiError.badRequest(`Ошибка загрузки файла: ${err.message}`);
@@ -189,7 +189,7 @@ router.post("/upload", authGuard, requireAdminOrManager, upload.single("file"), 
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      const apiError = ApiError.badRequest('Размер файла превышает допустимый (10MB)');
+      const apiError = ApiError.badRequest('Размер файла превышает допустимый (30MB)');
       return next(apiError);
     }
     const apiError = ApiError.badRequest(`Ошибка загрузки файла: ${err.message}`);

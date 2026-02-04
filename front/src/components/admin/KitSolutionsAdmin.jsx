@@ -6,7 +6,7 @@ import { FaArrowLeft, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
 import KitSolutionCreator from "./KitSolutionCreator";
 import { getImageUrl } from "../../utils/image";
 
-const KitSolutionsAdmin = () => {
+const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValues = null }) => {
   const { get, del } = useApi();
   const logger = useLogger();
 
@@ -37,6 +37,8 @@ const KitSolutionsAdmin = () => {
       const res = await getRef.current("/kit-solutions", {
         limit: 500,
         includeInactive: true,
+        ...(fixedValues?.category_group ? { categoryGroup: fixedValues.category_group } : {}),
+        ...(fixedValues?.category ? { category: fixedValues.category } : {}),
       });
       setItems(Array.isArray(res?.data) ? res.data : []);
       hasLoadedRef.current = true;
@@ -80,7 +82,7 @@ const KitSolutionsAdmin = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-1">
-            <h2 className="text-xl font-semibold text-night-900">Создание готового решения</h2>
+            <h2 className="text-xl font-semibold text-night-900">Создание: {title}</h2>
             <p className="text-sm text-night-500">Создайте решение, загрузите фото и выберите превью.</p>
           </div>
           <SecureButton
@@ -94,6 +96,7 @@ const KitSolutionsAdmin = () => {
         </div>
 
         <KitSolutionCreator
+          fixedValues={fixedValues}
           onDone={async () => {
             setMode("list");
             hasLoadedRef.current = false;
@@ -109,7 +112,7 @@ const KitSolutionsAdmin = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div className="space-y-1">
-            <h2 className="text-xl font-semibold text-night-900">Редактирование готового решения</h2>
+            <h2 className="text-xl font-semibold text-night-900">Редактирование: {title}</h2>
             <p className="text-sm text-night-500">Сохранение выполняется без создания дубля.</p>
           </div>
           <SecureButton
@@ -127,6 +130,7 @@ const KitSolutionsAdmin = () => {
 
         <KitSolutionCreator
           kitSolutionId={editingId}
+          fixedValues={fixedValues}
           onDone={async () => {
             setEditingId(null);
             setMode("list");
@@ -142,7 +146,7 @@ const KitSolutionsAdmin = () => {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-xl font-semibold text-night-900">Готовые решения</h2>
+          <h2 className="text-xl font-semibold text-night-900">{title}</h2>
           <p className="text-sm text-night-500">Список готовых решений. Можно редактировать и удалять.</p>
         </div>
         <SecureButton

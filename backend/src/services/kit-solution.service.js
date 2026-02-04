@@ -197,6 +197,8 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     name,
     sku,
     description,
+    category_group,
+    category,
     kitchen_type_id,
     collection_id,
     primary_color_id,
@@ -212,6 +214,13 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     preview_url,
     is_active,
   } = kitData;
+
+  const normalizedCategoryGroup = category_group != null && String(category_group).trim()
+    ? String(category_group).trim()
+    : null;
+  const normalizedCategory = category != null && String(category).trim()
+    ? String(category).trim()
+    : null;
 
   let resolvedSku = sku;
   if (!resolvedSku) {
@@ -255,19 +264,22 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     await query(
       `UPDATE kit_solutions 
        SET name = $1, sku = $2, description = $3,
-           kitchen_type_id = $4,
-           collection_id = $5,
-           primary_color_id = $6, secondary_color_id = $7, material_id = $8,
-           total_length_mm = $9, total_depth_mm = $10, total_height_mm = $11,
-           countertop_length_mm = $12, countertop_depth_mm = $13,
-           base_price = $14, final_price = $15, preview_url = $16,
-           is_active = $17,
+           category_group = $4, category = $5,
+           kitchen_type_id = $6,
+           collection_id = $7,
+           primary_color_id = $8, secondary_color_id = $9, material_id = $10,
+           total_length_mm = $11, total_depth_mm = $12, total_height_mm = $13,
+           countertop_length_mm = $14, countertop_depth_mm = $15,
+           base_price = $16, final_price = $17, preview_url = $18,
+           is_active = $19,
            updated_at = now()
-       WHERE id = $18`,
+       WHERE id = $20`,
       [
         name,
         resolvedSku,
         description,
+        normalizedCategoryGroup,
+        normalizedCategory,
         normalizedKitchenTypeId,
         collection_id ?? null,
         primary_color_id,
@@ -293,16 +305,18 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = []) => {
     // Создание нового решения
     const { rows } = await query(
       `INSERT INTO kit_solutions 
-       (name, sku, description, kitchen_type_id, collection_id,
+       (name, sku, description, category_group, category, kitchen_type_id, collection_id,
         primary_color_id, secondary_color_id, material_id,
         total_length_mm, total_depth_mm, total_height_mm,
         countertop_length_mm, countertop_depth_mm, base_price, final_price, preview_url, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
        RETURNING id`,
       [
         name,
         resolvedSku,
         description,
+        normalizedCategoryGroup,
+        normalizedCategory,
         normalizedKitchenTypeId,
         collection_id ?? null,
         primary_color_id,
@@ -416,7 +430,7 @@ const removeKitSolution = async (kitSolutionId) => {
  * @returns {Promise<Array>} Список готовых решений
  */
 const listKitSolutions = async (filters = {}) => {
-  const { search, colorId, minPrice, maxPrice, includeInactive, limit, offset } = filters;
+  const { search, colorId, minPrice, maxPrice, categoryGroup, category, includeInactive, limit, offset } = filters;
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
   const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
 
@@ -448,6 +462,18 @@ const listKitSolutions = async (filters = {}) => {
   if (maxPrice) {
     conditions.push(`ks.final_price <= $${paramIndex}`);
     params.push(parseFloat(maxPrice));
+    paramIndex++;
+  }
+
+  if (categoryGroup) {
+    conditions.push(`ks.category_group = $${paramIndex}`);
+    params.push(String(categoryGroup));
+    paramIndex++;
+  }
+
+  if (category) {
+    conditions.push(`ks.category = $${paramIndex}`);
+    params.push(String(category));
     paramIndex++;
   }
 

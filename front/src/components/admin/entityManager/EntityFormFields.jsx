@@ -23,17 +23,35 @@ const EntityFormFields = ({
 }) => {
   const fieldsToRender = endpoint === "/module-descriptions" && !filterModuleCategoryId ? [] : currentFields;
 
+  const isCheckboxChecked = (value) => {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value === 1 || value === "1") return true;
+    if (value === 0 || value === "0") return false;
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return Boolean(value);
+  };
+
   return (
     <>
       {fieldsToRender.map((field) => (
-        <label key={field.name} className="text-sm text-night-700 space-y-1">
+        <label
+          key={field.name}
+          className="text-sm text-night-700 space-y-1"
+        >
           <span>{field.label}</span>
           {field.inputType === "image" ? (
             <div className="space-y-2">
               <input
                 type="file"
                 accept="image/*"
-                onChange={(event) => handleUpload(field.name, event.target.files?.[0] || null)}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+                  handleUpload(field.name, file);
+                  // сбрасываем выбранный файл, чтобы не оставалось название и можно было выбрать тот же файл снова
+                  event.target.value = "";
+                }}
                 className="block w-full text-xs text-night-600 file:mr-3 file:rounded-full file:border-0 file:bg-night-900 file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-night-800"
               />
               {form[field.name] && (
@@ -49,6 +67,33 @@ const EntityFormFields = ({
                 />
               )}
               {uploadingField === field.name && <p className="text-xs text-night-400">Загружаем файл...</p>}
+            </div>
+          ) : field.type === "checkbox" ? (
+            <div className="w-full">
+              <div className="flex items-start justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      [field.name]: !isCheckboxChecked(prev[field.name]),
+                    }))
+                  }
+                  className={
+                    "relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent" +
+                    (isCheckboxChecked(form[field.name]) ? " bg-accent" : " bg-night-300")
+                  }
+                  aria-pressed={isCheckboxChecked(form[field.name])}
+                  aria-label={field.label}
+                >
+                  <span
+                    className={
+                      "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" +
+                      (isCheckboxChecked(form[field.name]) ? " translate-x-4" : " translate-x-0.5")
+                    }
+                  />
+                </button>
+              </div>
             </div>
           ) : field.type === "select" ? (
             <select

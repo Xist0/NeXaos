@@ -18,7 +18,7 @@ import ImageManager from "./ImageManager";
 import ColorBadge from "../ui/ColorBadge";
 import { formatCurrency } from "../../utils/format";
 
-const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone }) => {
+const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedValues = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
 
@@ -353,6 +353,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
         name: String(form.name).trim(),
         sku: String(form.sku).trim(),
         description: String(form.description).trim(),
+        category_group: fixedValues?.category_group || null,
+        category: fixedValues?.category || null,
         kitchen_type_id: Number(form.kitchen_type_id) || null,
         material_id: Number(form.material_id) || null,
         collection_id: form.collection_id ? Number(form.collection_id) : null,
@@ -385,7 +387,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
       setLoading(false);
       createLockRef.current = false;
     }
-  }, [form, kitId, moduleIdsPayload, post]);
+  }, [fixedValues?.category, fixedValues?.category_group, form, kitId, moduleIdsPayload, post]);
 
   const finalizeKit = async () => {
     if (!kitId) {
@@ -410,6 +412,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, onDone
         name: String(form.name).trim(),
         sku: String(form.sku).trim(),
         description: String(form.description).trim(),
+        category_group: fixedValues?.category_group || null,
+        category: fixedValues?.category || null,
         kitchen_type_id: Number(form.kitchen_type_id) || null,
         material_id: Number(form.material_id) || null,
         collection_id: form.collection_id ? Number(form.collection_id) : null,

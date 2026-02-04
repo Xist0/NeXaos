@@ -70,6 +70,23 @@ const EntityTable = ({
                           e.target.style.display = "none";
                         }}
                       />
+                    ) : field.type === "checkbox" ? (
+                      (() => {
+                        const v = item[field.name];
+                        const checked =
+                          v === true ||
+                          v === 1 ||
+                          v === "1" ||
+                          v === "true";
+                        const knownFalse =
+                          v === false ||
+                          v === 0 ||
+                          v === "0" ||
+                          v === "false";
+
+                        if (v === undefined || v === null || v === "") return "—";
+                        return checked ? "Да" : knownFalse ? "Нет" : v ? "Да" : "Нет";
+                      })()
                     ) : field.type === "color" && item[field.name] ? (
                       (() => {
                         const colorId = Number(item[field.name]);

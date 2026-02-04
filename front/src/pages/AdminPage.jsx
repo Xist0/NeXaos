@@ -5,6 +5,7 @@ import EntityManager from "../components/admin/EntityManager";
 import ModulesAdmin from "../components/admin/ModulesAdmin";
 import KitSolutionsAdmin from "../components/admin/KitSolutionsAdmin";
 import ModuleDescriptionsAdmin from "../components/admin/ModuleDescriptionsAdmin";
+import CatalogItemsAdmin from "../components/admin/CatalogItemsAdmin";
 import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight } from "react-icons/fa";
 
 // Структура разделов админ панели
@@ -65,7 +66,6 @@ const adminSections = [
       { id: "catalogBedroomBeds", label: "Спальня — Кровати", endpoint: "/catalog-items" },
       { id: "catalogBedroomDressingTables", label: "Спальня — Туалетные столики", endpoint: "/catalog-items" },
       { id: "catalogBedroomBedside", label: "Спальня — Прикроватные тумбы", endpoint: "/catalog-items" },
-      { id: "hardwareExtended", label: "Фурнитура", endpoint: "/hardware-extended" },
     ],
   },
   {
@@ -107,8 +107,8 @@ const entityConfigs = {
         { value: "corpus", label: "Корпус (дополнительный)" },
         { value: "", label: "Универсальный" }
       ]},
-      { name: "image_url", label: "Фотография", inputType: "image" },
       { name: "is_active", label: "Активен", type: "checkbox" },
+      { name: "image_url", label: "Фотография", inputType: "image" },
     ],
   },
   collections: {
@@ -783,22 +783,6 @@ const entityConfigs = {
       { name: "price_per_piece", label: "Цена за единицу", type: "number" },
     ],
   },
-  hardwareExtended: {
-    title: "Фурнитура",
-    endpoint: "/hardware-extended",
-    fields: [
-      { name: "name", label: "Наименование", required: true },
-      { name: "sku", label: "Артикул" },
-      { name: "unit_id", label: "Ед.изм. (ID)", type: "number" },
-      { name: "material_class_id", label: "Класс материала (ID)", type: "number" },
-      { name: "price_per_unit", label: "Цена за ед.", type: "number" },
-      { name: "comment", label: "Комментарий" },
-      { name: "base_sku", label: "Основа артикула" },
-      { name: "primary_color_id", label: "Основной цвет", type: "color" },
-      { name: "secondary_color_id", label: "Дополнительный цвет", type: "color" },
-      { name: "is_active", label: "Активен", type: "checkbox" },
-    ],
-  },
   materialClasses: {
     title: "Классы материалов",
     endpoint: "/material-classes",
@@ -886,17 +870,33 @@ const AdminPage = () => {
   });
 
   const toggleSection = (sectionId) => {
-    setExpandedSections((prev) => ({
-      ...prev,
-      [sectionId]: !prev[sectionId],
-    }));
+    setExpandedSections((prev) => {
+      const nextValue = !prev[sectionId];
+      const next = Object.fromEntries(Object.keys(prev).map((k) => [k, false]));
+      next[sectionId] = nextValue;
+      return next;
+    });
   };
 
   const toggleCatalogGroup = (groupId) => {
-    setExpandedCatalogGroups((prev) => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
+    setExpandedCatalogGroups((prev) => {
+      // Вложенная группа кухни ("Модули") не должна закрывать саму "Кухню"
+      if (groupId === "kitchenModules") {
+        return {
+          ...prev,
+          kitchenModules: !prev.kitchenModules,
+        };
+      }
+
+      const nextValue = !prev[groupId];
+      const next = Object.fromEntries(Object.keys(prev).map((k) => [k, false]));
+      next[groupId] = nextValue;
+      // если закрыли кухню — закрываем и вложенные "Модули"
+      if (groupId !== "kitchen") {
+        next.kitchenModules = false;
+      }
+      return next;
+    });
   };
 
   const handleTabClick = (tabId, item) => {
@@ -907,6 +907,7 @@ const AdminPage = () => {
   const currentSection = adminSections.find((s) => s.id === activeSection);
   const currentItem = currentSection?.items.find((item) => item.id === activeTab);
   const entityConfig = entityConfigs[activeTab];
+  const isCatalogItemsTab = Boolean(entityConfig?.endpoint === "/catalog-items");
   const isModuleCreator = currentItem?.special === "moduleCreator";
   const isKitSolutionCreator = currentItem?.special === "kitSolutionCreator";
   const isModuleDescriptionCreator = currentItem?.special === "moduleDescriptionCreator";
@@ -982,7 +983,7 @@ const AdminPage = () => {
                           {expandedCatalogGroups.hallway && (
                             <div className="ml-4 space-y-1">
                               {[
-                                { id: "catalogHallwayReady", label: "Готовые прихожие" },
+                                { id: "hallwayReadySolutions", label: "Готовые прихожие" },
                                 { id: "catalogHallwayWardrobes", label: "Шкафы" },
                                 { id: "catalogHallwayShoeracks", label: "Обувницы" },
                                 { id: "catalogHallwayDressers", label: "Комоды" },
@@ -1023,7 +1024,7 @@ const AdminPage = () => {
                           {expandedCatalogGroups.livingroom && (
                             <div className="ml-4 space-y-1">
                               {[
-                                { id: "catalogLivingroomWalls", label: "Стенки для гостиной" },
+                                { id: "livingroomReadySolutions", label: "Стенки для гостиной" },
                                 { id: "catalogLivingroomTvZones", label: "ТВ зоны" },
                                 { id: "catalogLivingroomWardrobes", label: "Шкафы" },
                                 { id: "catalogLivingroomShelving", label: "Стеллажи" },
@@ -1144,7 +1145,7 @@ const AdminPage = () => {
                           {expandedCatalogGroups.bedroom && (
                             <div className="ml-4 space-y-1">
                               {[
-                                { id: "catalogBedroomSets", label: "Комплект мебели для спальни" },
+                                { id: "bedroomReadySolutions", label: "Комплект мебели для спальни" },
                                 { id: "catalogBedroomBeds", label: "Кровати" },
                                 { id: "catalogBedroomDressingTables", label: "Туалетные столики" },
                                 { id: "catalogBedroomBedside", label: "Прикроватные тумбы" },
@@ -1163,17 +1164,6 @@ const AdminPage = () => {
                               ))}
                             </div>
                           )}
-
-                          <button
-                            onClick={() => handleTabClick("hardwareExtended", { sectionId: section.id })}
-                            className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                              activeTab === "hardwareExtended"
-                                ? "bg-accent text-white font-semibold shadow-md scale-[1.02] translate-y-[-1px]"
-                                : "text-night-600 hover:bg-night-50 hover:shadow-sm hover:translate-x-1"
-                            }`}
-                          >
-                            Фурнитура
-                          </button>
                         </div>
                       ) : (
                         section.items.map((item) => (
@@ -1216,6 +1206,25 @@ const AdminPage = () => {
             <ModulesAdmin title="Кухня — Модули — Пеналы" fixedModuleCategoryId={3} />
           )}
           
+          {activeTab === "hallwayReadySolutions" && (
+            <KitSolutionsAdmin
+              title="Прихожая — Готовые прихожие"
+              fixedValues={{ category_group: "Прихожая", category: "Готовые прихожие" }}
+            />
+          )}
+          {activeTab === "livingroomReadySolutions" && (
+            <KitSolutionsAdmin
+              title="Гостиная — Стенки для гостиной"
+              fixedValues={{ category_group: "Гостиная", category: "Стенки для гостиной" }}
+            />
+          )}
+          {activeTab === "bedroomReadySolutions" && (
+            <KitSolutionsAdmin
+              title="Спальня — Комплект мебели для спальни"
+              fixedValues={{ category_group: "Спальня", category: "Комплект мебели для спальни" }}
+            />
+          )}
+
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ МОДУЛЕЙ */}
           {isModuleCreator && <ModulesAdmin />}
 
@@ -1227,7 +1236,11 @@ const AdminPage = () => {
           
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
           {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && (
-            <EntityManager key={entityConfig.endpoint} {...entityConfig} />
+            isCatalogItemsTab ? (
+              <CatalogItemsAdmin title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
+            ) : (
+              <EntityManager key={entityConfig.endpoint} {...entityConfig} />
+            )
           )}
         </div>
       </div>

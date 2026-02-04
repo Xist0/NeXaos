@@ -480,7 +480,11 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
         logger.error("Сервер не вернул ссылку на файл");
       }
     } catch (error) {
-      logger.error("Не удалось загрузить файл", error);
+      const serverMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message;
+      logger.error(serverMessage || "Не удалось загрузить файл", error);
     } finally {
       setUploadingField(null);
     }
@@ -504,9 +508,25 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
       if (field.virtual) return acc;
       // Пропускаем undefined и пустые строки, но сохраняем 0 для чисел
       const rawValue = form[field.name];
-      if (rawValue === undefined || rawValue === "") return acc;
-      acc[field.name] =
-        field.type === "number" ? Number(rawValue) : rawValue;
+      if (rawValue === undefined || rawValue === "") {
+        // для чекбоксов важно отправлять явное false, если значение задано
+        if (field.type === "checkbox" && rawValue === false) {
+          acc[field.name] = false;
+        }
+        return acc;
+      }
+
+      if (field.type === "number") {
+        acc[field.name] = Number(rawValue);
+        return acc;
+      }
+
+      if (field.type === "checkbox") {
+        acc[field.name] = Boolean(rawValue);
+        return acc;
+      }
+
+      acc[field.name] = rawValue;
       return acc;
     }, {});
 
@@ -519,6 +539,9 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
       const missingFields = allFields.filter((field) => {
         if (endpoint === "/module-descriptions" && field.name === "module_category_id") return false;
         const value = payload[field.name];
+        if (field.type === "checkbox") {
+          return value === undefined;
+        }
         if (value === undefined || value === "") return true;
         if (field.type === "number") {
           const n = Number(value);
@@ -651,6 +674,9 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
     const requiredFields = allFields.filter((f) => f.required);
     const missingRequiredFields = requiredFields.filter((field) => {
       const value = payload[field.name];
+      if (field.type === "checkbox") {
+        return value === undefined;
+      }
       return value === undefined || value === "" || (field.type === "number" && isNaN(value));
     });
 
@@ -861,12 +887,12 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
         </div>
       )}
 
-      <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit}>
+      <form className="grid gap-4 md:grid-cols-2 items-start" onSubmit={handleSubmit}>
         {endpoint === "/kit-solutions" && (
           <div className="md:col-span-2 space-y-3 border border-night-200 rounded-lg p-4 bg-white">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-night-900">Состав кухни</p>
+                <h3 className="text-lg font-semibold text-night-900">Состав модулей</h3>
                 <p className="text-xs text-night-500">Выберите нижние и верхние модули для готового решения</p>
               </div>
               <SecureButton type="button" variant="outline" className="px-4 py-2 text-xs" onClick={runKitCalculations}>

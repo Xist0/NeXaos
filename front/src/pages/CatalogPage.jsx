@@ -51,7 +51,7 @@ const CatalogPage = () => {
           label: "Прихожая",
           group: "Прихожая",
           subs: [
-            { code: "Готовые прихожие", label: "Готовые прихожие" },
+            { code: "Готовые прихожие", label: "Готовые прихожие", isKits: true },
             { code: "Шкафы", label: "Шкафы" },
             { code: "Обувницы", label: "Обувницы" },
             { code: "Комоды", label: "Комоды" },
@@ -67,7 +67,7 @@ const CatalogPage = () => {
           label: "Гостиная",
           group: "Гостиная",
           subs: [
-            { code: "Стенки для гостиной", label: "Стенки для гостиной" },
+            { code: "Стенки для гостиной", label: "Стенки для гостиной", isKits: true },
             { code: "ТВ зоны", label: "ТВ зоны" },
             { code: "Шкафы", label: "Шкафы" },
             { code: "Стеллажи", label: "Стеллажи" },
@@ -97,7 +97,7 @@ const CatalogPage = () => {
           label: "Спальня",
           group: "Спальня",
           subs: [
-            { code: "Комплект мебели для спальни", label: "Комплект мебели для спальни" },
+            { code: "Комплект мебели для спальни", label: "Комплект мебели для спальни", isKits: true },
             { code: "Кровати", label: "Кровати" },
             { code: "Туалетные столики", label: "Туалетные столики" },
             { code: "Прикроватные тумбы", label: "Прикроватные тумбы" },
@@ -293,6 +293,53 @@ const CatalogPage = () => {
         if (roomCategoryCodes.has(activeCategory)) {
           const room = roomCatalog.find((x) => x.code === activeCategory);
 
+          // Если выбрана комната без подкатегории — показываем все товары комнаты:
+          // 1) catalog-items по categoryGroup (или modules для кухни)
+          // 2) kit-solutions по categoryGroup
+          if (!activeSubCategory) {
+            const isKitchenRoot = activeCategory === "kitchen";
+            const [listRes, kitsRes] = await Promise.all([
+              isKitchenRoot
+                ? get("/modules", queryParams)
+                : get("/catalog-items", {
+                    search: debouncedQuery,
+                    categoryGroup: room?.group,
+                    isActive: true,
+                  }),
+              get("/kit-solutions", {
+                ...queryParams,
+                ...(isKitchenRoot ? {} : { categoryGroup: room?.group }),
+              }),
+            ]);
+
+            if (active) {
+              setItems(
+                isKitchenRoot
+                  ? (listRes?.data || []).map((x) => ({ ...x, __type: "module" }))
+                  : (listRes?.data || []).map((x) => ({ ...x, __type: "catalogItem" }))
+              );
+              setKitSolutions((kitsRes?.data || []).map((k) => ({ ...k, __type: "kitSolution" })));
+            }
+            return;
+          }
+
+          // Не кухня: готовые решения живут в /kit-solutions и выбираются по (categoryGroup, category)
+          if (activeCategory !== "kitchen") {
+            const roomSub = room?.subs?.find((s) => s.code === activeSubCategory);
+            if (roomSub?.isKits) {
+              const res = await get("/kit-solutions", {
+                ...queryParams,
+                categoryGroup: room?.group,
+                category: activeSubCategory,
+              });
+              if (active) {
+                setKitSolutions((res?.data || []).map((k) => ({ ...k, __type: "kitSolution" })));
+                setItems([]);
+              }
+              return;
+            }
+          }
+
           // Кухня: "Готовые решения" живут в /kit-solutions, но выбираются внутри кухни
           if (activeCategory === "kitchen" && activeSubCategory === "__kitchen_kits") {
             const res = await get("/kit-solutions", queryParams);
@@ -351,9 +398,15 @@ const CatalogPage = () => {
   const displayItems = useMemo(() => {
     const safeModules = items.filter((x) => x.is_active);
     const safeKits = kitSolutions.filter((x) => x.is_active);
+    const isKitchenKits = activeCategory === "kitchen" && activeSubCategory === "__kitchen_kits";
+    const isKitsOnlyView = activeCategory === "kitSolutions" || isKitchenKits;
+    const isRoomRootView = roomCategoryCodes.has(activeCategory) && !activeSubCategory;
 
     if (!fromProduct) {
-      return activeCategory === "kitSolutions"
+      if (isRoomRootView) {
+        return [...safeKits, ...safeModules];
+      }
+      return isKitsOnlyView
         ? safeKits
         : activeCategory === "all"
         ? [...safeKits, ...safeModules]
@@ -361,14 +414,14 @@ const CatalogPage = () => {
     }
 
     // 1) Режим похожих для kit
-    if (similarKitId && (activeCategory === "kitSolutions" || activeCategory === "all")) {
+    if (similarKitId && (isKitsOnlyView || activeCategory === "all")) {
       const kitBaseList = safeKits;
       const baseIds = new Set(kitBaseList.map((x) => x.id));
       const similarInScope = similarKitItems.filter((x) => baseIds.has(x.id));
       const similarIds = new Set(similarInScope.map((x) => x.id));
       const rest = kitBaseList.filter((x) => !similarIds.has(x.id));
       const kitsOrdered = [...similarInScope, ...rest];
-      return activeCategory === "kitSolutions" ? kitsOrdered : [...kitsOrdered, ...safeModules];
+      return isKitsOnlyView ? kitsOrdered : [...kitsOrdered, ...safeModules];
     }
 
     // 2) Режим похожих для module
@@ -386,7 +439,7 @@ const CatalogPage = () => {
       : activeCategory === "all"
       ? [...safeKits, ...safeModules]
       : safeModules;
-  }, [activeCategory, kitSolutions, items, fromProduct, similarModuleId, similarKitId, similarItems, similarKitItems]);
+  }, [activeCategory, activeSubCategory, kitSolutions, items, fromProduct, similarModuleId, similarKitId, similarItems, similarKitItems, roomCategoryCodes]);
   const handleAddToCart = useCallback((product) => addItem(product), [addItem]);
 
   const SidebarContent = () => (
