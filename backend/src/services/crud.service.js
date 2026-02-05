@@ -132,12 +132,12 @@ const list = async (entity, queryParams = {}) => {
     }
 
     if (queryParams.categoryGroup) {
-      conditions.push(`category_group = $${params.length + 1}`);
+      conditions.push(`LOWER(TRIM(COALESCE(category_group, ''))) = LOWER(TRIM($${params.length + 1}))`);
       params.push(String(queryParams.categoryGroup));
     }
 
     if (queryParams.category) {
-      conditions.push(`category = $${params.length + 1}`);
+      conditions.push(`LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM($${params.length + 1}))`);
       params.push(String(queryParams.category));
     }
 

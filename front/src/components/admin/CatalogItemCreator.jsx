@@ -6,6 +6,58 @@ import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
 import ColorBadge from "../ui/ColorBadge";
+import { getThumbUrl } from "../../utils/image";
+import { resolveCategoryCode, resolveCategoryGroupCode } from "../../utils/categoryCodes";
+
+const LazyImg = ({ src, alt, className, onError }) => {
+  const holderRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isVisible) return;
+    const el = holderRef.current;
+    if (!el) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
+      return;
+    }
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setIsVisible(true);
+          obs.disconnect();
+        }
+      },
+      { root: null, rootMargin: "50px", threshold: 0.01 }
+    );
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [isVisible]);
+
+  return (
+    <span ref={holderRef} className={className}>
+      {isVisible && (
+        <img
+          src={src}
+          alt={alt}
+          className={className}
+          loading="lazy"
+          decoding="async"
+          fetchPriority="low"
+          onError={onError}
+        />
+      )}
+    </span>
+  );
+};
+
+let colorsCache = null;
+let colorsCachePromise = null;
+let collectionsCache = null;
+let collectionsCachePromise = null;
 
 const toOptionalInt = (value) => {
   if (value === null || value === undefined) return undefined;
@@ -27,6 +79,22 @@ const toOptionalString = (value) => {
   return str ? str : undefined;
 };
 
+const normalizeSkuPart = (value) => {
+  const s = String(value ?? "").trim();
+  if (!s) return "";
+  return s
+    .replace(/\s+/g, "")
+    .replace(/[-–—]+/g, "")
+    .replace(/[\\/]+/g, "")
+    .trim();
+};
+
+const normalizeNum = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return String(Math.round(n));
+};
+
 const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedValues = null, title = "", onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
@@ -36,6 +104,10 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
 
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
+
+  const [openPrimary, setOpenPrimary] = useState(false);
+  const [openSecondary, setOpenSecondary] = useState(false);
+  const colorPickerRef = useRef(null);
 
   const [itemId, setItemId] = useState(initialCatalogItemId);
   const createLockRef = useRef(false);
@@ -48,6 +120,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
   const [isLoadingReferences, setIsLoadingReferences] = useState(true);
 
   const [form, setForm] = useState({
+    baseSku: "",
     sku: "",
     name: "",
     description: "",
@@ -67,17 +140,50 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
   }, [get, logger]);
 
   useEffect(() => {
+    if (!openPrimary && !openSecondary) return;
+
+    const onPointerDown = (e) => {
+      const root = colorPickerRef.current;
+      if (!root) return;
+      if (root.contains(e.target)) return;
+      setOpenPrimary(false);
+      setOpenSecondary(false);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [openPrimary, openSecondary]);
+
+  useEffect(() => {
     const loadRefs = async () => {
       if (referenceData.isLoaded) return;
       setIsLoadingReferences(true);
       try {
-        const [colorsRes, collectionsRes] = await Promise.all([
-          getRef.current("/colors", { limit: 500, is_active: true }),
-          getRef.current("/collections", { limit: 500, isActive: true }),
+        if (!colorsCachePromise) {
+          colorsCachePromise = getRef.current("/colors", { limit: 500, is_active: true }).then((res) => {
+            const data = Array.isArray(res?.data) ? res.data : [];
+            colorsCache = data;
+            return data;
+          });
+        }
+
+        if (!collectionsCachePromise) {
+          collectionsCachePromise = getRef.current("/collections", { limit: 500, isActive: true }).then((res) => {
+            const data = Array.isArray(res?.data) ? res.data : [];
+            collectionsCache = data;
+            return data;
+          });
+        }
+
+        const [colorsData, collectionsData] = await Promise.all([
+          Array.isArray(colorsCache) ? Promise.resolve(colorsCache) : colorsCachePromise,
+          Array.isArray(collectionsCache) ? Promise.resolve(collectionsCache) : collectionsCachePromise,
         ]);
         setReferenceData({
-          colors: Array.isArray(colorsRes?.data) ? colorsRes.data : [],
-          collections: Array.isArray(collectionsRes?.data) ? collectionsRes.data : [],
+          colors: Array.isArray(colorsData) ? colorsData : [],
+          collections: Array.isArray(collectionsData) ? collectionsData : [],
           isLoaded: true,
         });
       } catch (e) {
@@ -104,6 +210,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         setItemId(data.id);
         setForm((prev) => ({
           ...prev,
+          baseSku: data.base_sku || "",
           sku: data.sku || "",
           name: data.name || "",
           description: data.description || "",
@@ -159,6 +266,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     setLoading(true);
     try {
       const payload = {
+        base_sku: toOptionalString(form.baseSku),
         sku: toOptionalString(form.sku),
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
@@ -184,6 +292,9 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
       const id = resp?.data?.id;
       if (!id) throw new Error("API не вернул id при создании позиции каталога");
       setItemId(id);
+      if (resp?.data?.sku) {
+        setForm((p) => ({ ...p, sku: resp.data.sku }));
+      }
       return id;
     } catch (e) {
       loggerRef.current?.error("Не удалось создать позицию каталога", e);
@@ -226,6 +337,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     setLoading(true);
     try {
       const payload = {
+        base_sku: toOptionalString(form.baseSku),
         sku: toOptionalString(form.sku),
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
@@ -253,6 +365,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
       setItemId(null);
       setStep(1);
       setForm({
+        baseSku: "",
         sku: "",
         name: "",
         description: "",
@@ -272,6 +385,53 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     }
   };
 
+  const colorsByType = useMemo(() => {
+    const list = Array.isArray(referenceData.colors) ? referenceData.colors : [];
+    return {
+      facade: list.filter((c) => c?.type === "facade"),
+      corpus: list.filter((c) => c?.type === "corpus"),
+      universal: list.filter((c) => !c?.type),
+    };
+  }, [referenceData.colors]);
+
+  const selectedPrimaryColor = referenceData.colors.find((c) => c.id === Number(form.primary_color_id));
+  const selectedSecondaryColor = referenceData.colors.find((c) => c.id === Number(form.secondary_color_id));
+
+  const skuPreview = useMemo(() => {
+    if (String(form.sku || "").trim()) return "";
+
+    const groupCode = fixedValues?.category_group ? resolveCategoryGroupCode(fixedValues.category_group) : "";
+    const catCode = fixedValues?.category ? resolveCategoryCode(fixedValues.category) : "";
+    const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
+
+    const parts = [
+      normalizeSkuPart(groupCode),
+      normalizeSkuPart(catCode),
+      normalizeSkuPart(articleName),
+      normalizeNum(form.length_mm),
+      normalizeNum(form.depth_mm),
+      normalizeNum(form.height_mm),
+      normalizeSkuPart(selectedPrimaryColor?.sku || ""),
+      normalizeSkuPart(selectedSecondaryColor?.sku || ""),
+    ].filter(Boolean);
+
+    return parts.length ? parts.join("-") : "";
+  }, [
+    fixedValues?.category,
+    fixedValues?.category_group,
+    form.baseSku,
+    form.depth_mm,
+    form.height_mm,
+    form.length_mm,
+    form.name,
+    form.sku,
+    form.primary_color_id,
+    form.secondary_color_id,
+    referenceData.colors,
+    selectedPrimaryColor?.sku,
+    selectedSecondaryColor?.sku,
+  ]);
+
   if (isLoadingReferences) {
     return (
       <div className="max-w-6xl mx-auto">
@@ -282,9 +442,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
       </div>
     );
   }
-
-  const selectedPrimaryColor = referenceData.colors.find((c) => c.id === Number(form.primary_color_id));
-  const selectedSecondaryColor = referenceData.colors.find((c) => c.id === Number(form.secondary_color_id));
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -321,13 +478,18 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         <div className="glass-card p-6 space-y-4">
           <div className="grid gap-4">
             <label className="space-y-2">
+              <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
+              <SecureInput value={form.baseSku} onChange={(v) => setForm((p) => ({ ...p, baseSku: v }))} />
+            </label>
+
+            <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Название</div>
               <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
             </label>
 
             <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">SKU</div>
-              <SecureInput value={form.sku} onChange={(v) => setForm((p) => ({ ...p, sku: v }))} />
+              <SecureInput value={form.sku || skuPreview} onChange={(v) => setForm((p) => ({ ...p, sku: v }))} />
             </label>
 
             <label className="space-y-2">
@@ -398,48 +560,169 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
 
       {step === 3 && (
         <div className="glass-card p-6 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Основной цвет</div>
-              <select
-                value={form.primary_color_id}
-                onChange={(e) => setForm((p) => ({ ...p, primary_color_id: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Не выбран</option>
-                {referenceData.colors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.id} {c.name}
-                  </option>
-                ))}
-              </select>
-              {selectedPrimaryColor ? (
-                <div className="pt-2">
-                  <ColorBadge labelPrefix="Выбрано:" colorData={selectedPrimaryColor} />
-                </div>
-              ) : null}
-            </label>
+          <div className="space-y-3" ref={colorPickerRef}>
+            <div className="relative py-2">
+              <div className="border-t border-night-200" />
+              <span className="absolute -top-2 left-3 px-2 text-xs text-night-500 bg-white/70">Выбор цвета</span>
+            </div>
 
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Доп. цвет</div>
-              <select
-                value={form.secondary_color_id}
-                onChange={(e) => setForm((p) => ({ ...p, secondary_color_id: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+            <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-night-700">Основной цвет</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenPrimary((v) => !v);
+                  setOpenSecondary(false);
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
               >
-                <option value="">Не выбран</option>
-                {referenceData.colors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.id} {c.name}
-                  </option>
-                ))}
-              </select>
-              {selectedSecondaryColor ? (
-                <div className="pt-2">
-                  <ColorBadge labelPrefix="Выбрано:" colorData={selectedSecondaryColor} />
+                <span className="flex items-center gap-2">
+                  {selectedPrimaryColor ? <ColorBadge colorData={selectedPrimaryColor} /> : <span className="text-xs text-night-500">Выберите цвет</span>}
+                </span>
+                <span className="text-night-400">▾</span>
+              </button>
+              {openPrimary && (
+                <div className="relative">
+                  <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
+                    <div className="p-2 space-y-2">
+                      <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Основные цвета</div>
+                      <div className="space-y-1">
+                        {colorsByType.facade.map((c) => {
+                          const isSelected = Number(form.primary_color_id) === Number(c.id);
+                          return (
+                            <button
+                              key={`primary-opt-${c.id}`}
+                              type="button"
+                              onClick={() => {
+                                setForm((p) => ({ ...p, primary_color_id: String(c.id) }));
+                                setOpenPrimary(false);
+                              }}
+                              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
+                              }`}
+                            >
+                              <LazyImg
+                                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                alt={c.name}
+                                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                              />
+                              <span className="text-xs text-night-700 truncate">{c.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="my-2 border-t border-night-200" />
+                      <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
+                      <div className="space-y-1">
+                        {colorsByType.universal.map((c) => {
+                          const isSelected = Number(form.primary_color_id) === Number(c.id);
+                          return (
+                            <button
+                              key={`primary-univ-${c.id}`}
+                              type="button"
+                              onClick={() => {
+                                setForm((p) => ({ ...p, primary_color_id: String(c.id) }));
+                                setOpenPrimary(false);
+                              }}
+                              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
+                              }`}
+                            >
+                              <LazyImg
+                                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                alt={c.name}
+                                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                              />
+                              <span className="text-xs text-night-700 truncate">{c.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              ) : null}
-            </label>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-night-700">Доп. цвет</div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenSecondary((v) => !v);
+                  setOpenPrimary(false);
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
+              >
+                <span className="flex items-center gap-2">
+                  {selectedSecondaryColor ? <ColorBadge colorData={selectedSecondaryColor} /> : <span className="text-xs text-night-500">Выберите цвет</span>}
+                </span>
+                <span className="text-night-400">▾</span>
+              </button>
+              {openSecondary && (
+                <div className="relative">
+                  <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
+                    <div className="p-2 space-y-2">
+                      <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Доп. цвета</div>
+                      <div className="space-y-1">
+                        {colorsByType.corpus.map((c) => {
+                          const isSelected = Number(form.secondary_color_id) === Number(c.id);
+                          return (
+                            <button
+                              key={`secondary-opt-${c.id}`}
+                              type="button"
+                              onClick={() => {
+                                setForm((p) => ({ ...p, secondary_color_id: String(c.id) }));
+                                setOpenSecondary(false);
+                              }}
+                              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
+                              }`}
+                            >
+                              <LazyImg
+                                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                alt={c.name}
+                                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                              />
+                              <span className="text-xs text-night-700 truncate">{c.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="my-2 border-t border-night-200" />
+                      <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
+                      <div className="space-y-1">
+                        {colorsByType.universal.map((c) => {
+                          const isSelected = Number(form.secondary_color_id) === Number(c.id);
+                          return (
+                            <button
+                              key={`secondary-univ-${c.id}`}
+                              type="button"
+                              onClick={() => {
+                                setForm((p) => ({ ...p, secondary_color_id: String(c.id) }));
+                                setOpenSecondary(false);
+                              }}
+                              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
+                              }`}
+                            >
+                              <LazyImg
+                                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                alt={c.name}
+                                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                              />
+                              <span className="text-xs text-night-700 truncate">{c.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            </div>
           </div>
 
           <div className="flex justify-between">

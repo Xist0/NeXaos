@@ -12,6 +12,11 @@ import useDragSort from "./entityManager/useDragSort";
 import EntityTable from "./entityManager/EntityTable";
 import EntityFormFields from "./entityManager/EntityFormFields";
 
+let colorsCache = null;
+let colorsCachePromise = null;
+let collectionsCache = null;
+let collectionsCachePromise = null;
+
 const defaultField = (field) => ({
   type: "text",
   placeholder: "",
@@ -237,8 +242,22 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
     if (hasColorFields && !colorsLoadedRef.current) {
       const loadColors = async () => {
         try {
-          const response = await get("/colors");
-          setColors(response?.data || []);
+          if (Array.isArray(colorsCache)) {
+            setColors(colorsCache);
+            colorsLoadedRef.current = true;
+            return;
+          }
+
+          if (!colorsCachePromise) {
+            colorsCachePromise = get("/colors").then((response) => {
+              const data = Array.isArray(response?.data) ? response.data : [];
+              colorsCache = data;
+              return data;
+            });
+          }
+
+          const data = await colorsCachePromise;
+          setColors(data);
           colorsLoadedRef.current = true;
         } catch (error) {
           logger.error("Не удалось загрузить цвета", error);
@@ -255,8 +274,22 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
     if (hasCollectionFields && !collectionsLoadedRef.current) {
       const loadCollections = async () => {
         try {
-          const response = await get("/collections", { limit: 500, isActive: true });
-          setCollections(Array.isArray(response?.data) ? response.data : []);
+          if (Array.isArray(collectionsCache)) {
+            setCollections(collectionsCache);
+            collectionsLoadedRef.current = true;
+            return;
+          }
+
+          if (!collectionsCachePromise) {
+            collectionsCachePromise = get("/collections", { limit: 500, isActive: true }).then((response) => {
+              const data = Array.isArray(response?.data) ? response.data : [];
+              collectionsCache = data;
+              return data;
+            });
+          }
+
+          const data = await collectionsCachePromise;
+          setCollections(data);
           collectionsLoadedRef.current = true;
         } catch (error) {
           logger.error("Не удалось загрузить коллекции", error);

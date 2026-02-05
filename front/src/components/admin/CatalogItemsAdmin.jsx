@@ -28,6 +28,10 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
     loggerRef.current = logger;
   }, [get, del, logger]);
 
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [fixedValues?.category, fixedValues?.category_group]);
+
   const loadItems = useCallback(async ({ force = false } = {}) => {
     if (!force && hasLoadedRef.current) return;
     if (isLoadingRef.current) return;
@@ -37,6 +41,7 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
     try {
       const res = await getRef.current("/catalog-items", {
         limit: 500,
+        ...(force ? { __nocache: Date.now() } : {}),
         ...(fixedValues?.category_group ? { categoryGroup: fixedValues.category_group } : {}),
         ...(fixedValues?.category ? { category: fixedValues.category } : {}),
       });
@@ -53,8 +58,8 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
 
   useEffect(() => {
     if (mode !== "list") return;
-    loadItems();
-  }, [mode, loadItems]);
+    loadItems({ force: true });
+  }, [fixedValues?.category, fixedValues?.category_group, mode, loadItems]);
 
   const openEdit = (id) => {
     setEditingId(id);

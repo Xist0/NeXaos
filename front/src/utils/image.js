@@ -37,4 +37,19 @@ export const getImageUrl = (url) => {
   return url;
 };
 
+export const getThumbUrl = (url, { w = 128, h = 128, q = 70, fit = "cover" } = {}) => {
+  if (!url) return placeholderImage;
+  const src = url.startsWith("/uploads/") ? url : null;
+  if (!src) return getImageUrl(url);
+  const origin = getBackendOrigin();
+  const base = origin ? `${origin}` : "";
+  const params = new URLSearchParams();
+  params.set("src", src);
+  if (w) params.set("w", String(w));
+  if (h) params.set("h", String(h));
+  if (q) params.set("q", String(q));
+  if (fit) params.set("fit", String(fit));
+  return `${base}/uploads/thumb?${params.toString()}`;
+};
+
 export { placeholderImage };

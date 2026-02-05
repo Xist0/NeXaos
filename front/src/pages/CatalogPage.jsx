@@ -25,12 +25,16 @@ const CatalogPage = () => {
 
   const [similarModuleId, setSimilarModuleId] = useState(() => searchParams.get("similarModuleId") || null);
   const [similarKitId, setSimilarKitId] = useState(() => searchParams.get("similarKitId") || null);
+  const [similarCatalogItemId, setSimilarCatalogItemId] = useState(() => searchParams.get("similarCatalogItemId") || null);
   const [fromProduct, setFromProduct] = useState(() => searchParams.get("fromProduct") === "1");
   const [similarItems, setSimilarItems] = useState([]);
   const [similarLoading, setSimilarLoading] = useState(false);
 
   const [similarKitItems, setSimilarKitItems] = useState([]);
   const [similarKitLoading, setSimilarKitLoading] = useState(false);
+
+  const [similarCatalogItems, setSimilarCatalogItems] = useState([]);
+  const [similarCatalogLoading, setSimilarCatalogLoading] = useState(false);
 
   const [filters, setFilters] = useState(() => ({
     facadeColor: searchParams.get("facadeColor") || "",
@@ -111,6 +115,7 @@ const CatalogPage = () => {
 
   const lastSimilarModuleIdRef = useRef(null);
   const lastSimilarKitIdRef = useRef(null);
+  const lastSimilarCatalogItemIdRef = useRef(null);
 
   useEffect(() => {
     if (!isFiltersOpen) return;
@@ -140,6 +145,7 @@ const CatalogPage = () => {
     setFromProduct(searchParams.get("fromProduct") === "1");
     setSimilarModuleId(searchParams.get("similarModuleId") || null);
     setSimilarKitId(searchParams.get("similarKitId") || null);
+    setSimilarCatalogItemId(searchParams.get("similarCatalogItemId") || null);
 
     const urlCategory = searchParams.get("category") || "all";
     const urlSubCategory = searchParams.get("subCategory") || null;
@@ -188,9 +194,44 @@ const CatalogPage = () => {
     if (fromProduct) params.set("fromProduct", "1");
     if (similarModuleId) params.set("similarModuleId", String(similarModuleId));
     if (similarKitId) params.set("similarKitId", String(similarKitId));
+    if (similarCatalogItemId) params.set("similarCatalogItemId", String(similarCatalogItemId));
 
     setSearchParams(params, { replace: true });
-  }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, fromProduct, similarModuleId, similarKitId, setSearchParams]);
+  }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, fromProduct, similarModuleId, similarKitId, similarCatalogItemId, setSearchParams]);
+
+  useEffect(() => {
+    const loadSimilarCatalogItems = async () => {
+      if (!fromProduct || !similarCatalogItemId) {
+        setSimilarCatalogItems([]);
+        return;
+      }
+
+      const parsed = Number(similarCatalogItemId);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setSimilarCatalogItems([]);
+        return;
+      }
+
+      if (lastSimilarCatalogItemIdRef.current === parsed && similarCatalogItems.length > 0) return;
+      lastSimilarCatalogItemIdRef.current = parsed;
+
+      setSimilarCatalogLoading(true);
+      try {
+        const res = await post(`/catalog-items/${parsed}/similar`, { limit: 50 });
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setSimilarCatalogItems(list.filter((x) => x?.is_active).map((x) => ({ ...x, __type: "catalogItem" })));
+      } catch (e) {
+        console.error("Ошибка загрузки похожих элементов каталога:", e);
+        setSimilarCatalogItems([]);
+        lastSimilarCatalogItemIdRef.current = null;
+      } finally {
+        setSimilarCatalogLoading(false);
+      }
+    };
+
+    loadSimilarCatalogItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromProduct, similarCatalogItemId, post]);
 
   useEffect(() => {
     // Не даем нескольким комнатам быть раскрытыми одновременно
@@ -364,9 +405,18 @@ const CatalogPage = () => {
         }
 
         if (activeCategory === "all") {
-          const [modulesRes, kitsRes] = await Promise.all([get("/modules", queryParams), get("/kit-solutions", queryParams)]);
+          const [modulesRes, kitsRes, catalogItemsRes] = await Promise.all([
+            get("/modules", queryParams),
+            get("/kit-solutions", queryParams),
+            get("/catalog-items", queryParams),
+          ]);
           if (active) {
-            setItems(modulesRes?.data || []);
+            const modulesList = Array.isArray(modulesRes?.data) ? modulesRes.data : [];
+            const catalogItemsList = Array.isArray(catalogItemsRes?.data) ? catalogItemsRes.data : [];
+            setItems([
+              ...modulesList.map((x) => ({ ...x, __type: "module" })),
+              ...catalogItemsList.map((x) => ({ ...x, __type: "catalogItem" })),
+            ]);
             setKitSolutions((kitsRes?.data || []).map(k => ({...k, __type: "kitSolution"})));
           }
         } else {
@@ -434,12 +484,22 @@ const CatalogPage = () => {
       return [...similarInScope, ...rest];
     }
 
+    // 3) Режим похожих для catalog-item
+    if (similarCatalogItemId && activeCategory !== "kitSolutions") {
+      const baseList = activeCategory === "all" ? [...safeKits, ...safeModules] : safeModules;
+      const baseIds = new Set(baseList.map((x) => x.id));
+      const similarInScope = similarCatalogItems.filter((x) => baseIds.has(x.id));
+      const similarIds = new Set(similarInScope.map((x) => x.id));
+      const rest = baseList.filter((x) => !similarIds.has(x.id));
+      return [...similarInScope, ...rest];
+    }
+
     return activeCategory === "kitSolutions"
       ? safeKits
       : activeCategory === "all"
       ? [...safeKits, ...safeModules]
       : safeModules;
-  }, [activeCategory, activeSubCategory, kitSolutions, items, fromProduct, similarModuleId, similarKitId, similarItems, similarKitItems, roomCategoryCodes]);
+  }, [activeCategory, activeSubCategory, kitSolutions, items, fromProduct, similarModuleId, similarKitId, similarCatalogItemId, similarItems, similarKitItems, similarCatalogItems, roomCategoryCodes]);
   const handleAddToCart = useCallback((product) => addItem(product), [addItem]);
 
   const SidebarContent = () => (

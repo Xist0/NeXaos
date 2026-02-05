@@ -17,10 +17,65 @@ import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
 import ColorBadge from "../ui/ColorBadge";
 import { formatCurrency } from "../../utils/format";
+import { getThumbUrl } from "../../utils/image";
+import { resolveCategoryCode, resolveCategoryGroupCode } from "../../utils/categoryCodes";
+
+const LazyImg = ({ src, alt, className, onError }) => {
+  const holderRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isVisible) return;
+    const el = holderRef.current;
+    if (!el) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
+      return;
+    }
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setIsVisible(true);
+          obs.disconnect();
+        }
+      },
+      { root: null, rootMargin: "50px", threshold: 0.01 }
+    );
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [isVisible]);
+
+  return (
+    <span ref={holderRef} className={className}>
+      {isVisible && (
+        <img
+          src={src}
+          alt={alt}
+          className={className}
+          loading="lazy"
+          decoding="async"
+          fetchPriority="low"
+          onError={onError}
+        />
+      )}
+    </span>
+  );
+};
+
+let colorsCache = null;
+let colorsCachePromise = null;
+let collectionsCache = null;
+let collectionsCachePromise = null;
 
 const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedValues = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
+
+  const categoryGroupLabel = String(fixedValues?.category_group || "").trim();
+  const isKitchen = /^\s*(кух|kitchen)/i.test(categoryGroupLabel);
 
   const getRef = useRef(get);
   const loggerRef = useRef(logger);
@@ -39,6 +94,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     collections: [],
     modules: [],
     moduleCategories: [],
+    catalogItems: [],
     isLoaded: false,
   });
 
@@ -71,17 +127,56 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     top: [],
   });
 
+  const [selectedCatalogItems, setSelectedCatalogItems] = useState([]);
+  const [openPrimary, setOpenPrimary] = useState(false);
+  const [openSecondary, setOpenSecondary] = useState(false);
+  const colorPickerRef = useRef(null);
+
   const [lengthWarning, setLengthWarning] = useState(null);
+
+  const colorsByType = useMemo(() => {
+    const list = Array.isArray(referenceData.colors) ? referenceData.colors : [];
+    return {
+      facade: list.filter((c) => c?.type === "facade"),
+      corpus: list.filter((c) => c?.type === "corpus"),
+      universal: list.filter((c) => !c?.type),
+    };
+  }, [referenceData.colors]);
+
+  const addCatalogItem = (catalogItemId) => {
+    const id = Number(catalogItemId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    setSelectedCatalogItems((prev) => [
+      ...prev,
+      { catalogItemId: id, quantity: 1, positionUid: `tmp-ci-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },
+    ]);
+  };
+
+  const updateCatalogItemQuantity = (index, nextQty) => {
+    setSelectedCatalogItems((prev) => {
+      const list = [...prev];
+      list[index] = { ...list[index], quantity: Math.max(1, Number(nextQty) || 1) };
+      return list;
+    });
+  };
+
+  const removeCatalogItem = (index) => {
+    setSelectedCatalogItems((prev) => {
+      const list = [...prev];
+      list.splice(index, 1);
+      return list;
+    });
+  };
 
   const steps = useMemo(
     () => [
-      { number: 1, title: "Тип кухни", icon: FaCog },
+      { number: 1, title: isKitchen ? "Тип кухни" : "Тип", icon: FaCog },
       { number: 2, title: "Описание", icon: FaCheckCircle },
-      { number: 3, title: "Состав/Размеры", icon: FaRulerCombined },
+      { number: 3, title: isKitchen ? "Состав/Размеры" : "Состав/Габариты", icon: FaRulerCombined },
       { number: 4, title: "Фото", icon: FaCamera },
       { number: 5, title: "Цена", icon: FaDollarSign },
     ],
-    []
+    [isKitchen]
   );
 
   useEffect(() => {
@@ -90,15 +185,48 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
   }, [get, logger]);
 
   useEffect(() => {
+    if (!openPrimary && !openSecondary) return;
+
+    const onPointerDown = (e) => {
+      const root = colorPickerRef.current;
+      if (!root) return;
+      if (root.contains(e.target)) return;
+      setOpenPrimary(false);
+      setOpenSecondary(false);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [openPrimary, openSecondary]);
+
+  useEffect(() => {
     const loadReferences = async () => {
       if (referenceData.isLoaded) return;
       setLoading(true);
       try {
-        const [kitchenTypesRes, materialsRes, colorsRes, collectionsRes, modulesRes, moduleCategoriesRes] = await Promise.all([
+        if (!colorsCachePromise) {
+          colorsCachePromise = getRef.current("/colors", { limit: 500, is_active: true }).then((res) => {
+            const data = Array.isArray(res?.data) ? res.data : [];
+            colorsCache = data;
+            return data;
+          });
+        }
+
+        if (!collectionsCachePromise) {
+          collectionsCachePromise = getRef.current("/collections", { limit: 500, isActive: true }).then((res) => {
+            const data = Array.isArray(res?.data) ? res.data : [];
+            collectionsCache = data;
+            return data;
+          });
+        }
+
+        const [kitchenTypesRes, materialsRes, colorsData, collectionsData, modulesRes, moduleCategoriesRes] = await Promise.all([
           getRef.current("/kitchen-types", { limit: 500, isActive: true }),
           getRef.current("/materials", { limit: 500, isActive: true }),
-          getRef.current("/colors", { limit: 500, is_active: true }),
-          getRef.current("/collections", { limit: 500, isActive: true }),
+          Array.isArray(colorsCache) ? Promise.resolve(colorsCache) : colorsCachePromise,
+          Array.isArray(collectionsCache) ? Promise.resolve(collectionsCache) : collectionsCachePromise,
           getRef.current("/modules", { limit: 500, isActive: true }),
           getRef.current("/module-categories", { limit: 200 }),
         ]);
@@ -106,10 +234,11 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
         setReferenceData({
           kitchenTypes: Array.isArray(kitchenTypesRes?.data) ? kitchenTypesRes.data : [],
           materials: Array.isArray(materialsRes?.data) ? materialsRes.data : [],
-          colors: Array.isArray(colorsRes?.data) ? colorsRes.data : [],
-          collections: Array.isArray(collectionsRes?.data) ? collectionsRes.data : [],
+          colors: Array.isArray(colorsData) ? colorsData : [],
+          collections: Array.isArray(collectionsData) ? collectionsData : [],
           modules: Array.isArray(modulesRes?.data) ? modulesRes.data : [],
           moduleCategories: Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [],
+          catalogItems: [],
           isLoaded: true,
         });
       } catch (e) {
@@ -121,6 +250,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
           collections: [],
           modules: [],
           moduleCategories: [],
+          catalogItems: [],
           isLoaded: true,
         });
       } finally {
@@ -131,6 +261,37 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     loadReferences();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!referenceData.isLoaded) return;
+    if (isKitchen) return;
+    const group = String(fixedValues?.category_group || "").trim();
+    if (!group) {
+      setReferenceData((p) => ({ ...p, catalogItems: [] }));
+      return;
+    }
+
+    let active = true;
+    setLoading(true);
+    getRef.current("/catalog-items", { limit: 500, isActive: true, categoryGroup: group })
+      .then((res) => {
+        if (!active) return;
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setReferenceData((p) => ({ ...p, catalogItems: list }));
+      })
+      .catch((e) => {
+        if (!active) return;
+        loggerRef.current?.error("Не удалось загрузить catalog-items", e);
+        setReferenceData((p) => ({ ...p, catalogItems: [] }));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [fixedValues?.category_group, isKitchen, referenceData.isLoaded]);
 
   useEffect(() => {
     if (!initialKitSolutionId) return;
@@ -173,14 +334,23 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
           is_active: !!data.is_active,
         }));
 
-        const byType = { bottom: [], top: [], tall: [], filler: [], accessory: [] };
         const modulesObj = data.modules || {};
         const bottomList = Array.isArray(modulesObj.bottom) ? modulesObj.bottom : [];
         const topList = Array.isArray(modulesObj.top) ? modulesObj.top : [];
         setSelectedModulesByType({
-          bottom: bottomList.map((m) => ({ moduleId: m.id, quantity: 1 })),
-          top: topList.map((m) => ({ moduleId: m.id, quantity: 1 })),
+          bottom: bottomList.map((m, idx) => ({ moduleId: m.id, quantity: 1, positionUid: m.positionUid || `legacy-bottom-${m.id}-${idx}` })),
+          top: topList.map((m, idx) => ({ moduleId: m.id, quantity: 1, positionUid: m.positionUid || `legacy-top-${m.id}-${idx}` })),
         });
+
+        const comps = Array.isArray(data.components) ? data.components : [];
+        const catalogComps = comps.filter((x) => x?.__type === "catalogItem" && x?.id);
+        setSelectedCatalogItems(
+          catalogComps.map((c, idx) => ({
+            catalogItemId: Number(c.id),
+            quantity: 1,
+            positionUid: c.positionUid || `legacy-ci-${c.id}-${idx}`,
+          }))
+        );
 
         setStep(2);
       })
@@ -196,44 +366,28 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     };
   }, [initialKitSolutionId]);
 
-  const buildSku = useCallback(
-    (draft) => {
-      const parts = ["KT", draft.baseSku];
-      const len = Number(draft.total_length_mm || draft.countertop_length_mm);
-      if (Number.isFinite(len) && len > 0) parts.push(String(Math.round(len)));
-
-      const color = draft.primary_color_id
-        ? referenceData.colors.find((c) => c.id === Number(draft.primary_color_id))?.sku
-        : "";
-      if (color) parts.push(String(color));
-
-      if (!skuNonceRef.current) {
-        const fromSku = String(draft.sku || "").split("-").pop();
-        if (/^[a-z0-9]{4}$/i.test(fromSku)) {
-          skuNonceRef.current = fromSku;
-        } else {
-          skuNonceRef.current = Math.random().toString(36).substring(2, 6);
-        }
-      }
-
-      parts.push(skuNonceRef.current);
-      return parts.filter(Boolean).join("-");
-    },
-    [referenceData.colors]
-  );
+  const buildSku = useCallback(() => null, []);
 
   const computeAutoSizes = useCallback(() => {
-    const byId = new Map(referenceData.modules.map((m) => [Number(m.id), m]));
+    const byId = new Map(
+      (isKitchen ? referenceData.modules : referenceData.catalogItems).map((m) => [Number(m.id), m])
+    );
 
     const expand = (type) =>
-      (selectedModulesByType[type] || []).flatMap(({ moduleId, quantity }) =>
-        Array(Math.max(1, Number(quantity) || 1))
-          .fill(byId.get(Number(moduleId)))
-          .filter(Boolean)
-      );
+      isKitchen
+        ? (selectedModulesByType[type] || []).flatMap(({ moduleId, quantity }) =>
+            Array(Math.max(1, Number(quantity) || 1))
+              .fill(byId.get(Number(moduleId)))
+              .filter(Boolean)
+          )
+        : selectedCatalogItems.flatMap(({ catalogItemId, quantity }) =>
+            Array(Math.max(1, Number(quantity) || 1))
+              .fill(byId.get(Number(catalogItemId)))
+              .filter(Boolean)
+          );
 
     const bottomMods = expand("bottom");
-    const topMods = expand("top");
+    const topMods = isKitchen ? expand("top") : [];
 
     const bottomTotal = bottomMods.reduce((s, m) => s + (Number(m.length_mm) || 0), 0);
     const topTotal = topMods.reduce((s, m) => s + (Number(m.length_mm) || 0), 0);
@@ -260,12 +414,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
         countertop_length_mm: String(bottomTotal || ""),
         countertop_depth_mm: String(bottomMaxDepth || maxDepth || ""),
       };
-      if (next.baseSku) {
-        next.sku = buildSku(next);
-      }
       return next;
     });
-  }, [referenceData.modules, selectedModulesByType, buildSku]);
+  }, [isKitchen, referenceData.catalogItems, referenceData.modules, selectedCatalogItems, selectedModulesByType, buildSku]);
 
   const moduleIdsPayload = useMemo(() => {
     const order = ["bottom", "top"];
@@ -278,17 +429,90 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
       .filter((v) => Number.isFinite(v));
   }, [selectedModulesByType]);
 
+  const moduleItemsPayload = useMemo(() => {
+    const order = ["bottom", "top"];
+    const items = [];
+    let pos = 0;
+    for (const type of order) {
+      for (const m of selectedModulesByType[type] || []) {
+        const qty = Math.max(1, Number(m.quantity) || 1);
+        const baseUid = m.positionUid || `tmp-${type}-${pos}`;
+        for (let k = 0; k < qty; k++) {
+          items.push({
+            moduleId: Number(m.moduleId),
+            positionUid: k === 0 ? baseUid : `${baseUid}-${k}`,
+            positionType: type,
+            positionOrder: pos,
+          });
+          pos++;
+        }
+      }
+    }
+    return items.filter((x) => Number.isFinite(x.moduleId) && x.moduleId > 0);
+  }, [selectedModulesByType]);
+
+  const componentItemsPayload = useMemo(() => {
+    if (isKitchen) {
+      return moduleItemsPayload.map((x) => ({
+        componentType: "module",
+        moduleId: x.moduleId,
+        positionUid: x.positionUid,
+        positionType: x.positionType,
+        positionOrder: x.positionOrder,
+      }));
+    }
+
+    const items = [];
+    let pos = 0;
+    for (const c of selectedCatalogItems) {
+      const qty = Math.max(1, Number(c.quantity) || 1);
+      const baseUid = c.positionUid || `tmp-ci-${pos}`;
+      for (let k = 0; k < qty; k++) {
+        items.push({
+          componentType: "catalogItem",
+          catalogItemId: Number(c.catalogItemId),
+          positionUid: k === 0 ? baseUid : `${baseUid}-${k}`,
+          positionType: "component",
+          positionOrder: pos,
+        });
+        pos++;
+      }
+    }
+    return items.filter((x) => Number.isFinite(x.catalogItemId) && x.catalogItemId > 0);
+  }, [isKitchen, moduleItemsPayload, selectedCatalogItems]);
+
   const computedBasePrice = useMemo(() => {
-    const byId = new Map(referenceData.modules.map((m) => [Number(m.id), m]));
-    const sumForType = (type) =>
-      (selectedModulesByType[type] || []).reduce((acc, { moduleId, quantity }) => {
-        const m = byId.get(Number(moduleId));
-        const price = Number(m?.final_price || m?.price || 0);
-        const qty = Math.max(1, Number(quantity) || 1);
-        return acc + price * qty;
-      }, 0);
-    return sumForType("bottom") + sumForType("top");
-  }, [referenceData.modules, selectedModulesByType]);
+    if (isKitchen) {
+      const byId = new Map(referenceData.modules.map((m) => [Number(m.id), m]));
+      const sumForType = (type) =>
+        (selectedModulesByType[type] || []).reduce((acc, { moduleId, quantity }) => {
+          const m = byId.get(Number(moduleId));
+          const price = Number(m?.final_price || m?.price || 0);
+          const qty = Math.max(1, Number(quantity) || 1);
+          return acc + price * qty;
+        }, 0);
+      return sumForType("bottom") + sumForType("top");
+    }
+
+    const byId = new Map(referenceData.catalogItems.map((m) => [Number(m.id), m]));
+    return selectedCatalogItems.reduce((acc, { catalogItemId, quantity }) => {
+      const m = byId.get(Number(catalogItemId));
+      const price = Number(m?.final_price || m?.price || 0);
+      const qty = Math.max(1, Number(quantity) || 1);
+      return acc + price * qty;
+    }, 0);
+  }, [isKitchen, referenceData.catalogItems, referenceData.modules, selectedCatalogItems, selectedModulesByType]);
+
+  const catalogItemsSelectable = useMemo(() => {
+    const list = Array.isArray(referenceData.catalogItems) ? referenceData.catalogItems : [];
+    const excluded = String(fixedValues?.category || "").trim();
+    return list
+      .filter((x) => x?.is_active)
+      .filter((x) => {
+        if (!excluded) return true;
+        return String(x?.category || "").trim() !== excluded;
+      });
+  }, [fixedValues?.category, referenceData.catalogItems]);
 
   const moduleCategoryIdsByCode = useMemo(() => {
     const cats = Array.isArray(referenceData.moduleCategories) ? referenceData.moduleCategories : [];
@@ -296,6 +520,16 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     for (const c of cats) {
       if (!c?.code || !c?.id) continue;
       map.set(String(c.code), Number(c.id));
+    }
+    return map;
+  }, [referenceData.moduleCategories]);
+
+  const moduleCategoryById = useMemo(() => {
+    const cats = Array.isArray(referenceData.moduleCategories) ? referenceData.moduleCategories : [];
+    const map = new Map();
+    for (const c of cats) {
+      if (!c?.id) continue;
+      map.set(Number(c.id), c);
     }
     return map;
   }, [referenceData.moduleCategories]);
@@ -313,25 +547,37 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
       if (topId && catId === topId) return "top";
       if (bottomId && catId === bottomId) return "bottom";
 
+      const cat = moduleCategoryById.get(catId);
+      const hint = `${cat?.code || ""} ${cat?.name || ""} ${cat?.sku_prefix || ""}`.trim();
+      if (/^\s*В/i.test(hint)) return "top";
+      if (/^\s*Н/i.test(hint)) return "bottom";
+      if (/верх/i.test(hint)) return "top";
+      if (/низ/i.test(hint)) return "bottom";
+
       return null;
     },
-    [moduleCategoryIdsByCode]
+    [moduleCategoryById, moduleCategoryIdsByCode]
   );
 
   const bottomModulesSelectable = useMemo(() => {
-    return referenceData.modules.filter((m) => classifyModule(m) === "bottom");
-  }, [referenceData.modules, classifyModule]);
+    return isKitchen ? referenceData.modules.filter((m) => classifyModule(m) === "bottom") : referenceData.modules;
+  }, [isKitchen, referenceData.modules, classifyModule]);
 
   const topModulesSelectable = useMemo(() => {
-    return referenceData.modules.filter((m) => classifyModule(m) === "top");
-  }, [referenceData.modules, classifyModule]);
+    return isKitchen ? referenceData.modules.filter((m) => classifyModule(m) === "top") : [];
+  }, [isKitchen, referenceData.modules, classifyModule]);
 
   const createKitIfNeeded = useCallback(async () => {
     if (kitId) return kitId;
     if (createLockRef.current) return null;
 
-    if (!form.kitchen_type_id || !form.material_id || !form.primary_color_id) {
-      loggerRef.current?.error("Заполните тип кухни, материал и основной цвет");
+    if (isKitchen && !form.kitchen_type_id) {
+      loggerRef.current?.error("Заполните тип кухни");
+      return null;
+    }
+
+    if (!form.material_id || !form.primary_color_id) {
+      loggerRef.current?.error("Заполните материал и основной цвет");
       return null;
     }
 
@@ -351,6 +597,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     try {
       const payload = {
         name: String(form.name).trim(),
+        base_sku: String(form.baseSku || "").trim() || null,
         sku: String(form.sku).trim(),
         description: String(form.description).trim(),
         category_group: fixedValues?.category_group || null,
@@ -373,12 +620,17 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
         is_active: false,
 
         moduleIds: moduleIdsPayload,
+        moduleItems: moduleItemsPayload,
+        componentItems: componentItemsPayload,
       };
 
       const resp = await post("/kit-solutions", payload);
       const id = resp?.data?.id;
       if (!id) throw new Error("API не вернул id при создании готового решения");
       setKitId(id);
+      if (resp?.data?.sku) {
+        setForm((p) => ({ ...p, sku: resp.data.sku }));
+      }
       return id;
     } catch (e) {
       loggerRef.current?.error("Не удалось создать готовое решение", e);
@@ -387,7 +639,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
       setLoading(false);
       createLockRef.current = false;
     }
-  }, [fixedValues?.category, fixedValues?.category_group, form, kitId, moduleIdsPayload, post]);
+  }, [componentItemsPayload, fixedValues?.category, fixedValues?.category_group, form, kitId, moduleIdsPayload, moduleItemsPayload, post]);
 
   const finalizeKit = async () => {
     if (!kitId) {
@@ -410,6 +662,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     try {
       const payload = {
         name: String(form.name).trim(),
+        base_sku: String(form.baseSku || "").trim() || null,
         sku: String(form.sku).trim(),
         description: String(form.description).trim(),
         category_group: fixedValues?.category_group || null,
@@ -432,6 +685,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
         is_active: true,
 
         moduleIds: moduleIdsPayload,
+        moduleItems: moduleItemsPayload,
+        componentItems: componentItemsPayload,
       };
 
       await put(`/kit-solutions/${kitId}`, payload);
@@ -460,6 +715,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
         is_active: false,
       });
       setSelectedModulesByType({ bottom: [], top: [] });
+      setSelectedCatalogItems([]);
     } catch (e) {
       loggerRef.current?.error("Не удалось сохранить готовое решение", e);
     } finally {
@@ -473,7 +729,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
 
     setSelectedModulesByType((prev) => ({
       ...prev,
-      [type]: [...(prev[type] || []), { moduleId: id, quantity: 1 }],
+      [type]: [...(prev[type] || []), { moduleId: id, quantity: 1, positionUid: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }],
     }));
   };
 
@@ -504,6 +760,52 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     if (!id) return;
     setStep(5);
   };
+
+  const toOptionalString = (value) => {
+    if (value === null || value === undefined) return undefined;
+    const str = String(value).trim();
+    return str ? str : undefined;
+  };
+
+  const normalizeSkuPart = (value) => {
+    const s = String(value ?? "").trim();
+    if (!s) return "";
+    return s
+      .replace(/\s+/g, "")
+      .replace(/[-–—]+/g, "")
+      .replace(/[\\/]+/g, "")
+      .trim();
+  };
+
+  const normalizeNum = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    return String(Math.round(n));
+  };
+
+  const selectedPrimaryColor = referenceData.colors.find((c) => c.id === Number(form.primary_color_id));
+  const selectedSecondaryColor = referenceData.colors.find((c) => c.id === Number(form.secondary_color_id));
+
+  const skuPreview = useMemo(() => {
+    if (String(form.sku || "").trim()) return "";
+
+    const groupCode = fixedValues?.category_group ? resolveCategoryGroupCode(fixedValues.category_group) : "";
+    const catCode = fixedValues?.category ? resolveCategoryCode(fixedValues.category) : "";
+    const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
+
+    const parts = [
+      normalizeSkuPart(groupCode),
+      normalizeSkuPart(catCode),
+      normalizeSkuPart(articleName),
+      normalizeNum(form.total_length_mm),
+      normalizeNum(form.total_depth_mm),
+      normalizeNum(form.total_height_mm),
+      normalizeSkuPart(selectedPrimaryColor?.sku || ""),
+      normalizeSkuPart(selectedSecondaryColor?.sku || ""),
+    ].filter(Boolean);
+
+    return parts.length ? parts.join("-") : "";
+  }, [fixedValues?.category, fixedValues?.category_group, form.baseSku, form.name, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, selectedPrimaryColor?.sku, selectedSecondaryColor?.sku]);
 
   if (loading && referenceData.isLoaded === false) {
     return (
@@ -541,21 +843,23 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
       {step === 1 && (
         <div className="glass-card p-6 space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Тип кухни</div>
-              <select
-                value={form.kitchen_type_id}
-                onChange={(e) => setForm((p) => ({ ...p, kitchen_type_id: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Не выбран</option>
-                {referenceData.kitchenTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    #{t.id} {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {isKitchen ? (
+              <label className="space-y-2">
+                <div className="text-xs font-semibold text-night-700">Тип кухни</div>
+                <select
+                  value={form.kitchen_type_id}
+                  onChange={(e) => setForm((p) => ({ ...p, kitchen_type_id: e.target.value }))}
+                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+                >
+                  <option value="">Не выбран</option>
+                  {referenceData.kitchenTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      #{t.id} {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
             <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Материал</div>
@@ -592,76 +896,190 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
               </select>
             </label>
 
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Основной цвет</div>
-              <select
-                value={form.primary_color_id}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm((p) => {
-                    const next = { ...p, primary_color_id: v };
-                    if (next.baseSku) {
-                      next.sku = buildSku(next);
-                    }
-                    return next;
-                  });
-                }}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Не выбран</option>
-                {referenceData.colors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.id} {c.name}
-                  </option>
-                ))}
-              </select>
-              {form.primary_color_id ? (
-                <div className="pt-2">
-                  <ColorBadge
-                    labelPrefix="Выбрано:"
-                    colorData={referenceData.colors.find((c) => c.id === Number(form.primary_color_id))}
-                  />
-                </div>
-              ) : null}
-            </label>
+            <div className="space-y-3 md:col-span-2" ref={colorPickerRef}>
+              <div className="relative py-2">
+                <div className="border-t border-night-200" />
+                <span className="absolute -top-2 left-3 px-2 text-xs text-night-500 bg-white/70">Выбор цвета</span>
+              </div>
 
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Доп. цвет (опционально)</div>
-              <select
-                value={form.secondary_color_id}
-                onChange={(e) => setForm((p) => ({ ...p, secondary_color_id: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Не выбран</option>
-                {referenceData.colors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.id} {c.name}
-                  </option>
-                ))}
-              </select>
-              {form.secondary_color_id ? (
-                <div className="pt-2">
-                  <ColorBadge
-                    labelPrefix="Выбрано:"
-                    colorData={referenceData.colors.find((c) => c.id === Number(form.secondary_color_id))}
-                  />
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-night-700">Основной цвет</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenPrimary((v) => !v);
+                      setOpenSecondary(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
+                  >
+                    <span className="flex items-center gap-2">
+                      {form.primary_color_id ? (
+                        <ColorBadge colorData={referenceData.colors.find((c) => c.id === Number(form.primary_color_id))} />
+                      ) : (
+                        <span className="text-xs text-night-500">Выберите цвет</span>
+                      )}
+                    </span>
+                    <span className="text-night-400">▾</span>
+                  </button>
+                  {openPrimary && (
+                    <div className="relative">
+                      <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
+                        <div className="p-2 space-y-2">
+                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Основные цвета</div>
+                          <div className="space-y-1">
+                            {colorsByType.facade.map((c) => {
+                              const isSelected = Number(form.primary_color_id) === Number(c.id);
+                              return (
+                                <button
+                                  key={`kit-primary-opt-${c.id}`}
+                                  type="button"
+                                  onClick={() =>
+                                    setForm((p) => {
+                                      const next = { ...p, primary_color_id: String(c.id) };
+                                      setOpenPrimary(false);
+                                      return next;
+                                    })
+                                  }
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                    isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
+                                  }`}
+                                >
+                                  <LazyImg
+                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                    alt={c.name}
+                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                                  />
+                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="my-2 border-t border-night-200" />
+                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
+                          <div className="space-y-1">
+                            {colorsByType.universal.map((c) => {
+                              const isSelected = Number(form.primary_color_id) === Number(c.id);
+                              return (
+                                <button
+                                  key={`kit-primary-univ-${c.id}`}
+                                  type="button"
+                                  onClick={() =>
+                                    setForm((p) => {
+                                      const next = { ...p, primary_color_id: String(c.id) };
+                                      setOpenPrimary(false);
+                                      return next;
+                                    })
+                                  }
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                    isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
+                                  }`}
+                                >
+                                  <LazyImg
+                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                    alt={c.name}
+                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                                  />
+                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ) : null}
-            </label>
+
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-night-700">Доп. цвет (опционально)</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenSecondary((v) => !v);
+                      setOpenPrimary(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
+                  >
+                    <span className="flex items-center gap-2">
+                      {form.secondary_color_id ? (
+                        <ColorBadge colorData={referenceData.colors.find((c) => c.id === Number(form.secondary_color_id))} />
+                      ) : (
+                        <span className="text-xs text-night-500">Выберите цвет</span>
+                      )}
+                    </span>
+                    <span className="text-night-400">▾</span>
+                  </button>
+                  {openSecondary && (
+                    <div className="relative">
+                      <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
+                        <div className="p-2 space-y-2">
+                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Доп. цвета</div>
+                          <div className="space-y-1">
+                            {colorsByType.corpus.map((c) => {
+                              const isSelected = Number(form.secondary_color_id) === Number(c.id);
+                              return (
+                                <button
+                                  key={`kit-secondary-opt-${c.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setForm((p) => ({ ...p, secondary_color_id: String(c.id) }));
+                                    setOpenSecondary(false);
+                                  }}
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                    isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
+                                  }`}
+                                >
+                                  <LazyImg
+                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                    alt={c.name}
+                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                                  />
+                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="my-2 border-t border-night-200" />
+                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
+                          <div className="space-y-1">
+                            {colorsByType.universal.map((c) => {
+                              const isSelected = Number(form.secondary_color_id) === Number(c.id);
+                              return (
+                                <button
+                                  key={`kit-secondary-univ-${c.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setForm((p) => ({ ...p, secondary_color_id: String(c.id) }));
+                                    setOpenSecondary(false);
+                                  }}
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                    isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
+                                  }`}
+                                >
+                                  <LazyImg
+                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                    alt={c.name}
+                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                                  />
+                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <label className="space-y-2 md:col-span-2">
               <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
               <SecureInput
                 value={form.baseSku}
-                onChange={(v) => {
-                  setForm((p) => {
-                    const next = { ...p, baseSku: v };
-                    if (next.baseSku) {
-                      next.sku = buildSku(next);
-                    }
-                    return next;
-                  });
-                }}
+                onChange={(v) => setForm((p) => ({ ...p, baseSku: v }))}
                 placeholder="Например: PRYAMAYA"
               />
             </label>
@@ -669,7 +1087,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
             <label className="space-y-2 md:col-span-2">
               <div className="text-xs font-semibold text-night-700">Артикул (SKU)</div>
               <SecureInput
-                value={form.sku}
+                value={form.sku || skuPreview}
                 onChange={(v) => setForm((p) => ({ ...p, sku: v }))}
                 placeholder="Сформируется автоматически"
               />
@@ -717,8 +1135,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
         <div className="glass-card p-6 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
-              <div className="text-sm font-semibold text-night-900">Состав кухни</div>
-              <div className="text-xs text-night-500">Выберите модули и нажмите “Пересчитать размеры”.</div>
+              <div className="text-sm font-semibold text-night-900">{isKitchen ? "Состав кухни" : "Состав"}</div>
+              <div className="text-xs text-night-500">{isKitchen ? "Выберите модули и нажмите “Пересчитать размеры”." : "Выберите компоненты и нажмите “Пересчитать размеры”."}</div>
             </div>
             <SecureButton type="button" variant="outline" onClick={computeAutoSizes} className="px-4 py-2 text-xs">
               Пересчитать размеры
@@ -731,50 +1149,102 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
             </div>
           ) : null}
 
-          {[
-            { type: "bottom", title: "Нижние модули", list: bottomModulesSelectable },
-            { type: "top", title: "Верхние модули", list: topModulesSelectable },
-          ].map(({ type, title, list }) => (
-            <div key={type} className="space-y-3">
-              <div className="text-xs font-semibold text-night-700 uppercase">{title}</div>
+          {isKitchen ? (
+            [
+              { type: "bottom", title: "Нижние модули", list: bottomModulesSelectable },
+              { type: "top", title: "Верхние модули", list: topModulesSelectable },
+            ].map(({ type, title, list }) => (
+              <div key={type} className="space-y-3">
+                <div className="text-xs font-semibold text-night-700 uppercase">{title}</div>
+
+                <select
+                  value={""}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (!v) return;
+                    addModule(type, v);
+                  }}
+                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+                >
+                  <option value="">+ Добавить...</option>
+                  {list.map((m) => (
+                    <option key={`${type}-${m.id}`} value={m.id}>
+                      #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
+                    </option>
+                  ))}
+                </select>
+
+                {(selectedModulesByType[type] || []).length === 0 ? (
+                  <div className="text-xs text-night-500">Пусто</div>
+                ) : (
+                  <div className="space-y-2">
+                    {selectedModulesByType[type].map((m, idx) => {
+                      const full = referenceData.modules.find((x) => x.id === Number(m.moduleId));
+                      return (
+                        <div key={m.positionUid || `${type}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${m.moduleId}`}</div>
+                            <div className="text-xs text-night-500">{full?.sku || ""}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <SecureInput
+                              type="number"
+                              value={m.quantity}
+                              onChange={(v) => updateQuantity(type, idx, v)}
+                              className="w-20"
+                            />
+                            <SecureButton type="button" variant="ghost" onClick={() => removeModule(type, idx)} className="text-red-600 hover:bg-red-50">
+                              Удалить
+                            </SecureButton>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-night-700 uppercase">Компоненты</div>
 
               <select
                 value={""}
                 onChange={(e) => {
                   const v = e.target.value;
                   if (!v) return;
-                  addModule(type, v);
+                  addCatalogItem(v);
                 }}
                 className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
               >
-                <option value="">+ Добавить модуль...</option>
-                {list.map((m) => (
-                  <option key={`${type}-${m.id}`} value={m.id}>
+                <option value="">+ Добавить...</option>
+                {catalogItemsSelectable.map((m) => (
+                  <option key={`ci-${m.id}`} value={m.id}>
                     #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
                   </option>
                 ))}
               </select>
 
-              {(selectedModulesByType[type] || []).length === 0 ? (
+              {selectedCatalogItems.length === 0 ? (
                 <div className="text-xs text-night-500">Пусто</div>
               ) : (
                 <div className="space-y-2">
-                  {selectedModulesByType[type].map((m, idx) => {
-                    const full = referenceData.modules.find((x) => x.id === Number(m.moduleId));
+                  {selectedCatalogItems.map((m, idx) => {
+                    const full = referenceData.catalogItems.find((x) => x.id === Number(m.catalogItemId));
                     return (
-                      <div key={`${type}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
+                      <div key={m.positionUid || `ci-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `Модуль #${m.moduleId}`}</div>
+                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${m.catalogItemId}`}</div>
                           <div className="text-xs text-night-500">{full?.sku || ""}</div>
                         </div>
                         <div className="flex items-center gap-2">
                           <SecureInput
                             type="number"
                             value={m.quantity}
-                            onChange={(v) => updateQuantity(type, idx, v)}
+                            onChange={(v) => updateCatalogItemQuantity(idx, v)}
                             className="w-20"
                           />
-                          <SecureButton type="button" variant="ghost" onClick={() => removeModule(type, idx)} className="text-red-600 hover:bg-red-50">
+                          <SecureButton type="button" variant="ghost" onClick={() => removeCatalogItem(idx)} className="text-red-600 hover:bg-red-50">
                             Удалить
                           </SecureButton>
                         </div>
@@ -784,7 +1254,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
                 </div>
               )}
             </div>
-          ))}
+          )}
 
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2">

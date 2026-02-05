@@ -4,7 +4,7 @@ import SecureButton from "./SecureButton";
 import { formatCurrency } from "../../utils/format";
 import ColorBadge from "./ColorBadge";
 import FavoriteButton from "./FavoriteButton";
-import { getImageUrl, placeholderImage } from "../../utils/image";
+import { getThumbUrl, placeholderImage } from "../../utils/image";
 
 const ProductCard = memo(({ product, onAdd, className = "", compact = false }) => {
   const [isHover, setIsHover] = useState(false);
@@ -18,8 +18,8 @@ const ProductCard = memo(({ product, onAdd, className = "", compact = false }) =
     const primary = product.image || product.image_url || product.preview_url || normalized[0];
     const secondary = normalized.length > 1 ? normalized[1] : null;
     return {
-      primary: getImageUrl(primary),
-      secondary: secondary ? getImageUrl(secondary) : null,
+      primary: getThumbUrl(primary, { w: 900, h: 1200, q: 70, fit: "inside" }),
+      secondary: secondary ? getThumbUrl(secondary, { w: 900, h: 1200, q: 70, fit: "inside" }) : null,
     };
   }, [product.image, product.image_url, product.images, product.preview_url]);
 
@@ -32,8 +32,6 @@ const ProductCard = memo(({ product, onAdd, className = "", compact = false }) =
   const href =
     product?.__type === "kitSolution"
       ? `/catalog/kit/${product.id}`
-      : product?.__type === "catalogItem"
-      ? `/catalog/catalog-item/${product.id}`
       : `/catalog/${product.id}`;
 
   return (

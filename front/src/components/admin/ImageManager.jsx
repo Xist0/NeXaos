@@ -5,7 +5,7 @@ import useAuthStore from "../../store/authStore";
 import SecureButton from "../ui/SecureButton";
 import { FaSpinner, FaUpload, FaImage, FaCheckCircle, FaTrash } from "react-icons/fa";
 import { API_BASE_URL } from "../../utils/constants";
-import { getImageUrl, placeholderImage } from "../../utils/image";
+import { getImageUrl, getThumbUrl, placeholderImage } from "../../utils/image";
 
 const ImageManager = ({
   entityType,
@@ -22,6 +22,7 @@ const ImageManager = ({
 
   const [images, setImages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [initialLoaded, setInitialLoaded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
@@ -29,8 +30,10 @@ const ImageManager = ({
   useEffect(() => {
     if (!entityId || entityId === "null") {
       setImages([]);
+      setInitialLoaded(true);
       return;
     }
+    setInitialLoaded(false);
     fetchImages();
   }, [entityId, entityType]);
 
@@ -57,6 +60,7 @@ const ImageManager = ({
       onMediaChange?.(0);
     } finally {
       setLoading(false);
+      setInitialLoaded(true);
     }
   }, [entityId, entityType, get, logger, onPreviewUpdate, onMediaChange]);
 
@@ -172,6 +176,11 @@ const ImageManager = ({
     return getImageUrl(url);
   };
 
+  const getGridThumbUrl = (url) => {
+    if (!url) return placeholderImage;
+    return getThumbUrl(url, { w: 420, h: 252, q: 70, fit: "cover" });
+  };
+
   const isVideoMedia = (item) => {
     if (!item) return false;
     if (item.media_type && String(item.media_type).toLowerCase() === "video") return true;
@@ -180,8 +189,29 @@ const ImageManager = ({
     return url.endsWith(".mp4") || url.endsWith(".webm") || url.endsWith(".ogg") || url.endsWith(".mov");
   };
 
+  if (!initialLoaded && loading) {
+    return (
+      <div className="relative">
+        <div className="absolute inset-0 z-[1000] rounded-3xl bg-white/60 backdrop-blur-sm" />
+        <div className="relative z-[1001] glass-card p-16 text-center">
+          <FaSpinner className="w-16 h-16 text-accent animate-spin mx-auto mb-8" />
+          <div className="text-2xl font-bold text-night-900 mb-2">Загружаем фотографии</div>
+          <div className="text-sm text-night-600">Пожалуйста, подождите…</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {loading && (
+        <div className="absolute inset-0 z-[1000] rounded-3xl bg-white/60 backdrop-blur-sm flex items-center justify-center">
+          <div className="glass-card px-8 py-6 flex items-center gap-3">
+            <FaSpinner className="w-6 h-6 text-accent animate-spin" />
+            <span className="text-sm font-semibold text-night-800">Загрузка…</span>
+          </div>
+        </div>
+      )}
       {/* Upload Zone */}
       <label className="block cursor-pointer group">
         <div
@@ -259,13 +289,14 @@ const ImageManager = ({
                     muted
                     playsInline
                     preload="metadata"
-                    controls
                   />
                 ) : (
                   <img
-                    src={getPreviewUrl(image.url)}
+                    src={getGridThumbUrl(image.url)}
                     alt={image.alt || `Image ${idx + 1}`}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                    loading="lazy"
+                    decoding="async"
                     onError={(e) => {
                       e.target.src = placeholderImage;
                     }}

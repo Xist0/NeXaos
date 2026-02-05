@@ -1,6 +1,8 @@
   const Joi = require("joi");
   const { hashPassword } = require("../services/user.service");
   const { query } = require("../config/db");
+  const { buildArticle } = require("../utils/article");
+  const { resolveCategoryGroupCode, resolveCategoryCode } = require("../utils/category-codes");
 
   const buildFieldSchema = (config) => {
     let field;
@@ -325,31 +327,84 @@
       beforeCreate: async (payload) => {
         const next = { ...payload };
         if (!next.sku) {
-          const baseSku = next.base_sku;
-          const size = next.length_mm;
-          let colorSku = next.facade_color;
-          if (!colorSku && next.primary_color_id) {
-            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.primary_color_id]);
-            colorSku = rows?.[0]?.sku || null;
+          let subcategory = "";
+          if (next.module_category_id) {
+            const { rows } = await query(
+              `SELECT code, name FROM module_categories WHERE id = $1`,
+              [next.module_category_id]
+            );
+            const row = rows?.[0];
+            subcategory = row?.code || row?.name || "";
           }
-          const generated = buildAutoSku({ baseSku, colorSku, size });
+
+          let primaryColor = next.facade_color;
+          if (!primaryColor && next.primary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.primary_color_id]);
+            primaryColor = rows?.[0]?.sku || null;
+          }
+
+          let secondaryColor = next.corpus_color;
+          if (!secondaryColor && next.secondary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.secondary_color_id]);
+            secondaryColor = rows?.[0]?.sku || null;
+          }
+
+          const generated = buildArticle({
+            category: "Кухня",
+            section: null,
+            subcategory,
+            name: next.base_sku || next.name,
+            size1: next.length_mm,
+            size2: next.depth_mm,
+            size3: next.height_mm,
+            primaryColor,
+            secondaryColor,
+          });
           if (generated) next.sku = generated;
         }
         return next;
       },
       beforeUpdate: async (payload) => {
         const next = { ...payload };
-        const baseSku = next.base_sku;
-        const size = next.length_mm;
         const hasSkuInPayload = Object.prototype.hasOwnProperty.call(next, "sku") && next.sku;
 
-        if (!hasSkuInPayload && (baseSku || size || next.facade_color || next.primary_color_id)) {
-          let colorSku = next.facade_color;
-          if (!colorSku && next.primary_color_id) {
-            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.primary_color_id]);
-            colorSku = rows?.[0]?.sku || null;
+        if (
+          !hasSkuInPayload &&
+          (next.base_sku || next.name || next.length_mm || next.depth_mm || next.height_mm || next.module_category_id || next.facade_color || next.corpus_color || next.primary_color_id || next.secondary_color_id)
+        ) {
+          let subcategory = "";
+          if (next.module_category_id) {
+            const { rows } = await query(
+              `SELECT code, name FROM module_categories WHERE id = $1`,
+              [next.module_category_id]
+            );
+            const row = rows?.[0];
+            subcategory = row?.code || row?.name || "";
           }
-          const generated = buildAutoSku({ baseSku, colorSku, size });
+
+          let primaryColor = next.facade_color;
+          if (!primaryColor && next.primary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.primary_color_id]);
+            primaryColor = rows?.[0]?.sku || null;
+          }
+
+          let secondaryColor = next.corpus_color;
+          if (!secondaryColor && next.secondary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.secondary_color_id]);
+            secondaryColor = rows?.[0]?.sku || null;
+          }
+
+          const generated = buildArticle({
+            category: "Кухня",
+            section: null,
+            subcategory,
+            name: next.base_sku || next.name,
+            size1: next.length_mm,
+            size2: next.depth_mm,
+            size3: next.height_mm,
+            primaryColor,
+            secondaryColor,
+          });
           if (generated) next.sku = generated;
         }
         return next;
@@ -633,6 +688,7 @@
       idColumn: "id",
       columns: {
         name: { type: "string", required: true, max: 255 },
+        base_sku: { type: "string", max: 255, allowNull: true },
         sku: { type: "string", max: 255 },
         description: { type: "string", allowNull: true },
         total_length_mm: { type: "integer" },
@@ -655,6 +711,7 @@
       table: "catalog_items",
       idColumn: "id",
       columns: {
+        base_sku: { type: "string", max: 255, allowNull: true },
         sku: { type: "string", max: 255, allowNull: true },
         name: { type: "string", required: true, max: 255 },
         description: { type: "string", allowNull: true },
@@ -670,6 +727,75 @@
         preview_url: { type: "string", allowNull: true },
         collection_id: { type: "integer" },
         is_active: { type: "boolean" },
+      },
+      beforeCreate: async (payload) => {
+        const next = { ...payload };
+        if (!next.sku) {
+          let primaryColor = null;
+          if (next.primary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.primary_color_id]);
+            primaryColor = rows?.[0]?.sku || null;
+          }
+          let secondaryColor = null;
+          if (next.secondary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.secondary_color_id]);
+            secondaryColor = rows?.[0]?.sku || null;
+          }
+
+          const category = next.category_group;
+          const subcategory = next.category;
+          const articleName = next.base_sku || next.name;
+          const generated = buildArticle({
+            category: category ? resolveCategoryGroupCode(category) : category,
+            section: null,
+            subcategory: subcategory ? resolveCategoryCode(subcategory) : subcategory,
+            name: articleName,
+            size1: next.length_mm,
+            size2: next.depth_mm,
+            size3: next.height_mm,
+            primaryColor,
+            secondaryColor,
+          });
+          if (generated) next.sku = generated;
+        }
+        return next;
+      },
+      beforeUpdate: async (payload) => {
+        const next = { ...payload };
+        const hasSkuInPayload = Object.prototype.hasOwnProperty.call(next, "sku") && next.sku;
+
+        if (
+          !hasSkuInPayload &&
+          (next.base_sku || next.name || next.category_group || next.category || next.length_mm || next.depth_mm || next.height_mm || next.primary_color_id || next.secondary_color_id)
+        ) {
+          let primaryColor = null;
+          if (next.primary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.primary_color_id]);
+            primaryColor = rows?.[0]?.sku || null;
+          }
+          let secondaryColor = null;
+          if (next.secondary_color_id) {
+            const { rows } = await query(`SELECT sku FROM colors WHERE id = $1`, [next.secondary_color_id]);
+            secondaryColor = rows?.[0]?.sku || null;
+          }
+
+          const category = next.category_group;
+          const subcategory = next.category;
+          const articleName = next.base_sku || next.name;
+          const generated = buildArticle({
+            category: category ? resolveCategoryGroupCode(category) : category,
+            section: null,
+            subcategory: subcategory ? resolveCategoryCode(subcategory) : subcategory,
+            name: articleName,
+            size1: next.length_mm,
+            size2: next.depth_mm,
+            size3: next.height_mm,
+            primaryColor,
+            secondaryColor,
+          });
+          if (generated) next.sku = generated;
+        }
+        return next;
       },
     },
     {

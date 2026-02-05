@@ -5,7 +5,6 @@ import HomePage from "../pages/HomePage";
 import CatalogPage from "../pages/CatalogPage";
 import ProductPage from "../pages/ProductPage";
 import KitSolutionPage from "../pages/KitSolutionPage";
-import CatalogItemPage from "../pages/CatalogItemPage";
 import FavoritesPage from "../pages/FavoritesPage";
 import CartPage from "../pages/CartPage";
 import AccountPage from "../pages/AccountPage";
@@ -13,6 +12,12 @@ import AdminPage from "../pages/AdminPage";
 import WorksPage from "../pages/WorksPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import { ROLES } from "../utils/constants";
+import { Navigate, useParams } from "react-router-dom";
+
+const CatalogItemRedirect = () => {
+  const { id } = useParams();
+  return <Navigate to={id ? `/catalog/${id}` : "/catalog"} replace />;
+};
 
 export const router = createBrowserRouter([
   {
@@ -22,7 +27,7 @@ export const router = createBrowserRouter([
       { path: "catalog", element: <CatalogPage /> },
       { path: "catalog/:id", element: <ProductPage /> },
       { path: "catalog/kit/:id", element: <KitSolutionPage /> },
-      { path: "catalog/catalog-item/:id", element: <CatalogItemPage /> },
+      { path: "catalog/catalog-item/:id", element: <CatalogItemRedirect /> },
       { path: "works", element: <WorksPage /> },
       { path: "favorites", element: <FavoritesPage /> },
       { path: "cart", element: <CartPage /> },

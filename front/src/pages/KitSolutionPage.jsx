@@ -151,19 +151,46 @@ const KitSolutionPage = () => {
     navigate(`/catalog?${params.toString()}`);
   }, [kit?.id, kit?.primary_color_id, navigate]);
 
+  const isKitchen = /^\s*(кух|kitchen)/i.test(String(kit?.category_group || "").trim());
   const modulesByType = kit?.modules || {};
+  const kitComponents = Array.isArray(kit?.components) ? kit.components : [];
 
-  const compositionSections = useMemo(() => (
-    [
+  const kitchenSectionsConfig = useMemo(
+    () => [
       { key: "bottom", title: "Нижние модули" },
       { key: "top", title: "Верхние модули" },
       { key: "tall", title: "Пеналы" },
       { key: "filler", title: "Доборные элементы" },
       { key: "accessory", title: "Аксессуары" },
-    ]
-      .map(({ key, title }) => ({ title, items: Array.isArray(modulesByType[key]) ? modulesByType[key] : [] }))
-      .filter((section) => section.items.length > 0)
-  ), [modulesByType]);
+    ],
+    []
+  );
+
+  const fallbackKitchenModulesByType = useMemo(() => {
+    const grouped = { bottom: [], top: [], tall: [], filler: [], accessory: [] };
+    const list = kitComponents.filter((x) => x?.__type === "module" && x?.id);
+    for (const m of list) {
+      const key = String(m.positionType || m.categoryCode || "bottom");
+      if (!grouped[key]) grouped.bottom.push(m);
+      else grouped[key].push(m);
+    }
+    return grouped;
+  }, [kitComponents]);
+
+  const compositionSections = useMemo(() => (
+    isKitchen
+      ? kitchenSectionsConfig
+          .map(({ key, title }) => {
+            const primary = Array.isArray(modulesByType[key]) ? modulesByType[key] : [];
+            const fallback = Array.isArray(fallbackKitchenModulesByType[key]) ? fallbackKitchenModulesByType[key] : [];
+            const items = primary.length > 0 ? primary : fallback;
+            return { title, items };
+          })
+          .filter((section) => section.items.length > 0)
+      : kitComponents.length > 0
+        ? [{ title: "Компоненты", items: kitComponents }]
+        : []
+  ), [fallbackKitchenModulesByType, isKitchen, kitchenSectionsConfig, kitComponents, modulesByType]);
 
   const loadSimilar = useCallback(async () => {
     if (!id) return;

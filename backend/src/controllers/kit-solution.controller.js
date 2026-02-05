@@ -74,9 +74,9 @@ const remove = asyncHandler(async (req, res) => {
  * POST /api/kit-solutions
  */
 const create = asyncHandler(async (req, res) => {
-  const { moduleIds, ...kitData } = req.body;
+  const { moduleIds, moduleItems, componentItems, ...kitData } = req.body;
 
-  const kitSolution = await kitSolutionService.saveKitSolutionWithModules(kitData, moduleIds);
+  const kitSolution = await kitSolutionService.saveKitSolutionWithModules(kitData, moduleIds, moduleItems, componentItems);
 
   logger.info("Создано готовое решение", {
     kitSolutionId: kitSolution.id,
@@ -94,7 +94,7 @@ const create = asyncHandler(async (req, res) => {
  */
 const update = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { moduleIds, ...kitData } = req.body;
+  const { moduleIds, moduleItems, componentItems, ...kitData } = req.body;
 
   const kitSolutionId = parseInt(id, 10);
   if (isNaN(kitSolutionId) || kitSolutionId <= 0) {
@@ -102,7 +102,7 @@ const update = asyncHandler(async (req, res) => {
   }
 
   kitData.id = kitSolutionId;
-  const kitSolution = await kitSolutionService.saveKitSolutionWithModules(kitData, moduleIds);
+  const kitSolution = await kitSolutionService.saveKitSolutionWithModules(kitData, moduleIds, moduleItems, componentItems);
 
   logger.info("Обновлено готовое решение", {
     kitSolutionId,

@@ -2,10 +2,12 @@
 const express = require("express");
 const crypto = require("crypto");
 const path = require("path");
+const fs = require("fs");
 const cors = require("cors");
 const helmet = require("helmet");
 const cookieParser = require("cookie-parser");
 const config = require("./config/env");
+const sharp = require("sharp");
 const applySecurityMiddleware = require("./middleware/security.middleware");
 const applyProxy = require("./middleware/proxy.middleware");
 const errorHandler = require("./middleware/error.middleware");
@@ -83,6 +85,75 @@ app.use(cookieParser());
 
 // Статика для загруженных файлов с CORS заголовками
 // Должна быть до security middleware и proxy, чтобы не блокировалась
+app.get("/uploads/thumb", async (req, res, next) => {
+  try {
+    const rawSrc = typeof req.query.src === "string" ? req.query.src : "";
+    if (!rawSrc || !rawSrc.startsWith("/uploads/")) {
+      res.status(400).json({ message: "Invalid src" });
+      return;
+    }
+
+    const w = Math.min(2000, Math.max(1, Number(req.query.w) || 0)) || 0;
+    const h = Math.min(2000, Math.max(1, Number(req.query.h) || 0)) || 0;
+    const q = Math.min(95, Math.max(30, Number(req.query.q) || 70));
+    const fit = String(req.query.fit || "cover");
+    const allowedFits = new Set(["cover", "contain", "fill", "inside", "outside"]);
+    const safeFit = allowedFits.has(fit) ? fit : "cover";
+    const withoutPrefix = rawSrc.replace(/^\/uploads\//, "");
+    const rel = withoutPrefix.replace(/\\/g, "/");
+    const relSafe = rel.replace(/\.+\//g, "");
+
+    const candidates = [config.uploadsDir, config.legacyUploadsDir].filter(Boolean);
+    let originalPath = null;
+    for (const baseDir of candidates) {
+      const full = path.resolve(path.join(baseDir, relSafe));
+      const base = path.resolve(baseDir);
+      if (!full.startsWith(base + path.sep) && full !== base) continue;
+      if (fs.existsSync(full) && fs.statSync(full).isFile()) {
+        originalPath = full;
+        break;
+      }
+    }
+
+    if (!originalPath) {
+      res.status(404).end();
+      return;
+    }
+
+    const cacheDir = path.join(config.uploadsDir, ".thumbs");
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+
+    const key = crypto
+      .createHash("sha1")
+      .update(`${rawSrc}|${w}|${h}|${q}|${safeFit}`)
+      .digest("hex");
+    const cachedPath = path.join(cacheDir, `${key}.webp`);
+
+    if (fs.existsSync(cachedPath)) {
+      res.setHeader("Content-Type", "image/webp");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      res.sendFile(cachedPath);
+      return;
+    }
+
+    const transformer = sharp(originalPath).rotate();
+    const resized = w || h ? transformer.resize({ width: w || undefined, height: h || undefined, fit: safeFit }) : transformer;
+    const buf = await resized.webp({ quality: q }).toBuffer();
+
+    try {
+      fs.writeFileSync(cachedPath, buf);
+    } catch {
+      // ignore cache write errors
+    }
+
+    res.setHeader("Content-Type", "image/webp");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.end(buf);
+  } catch (e) {
+    next(e);
+  }
+});
+
 app.use(
   "/uploads",
   (req, res, next) => {

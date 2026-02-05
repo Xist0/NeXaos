@@ -12,6 +12,8 @@ const orderController = require("../controllers/order.controller");
 const imageController = require("../controllers/image.controller");
 const moduleController = require("../controllers/module.controller");
 const kitSolutionController = require("../controllers/kit-solution.controller");
+const catalogItemController = require("../controllers/catalog-item.controller");
+const catalogController = require("../controllers/catalog.controller");
 
 // Кастомные роуты для orders
 router.get("/orders", authGuard, asyncHandler(orderController.list));
@@ -44,6 +46,8 @@ entities.forEach((entity) => {
   router.put(`${basePath}/:id`, ...auth, asyncHandler(controller.update));
   router.delete(`${basePath}/:id`, ...auth, asyncHandler(controller.remove));
 });
+
+router.get("/catalog/:id", optionalAuth, asyncHandler(catalogController.getById));
 
 router.post("/logs", (req, res) => {
   try {
@@ -306,6 +310,9 @@ router.post("/modules/check-compatibility", optionalAuth, asyncHandler(moduleCon
 
 // POST /api/modules/:id/similar - найти похожие модули
 router.post("/modules/:id/similar", optionalAuth, asyncHandler(moduleController.findSimilar));
+
+// POST /api/catalog-items/:id/similar - найти похожие элементы каталога
+router.post("/catalog-items/:id/similar", optionalAuth, asyncHandler(catalogItemController.findSimilar));
 
 // POST /api/modules/with-descriptions - получить модули с описаниями
 router.post("/modules/with-descriptions", optionalAuth, asyncHandler(moduleController.getModulesWithDescriptions));

@@ -20,5 +20,10 @@ module.exports = [
   require("./019_create_hero_slides_and_works"),
   require("./020_create_collections_and_catalog_items"),
   require("./021_add_categories_to_kit_solutions"),
+  require("./022_add_position_uid_to_kit_solution_modules"),
+  require("./023_create_kit_solution_components"),
+  require("./024_backfill_kitchen_ready_kit_solution_categories"),
+  require("./025_backfill_kitchen_ready_kit_solution_categories_by_components"),
+  require("./026_add_base_sku_to_catalog_items_and_kit_solutions"),
 ];
 

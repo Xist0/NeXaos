@@ -8,8 +8,9 @@ import { formatCurrency } from "../utils/format";
 import ColorBadge from "../components/ui/ColorBadge";
 import FavoriteButton from "../components/ui/FavoriteButton";
 import useLogger from "../hooks/useLogger";
-import { getImageUrl } from "../utils/image";
+import { getThumbUrl, getImageUrl } from "../utils/image";
 import ProductGallery from "../components/ui/ProductGallery";
+import apiClient from "../services/apiClient";
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -31,6 +32,11 @@ const ProductPage = () => {
   const [sizeRowScroll, setSizeRowScroll] = useState({ canLeft: false, canRight: false, hasOverflow: false });
   const [colorRowScroll, setColorRowScroll] = useState({ canLeft: false, canRight: false, hasOverflow: false });
   const [variantsModalOpen, setVariantsModalOpen] = useState(false);
+
+  const resolveThumb = useCallback(
+    (url, opts) => getThumbUrl(url, opts || { w: 1200, h: 1600, q: 75, fit: "inside" }),
+    []
+  );
 
   const variantItems = useMemo(() => {
     const list = [item, ...(Array.isArray(similarItems) ? similarItems : [])].filter(Boolean);
@@ -88,14 +94,39 @@ const ProductPage = () => {
 
     const fetchItem = async () => {
       try {
-        const moduleRes = await getRef.current(`/modules/${id}`, undefined, {
+        const validateStatus = (status) => (status >= 200 && status < 300) || status === 304 || status === 404;
+        const unwrap = (resp) => {
+          const payload = resp?.data;
+          if (
+            payload &&
+            typeof payload === "object" &&
+            !Array.isArray(payload) &&
+            Object.prototype.hasOwnProperty.call(payload, "data")
+          ) {
+            return payload.data;
+          }
+          return payload;
+        };
+
+        const resp = await apiClient.get(`/catalog/${id}`, {
           signal: abortController.signal,
+          validateStatus,
         });
 
-        if (active && moduleRes?.data) {
-          const itemData = moduleRes.data;
-          setItem(itemData);
-          setImages(Array.isArray(itemData?.images) ? itemData.images : []);
+        const itemData = resp?.status === 404 ? null : unwrap(resp);
+        const itemType = itemData?.__type || "module";
+
+        if (active && itemData) {
+          setItem({ ...itemData, __type: itemType });
+          const imgs = Array.isArray(itemData?.images)
+            ? itemData.images
+            : itemType === "catalogItem"
+              ? (() => {
+                  const url = itemData?.preview_url || itemData?.image_url || null;
+                  return url ? [{ url }] : [];
+                })()
+              : [];
+          setImages(imgs);
           setSelectedImageIndex(0);
         }
       } catch (error) {
@@ -208,6 +239,7 @@ const ProductPage = () => {
   // Похожие товары
   const loadSimilar = useCallback(async () => {
     if (!item?.id) return;
+    if (item.__type !== "module" && item.__type !== "catalogItem") return;
     if (similarRequestRef.current.inFlight) return;
     if (similarRequestRef.current.lastForId === item.id && similarItems.length > 0) return;
 
@@ -215,7 +247,8 @@ const ProductPage = () => {
     similarRequestRef.current.lastForId = item.id;
     setSimilarLoading(true);
     try {
-      const res = await postRef.current(`/modules/${item.id}/similar`, { limit: 12 });
+      const endpoint = item.__type === "catalogItem" ? `/catalog-items/${item.id}/similar` : `/modules/${item.id}/similar`;
+      const res = await postRef.current(endpoint, { limit: 12 });
       const list = Array.isArray(res?.data) ? res.data : [];
       const filtered = list.filter((x) => x.id !== Number(id) && x.is_active).slice(0, 12);
       setSimilarItems(filtered);
@@ -231,6 +264,7 @@ const ProductPage = () => {
 
   useEffect(() => {
     if (!item?.id) return;
+    if (item.__type !== "module" && item.__type !== "catalogItem") return;
     loadSimilar();
   }, [item?.id, loadSimilar]);
 
@@ -241,7 +275,9 @@ const ProductPage = () => {
 
   const handleFindSimilar = () => {
     if (!item?.id) return;
-    const params = new URLSearchParams({ fromProduct: "1", similarModuleId: String(item.id) });
+    const params = new URLSearchParams({ fromProduct: "1" });
+    if (item.__type === "catalogItem") params.set("similarCatalogItemId", String(item.id));
+    else params.set("similarModuleId", String(item.id));
 
     let categoryCode = item.category_code;
     if (!categoryCode && item.module_category_id) {
@@ -264,6 +300,9 @@ const ProductPage = () => {
   };
 
   const isKit = item?.__type === "kitSolution";
+  const isModule = item?.__type === "module";
+  const isCatalogItem = item?.__type === "catalogItem";
+  const canShowSimilar = isModule || isCatalogItem;
   const modulesByType = isKit ? item.modules || {} : null;
   const compositionSections = useMemo(() => {
     if (!isKit) return [];
@@ -343,9 +382,9 @@ const ProductPage = () => {
           selectedIndex={selectedImageIndex}
           onSelect={setSelectedImageIndex}
           onOpenSimilar={handleFindSimilar}
-          showSimilarButton
+          showSimilarButton={canShowSimilar}
           isNew={Boolean(item.is_new)}
-          getImageUrl={getImageUrl}
+          getImageUrl={resolveThumb}
         />
 
         {/* Центр: варианты + характеристики */}
@@ -354,7 +393,10 @@ const ProductPage = () => {
             <div>
               {(() => {
                 const selectedSize = item?.length_mm ? Number(item.length_mm) : null;
-                const selectedColor = item?.primary_color?.name || item?.facade_color || "";
+                const selectedPrimary = (item?.primary_color?.name || item?.facade_color || "").trim();
+                const selectedSecondary = (item?.secondary_color?.name || item?.corpus_color || "").trim();
+                const selectedColorLabel = [selectedPrimary, selectedSecondary].filter(Boolean).join(" + ");
+                const selectedColorKey = selectedColorLabel || String(item?.id || "");
 
                 const sizes = Array.from(
                   new Set(
@@ -367,9 +409,12 @@ const ProductPage = () => {
                 const colors = Array.from(
                   new Map(
                     variantItems.map((v) => {
-                      const label = v.primary_color?.name || v.facade_color || "";
+                      const primary = (v.primary_color?.name || v.facade_color || "").trim();
+                      const secondary = (v.secondary_color?.name || v.corpus_color || "").trim();
+                      const label = [primary, secondary].filter(Boolean).join(" + ");
+                      const key = label || String(v.id);
                       const imgUrl = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
-                      return [label || String(v.id), { label, imgUrl, sample: v }];
+                      return [key, { key, label, primary, secondary, imgUrl, sample: v }];
                     })
                   ).values()
                 );
@@ -449,7 +494,7 @@ const ProductPage = () => {
 
                     <div className="space-y-2">
                       <div className="text-night-500 text-sm">
-                        Выбран цвет: <span className="text-night-900 font-medium">{selectedColor || "—"}</span>
+                        Выбран цвет: <span className="text-night-900 font-medium">{selectedColorLabel || "—"}</span>
                       </div>
                       <div className="relative overflow-hidden">
                         <button
@@ -483,12 +528,12 @@ const ProductPage = () => {
                           className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth px-1"
                           style={{ scrollbarWidth: "none" }}
                         >
-                        {colors.map(({ label, imgUrl, sample }) => {
-                          const isActive = Boolean(selectedColor) && selectedColor === label;
+                        {colors.map(({ key, label, primary, secondary, imgUrl, sample }) => {
+                          const isActive = key === selectedColorKey;
                           const safeLabel = encodeURIComponent(label || String(sample?.id || ""));
                           return (
                             <button
-                              key={label || sample?.id}
+                              key={key}
                               type="button"
                               data-color={safeLabel}
                               onClick={(e) => {
@@ -496,11 +541,20 @@ const ProductPage = () => {
                                 const candidates = currentLen
                                   ? variantItems.filter((x) => Number(x.length_mm) === Number(currentLen))
                                   : variantItems;
-                                const next =
-                                  candidates.find((x) => (x.primary_color?.name || x.facade_color || "") === label) ||
-                                  variantItems.find((x) => (x.primary_color?.name || x.facade_color || "") === label) ||
-                                  sample;
-                                if (!next || String(next.id) === String(item.id)) return;
+                                let next = sample;
+                                if (label) {
+                                  const match = (x) => {
+                                    const p = ((x.primary_color?.name || x.facade_color || "").trim());
+                                    const s = ((x.secondary_color?.name || x.corpus_color || "").trim());
+                                    return p === (primary || "") && s === (secondary || "");
+                                  };
+                                  next = candidates.find(match) || variantItems.find(match) || sample;
+                                }
+                                if (!next) return;
+                                if (String(next.id) === String(item.id)) {
+                                  // Если кликнули по текущему — ничего не делаем
+                                  return;
+                                }
                                 scrollToCenterSmooth(colorRowRef.current, e.currentTarget);
                                 navigate(`/catalog/${next.id}`);
                               }}
@@ -513,7 +567,7 @@ const ProductPage = () => {
                               <div className="w-11 h-14 rounded-md overflow-hidden">
                                 {imgUrl ? (
                                   <img
-                                    src={getImageUrl(imgUrl)}
+                                    src={resolveThumb(imgUrl, { w: 220, h: 280, q: 70, fit: "inside" })}
                                     alt={label || item.name}
                                     className="w-full h-full object-cover"
                                     loading="lazy"
@@ -626,11 +680,59 @@ const ProductPage = () => {
             </div>
             <div className="max-h-[70vh] overflow-y-auto">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {variantItems.map((v) => {
+                {(() => {
+                  const getPrimaryLabel = (x) => (x?.primary_color?.name || x?.facade_color || "").trim();
+                  const getSecondaryLabel = (x) => (x?.secondary_color?.name || x?.corpus_color || "").trim();
+
+                  const getPrimarySampleUrl = (x) => x?.primary_color?.image_url || null;
+                  const getSecondarySampleUrl = (x) => x?.secondary_color?.image_url || null;
+
+                  const sizeKey = (x) => (x?.length_mm ? String(Number(x.length_mm)) : "");
+                  const colorKey = (x) => {
+                    const p = getPrimaryLabel(x);
+                    const s = getSecondaryLabel(x);
+                    return `${p}||${s}`;
+                  };
+
+                  const uniqueSizes = new Set(variantItems.map(sizeKey).filter(Boolean));
+                  const uniqueColors = new Set(variantItems.map(colorKey));
+                  const sizesVary = uniqueSizes.size > 1;
+                  const colorsVary = uniqueColors.size > 1;
+
+                  const selectedSizeKey = sizeKey(item);
+                  const selectedColorKey = colorKey(item);
+
+                  // Если что-то не варьируется — показываем только отличия по варьируемому атрибуту.
+                  // Если варьируется и размер и цвет — показываем все.
+                  const filtered = variantItems.filter((v) => {
+                    if (sizesVary && !colorsVary) {
+                      return sizeKey(v) !== selectedSizeKey;
+                    }
+                    if (!sizesVary && colorsVary) {
+                      return colorKey(v) !== selectedColorKey;
+                    }
+                    return true;
+                  });
+
+                  // Чтобы не получилось пусто (например если все одинаковые) — fallback на полный список.
+                  const list = filtered.length ? filtered : variantItems;
+
+                  return list.map((v) => {
                   const isActive = String(v.id) === String(item.id);
                   const vImg = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
-                  const primaryColorLabel = v.primary_color?.name || v.facade_color || "";
+
+                  const primaryLabel = getPrimaryLabel(v);
+                  const secondaryLabel = getSecondaryLabel(v);
+                  const colorLabel = [primaryLabel, secondaryLabel].filter(Boolean).join(" + ");
                   const sizeLabel = v.length_mm ? String(v.length_mm) : "";
+
+                  const showSize = sizesVary && sizeKey(v) !== selectedSizeKey;
+                  const showColor = colorsVary && colorKey(v) !== selectedColorKey;
+
+                  const pUrl = getPrimarySampleUrl(v);
+                  const sUrl = getSecondarySampleUrl(v);
+                  const pBg = pUrl ? `url(${resolveThumb(pUrl, { w: 64, h: 64, q: 70, fit: "inside" })})` : "none";
+                  const sBg = sUrl ? `url(${resolveThumb(sUrl, { w: 64, h: 64, q: 70, fit: "inside" })})` : "none";
                   return (
                     <button
                       key={v.id}
@@ -642,18 +744,41 @@ const ProductPage = () => {
                       }}
                       className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${isActive ? "border-accent bg-accent/5" : "border-night-200 hover:border-night-300"}`}
                     >
-                      <div className="w-14 h-16 rounded-lg bg-night-50 overflow-hidden border border-night-200 flex-shrink-0">
+                      <div className="relative w-14 h-16 rounded-lg bg-night-50 overflow-hidden border border-night-200 flex-shrink-0">
+                        <div className="absolute left-1 top-1 w-4 h-4 rounded-full border border-white shadow overflow-hidden" aria-hidden>
+                          <div
+                            className="absolute inset-y-0 left-0 w-1/2"
+                            style={
+                              pBg === "none"
+                                ? { backgroundColor: "#e5e7eb" }
+                                : { backgroundImage: pBg, backgroundSize: "cover", backgroundPosition: "center" }
+                            }
+                          />
+                          <div
+                            className="absolute inset-y-0 right-0 w-1/2"
+                            style={
+                              sBg === "none"
+                                ? { backgroundColor: "#e5e7eb" }
+                                : { backgroundImage: sBg, backgroundSize: "cover", backgroundPosition: "center" }
+                            }
+                          />
+                        </div>
                         {vImg ? (
-                          <img src={getImageUrl(vImg)} alt={v.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
+                          <img src={resolveThumb(vImg, { w: 280, h: 320, q: 70, fit: "inside" })} alt={v.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
                         ) : null}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-sm font-semibold text-night-900 truncate">{sizeLabel ? `${sizeLabel} мм` : v.sku || v.name}</div>
-                        <div className="text-xs text-night-500 truncate">{primaryColorLabel || ""}</div>
+                        <div className="text-sm font-semibold text-night-900 truncate">
+                          {primaryLabel || "—"}
+                        </div>
+                        {secondaryLabel ? (
+                          <div className="text-xs text-night-500 truncate">{secondaryLabel}</div>
+                        ) : null}
                       </div>
                     </button>
                   );
-                })}
+                  });
+                })()}
               </div>
             </div>
           </div>
@@ -701,7 +826,7 @@ const ProductPage = () => {
                       <div className="space-y-2">
                         <div className="aspect-[4/3] bg-night-50 rounded-xl overflow-hidden">
                           <img
-                            src={getImageUrl(module.preview_url)}
+                            src={resolveThumb(module.preview_url, { w: 800, h: 600, q: 70, fit: "inside" })}
                             alt={module.name}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />
@@ -726,29 +851,31 @@ const ProductPage = () => {
       )}
 
       {/* Похожие товары */}
-      <div className="glass-card p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
-          <h3 className="font-bold text-night-900 text-base sm:text-xl">Похожие товары</h3>
-          <SecureButton
-            variant="outline"
-            onClick={handleFindSimilar}
-            className="text-xs sm:text-sm px-3 py-2 w-full sm:w-auto"
-          >
-            Показать больше
-          </SecureButton>
-        </div>
-        {similarLoading ? (
-          <div className="text-night-500 text-center py-12">Загружаем похожие товары...</div>
-        ) : similarItems.length === 0 ? (
-          <div className="text-night-500 text-center py-12">Похожие товары не найдены</div>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4 auto-rows-fr">
-            {similarItems.map(product => (
-              <ProductCard key={product.id} product={product} onAdd={addItem} compact />
-            ))}
+      {canShowSimilar && (
+        <div className="glass-card p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <h3 className="font-bold text-night-900 text-base sm:text-xl">Похожие товары</h3>
+            <SecureButton
+              variant="outline"
+              onClick={handleFindSimilar}
+              className="text-xs sm:text-sm px-3 py-2 w-full sm:w-auto"
+            >
+              Показать больше
+            </SecureButton>
           </div>
-        )}
-      </div>
+          {similarLoading ? (
+            <div className="text-night-500 text-center py-12">Загружаем похожие товары...</div>
+          ) : similarItems.length === 0 ? (
+            <div className="text-night-500 text-center py-12">Похожие товары не найдены</div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4 auto-rows-fr">
+              {similarItems.map(product => (
+                <ProductCard key={product.id} product={product} onAdd={addItem} compact />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

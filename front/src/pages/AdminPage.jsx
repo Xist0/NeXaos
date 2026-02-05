@@ -613,6 +613,7 @@ const entityConfigs = {
       { name: "category_group", label: "Группа", required: true },
       { name: "category", label: "Категория" },
       { name: "name", label: "Название", required: true },
+      { name: "base_sku", label: "baseSku (для артикула)" },
       { name: "sku", label: "SKU" },
       { name: "description", label: "Описание" },
       { name: "collection_id", label: "Коллекция", type: "collection" },
@@ -635,6 +636,7 @@ const entityConfigs = {
       { name: "category_group", label: "Группа", required: true },
       { name: "category", label: "Категория" },
       { name: "name", label: "Название", required: true },
+      { name: "base_sku", label: "baseSku (для артикула)" },
       { name: "sku", label: "SKU" },
       { name: "description", label: "Описание" },
       { name: "collection_id", label: "Коллекция", type: "collection" },
@@ -657,6 +659,7 @@ const entityConfigs = {
       { name: "category_group", label: "Группа", required: true },
       { name: "category", label: "Категория" },
       { name: "name", label: "Название", required: true },
+      { name: "base_sku", label: "baseSku (для артикула)" },
       { name: "sku", label: "SKU" },
       { name: "description", label: "Описание" },
       { name: "collection_id", label: "Коллекция", type: "collection" },
@@ -679,6 +682,7 @@ const entityConfigs = {
       { name: "category_group", label: "Группа", required: true },
       { name: "category", label: "Категория" },
       { name: "name", label: "Название", required: true },
+      { name: "base_sku", label: "baseSku (для артикула)" },
       { name: "sku", label: "SKU" },
       { name: "description", label: "Описание" },
       { name: "collection_id", label: "Коллекция", type: "collection" },
@@ -1063,14 +1067,14 @@ const AdminPage = () => {
                           {expandedCatalogGroups.kitchen && (
                             <div className="ml-4 space-y-1">
                               <button
-                                onClick={() => handleTabClick("kitSolutions", { sectionId: section.id })}
+                                onClick={() => handleTabClick("kitchenReadySolutions", { sectionId: section.id })}
                                 className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                                  activeTab === "kitSolutions"
+                                  activeTab === "kitchenReadySolutions"
                                     ? "bg-accent text-white font-semibold shadow-md"
                                     : "text-night-600 hover:bg-night-50 hover:shadow-sm"
                                 }`}
                               >
-                                Готовые решения
+                                Готовые кухни
                               </button>
 
                               <button
@@ -1194,42 +1198,53 @@ const AdminPage = () => {
           {activeTab === "orders" && <OrdersTable />}
 
           {activeTab === "kitchenModulesBottom" && (
-            <ModulesAdmin title="Кухня — Модули — Нижние" fixedModuleCategoryId={1} />
+            <ModulesAdmin key={activeTab} title="Кухня — Модули — Нижние" fixedModuleCategoryId={1} />
           )}
           {activeTab === "kitchenModulesTop" && (
-            <ModulesAdmin title="Кухня — Модули — Верхние" fixedModuleCategoryId={2} />
+            <ModulesAdmin key={activeTab} title="Кухня — Модули — Верхние" fixedModuleCategoryId={2} />
           )}
           {activeTab === "kitchenModulesMezzanine" && (
-            <ModulesAdmin title="Кухня — Модули — Антресольные" fixedModuleCategoryId={2} />
+            <ModulesAdmin key={activeTab} title="Кухня — Модули — Антресольные" fixedModuleCategoryId={2} />
           )}
           {activeTab === "kitchenModulesTall" && (
-            <ModulesAdmin title="Кухня — Модули — Пеналы" fixedModuleCategoryId={3} />
+            <ModulesAdmin key={activeTab} title="Кухня — Модули — Пеналы" fixedModuleCategoryId={3} />
+          )}
+
+          {activeTab === "kitchenReadySolutions" && (
+            <KitSolutionsAdmin
+              key={activeTab}
+              title="Кухня — Готовые кухни"
+              fixedValues={{ category_group: "Кухня", category: "Готовые кухни" }}
+            />
           )}
           
           {activeTab === "hallwayReadySolutions" && (
             <KitSolutionsAdmin
+              key={activeTab}
               title="Прихожая — Готовые прихожие"
               fixedValues={{ category_group: "Прихожая", category: "Готовые прихожие" }}
             />
           )}
           {activeTab === "livingroomReadySolutions" && (
             <KitSolutionsAdmin
+              key={activeTab}
               title="Гостиная — Стенки для гостиной"
               fixedValues={{ category_group: "Гостиная", category: "Стенки для гостиной" }}
             />
           )}
           {activeTab === "bedroomReadySolutions" && (
             <KitSolutionsAdmin
+              key={activeTab}
               title="Спальня — Комплект мебели для спальни"
               fixedValues={{ category_group: "Спальня", category: "Комплект мебели для спальни" }}
             />
           )}
 
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ МОДУЛЕЙ */}
-          {isModuleCreator && <ModulesAdmin />}
+          {isModuleCreator && <ModulesAdmin key={activeTab} />}
 
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ ГОТОВЫХ РЕШЕНИЙ */}
-          {isKitSolutionCreator && <KitSolutionsAdmin />}
+          {isKitSolutionCreator && <KitSolutionsAdmin key={activeTab} />}
 
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ ПОДТИПОВ МОДУЛЕЙ */}
           {isModuleDescriptionCreator && <ModuleDescriptionsAdmin />}
@@ -1237,9 +1252,9 @@ const AdminPage = () => {
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
           {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && (
             isCatalogItemsTab ? (
-              <CatalogItemsAdmin title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
+              <CatalogItemsAdmin key={activeTab} title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
             ) : (
-              <EntityManager key={entityConfig.endpoint} {...entityConfig} />
+              <EntityManager key={`${activeTab}:${entityConfig.endpoint}`} {...entityConfig} />
             )
           )}
         </div>

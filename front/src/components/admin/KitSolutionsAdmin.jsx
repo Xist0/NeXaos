@@ -27,6 +27,10 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
     loggerRef.current = logger;
   }, [get, del, logger]);
 
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [fixedValues?.category, fixedValues?.category_group]);
+
   const loadKits = useCallback(async ({ force = false } = {}) => {
     if (!force && hasLoadedRef.current) return;
     if (isLoadingRef.current) return;
@@ -37,6 +41,7 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
       const res = await getRef.current("/kit-solutions", {
         limit: 500,
         includeInactive: true,
+        ...(force ? { __nocache: Date.now() } : {}),
         ...(fixedValues?.category_group ? { categoryGroup: fixedValues.category_group } : {}),
         ...(fixedValues?.category ? { category: fixedValues.category } : {}),
       });
@@ -49,13 +54,13 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
       setLoading(false);
       isLoadingRef.current = false;
     }
-  }, []);
+  }, [fixedValues?.category, fixedValues?.category_group]);
 
   useEffect(() => {
     if (mode === "list") {
-      loadKits({ force: false });
+      loadKits({ force: true });
     }
-  }, [mode, loadKits]);
+  }, [fixedValues?.category, fixedValues?.category_group, mode, loadKits]);
 
   const handleDelete = async (id) => {
     if (!id) return;

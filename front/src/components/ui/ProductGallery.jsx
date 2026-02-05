@@ -138,7 +138,7 @@ const ProductGallery = ({
 
   return (
     <div className={`w-full ${className}`}>
-      <div className="grid gap-3 sm:gap-4 lg:grid-cols-[48px_1fr] lg:items-start">
+      <div className={`grid gap-3 sm:gap-4 ${hasMany ? "lg:grid-cols-[48px_1fr]" : "lg:grid-cols-1"} lg:items-start`}>
         {/* Thumbnails (desktop only) */}
         {hasMany && (
           <div className="hidden lg:block relative">
