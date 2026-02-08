@@ -493,6 +493,13 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
 
   const handleUpload = async (fieldName, file) => {
     if (!file) return;
+
+    const maxBytes = 120 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      logger.error("Файл слишком большой. Максимальный размер: 120MB");
+      return;
+    }
+
     setUploadingField(fieldName);
     try {
       const formData = new FormData();
@@ -513,6 +520,10 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
         logger.error("Сервер не вернул ссылку на файл");
       }
     } catch (error) {
+      if (error?.response?.status === 413) {
+        logger.error("Файл слишком большой для загрузки. Уменьшите размер или загрузите файл меньшего объема.");
+        return;
+      }
       const serverMessage =
         error?.response?.data?.message ||
         error?.response?.data?.error ||
