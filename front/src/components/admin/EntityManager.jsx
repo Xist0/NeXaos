@@ -494,9 +494,9 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
   const handleUpload = async (fieldName, file) => {
     if (!file) return;
 
-    const maxBytes = 120 * 1024 * 1024;
+    const maxBytes = 512 * 1024 * 1024;
     if (file.size > maxBytes) {
-      logger.error("Файл слишком большой. Максимальный размер: 120MB");
+      logger.error("Файл слишком большой. Максимальный размер: 512MB");
       return;
     }
 

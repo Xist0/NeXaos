@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ImageLightbox from "./ImageLightbox";
+import { getImageUrl as defaultGetImageUrl } from "../../utils/image";
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 
@@ -11,7 +12,7 @@ const ProductGallery = ({
   onOpenSimilar,
   showSimilarButton = true,
   isNew = false,
-  getImageUrl,
+  getImageUrl = defaultGetImageUrl,
   className = "",
 }) => {
   const safeImages = Array.isArray(images) ? images : [];
