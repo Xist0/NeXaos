@@ -12,6 +12,14 @@ const CatalogPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState(() => searchParams.get("search") || "");
   const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [page, setPage] = useState(() => {
+    const p = Number(searchParams.get("page") || 1);
+    return Number.isFinite(p) && p > 0 ? Math.floor(p) : 1;
+  });
+  const [limit, setLimit] = useState(() => {
+    const l = Number(searchParams.get("limit") || 24);
+    return Number.isFinite(l) && l > 0 ? Math.min(Math.floor(l), 60) : 24;
+  });
   const [items, setItems] = useState([]);
   const [kitSolutions, setKitSolutions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,9 +51,16 @@ const CatalogPage = () => {
     priceTo: searchParams.get("priceTo") || "",
     lengthFrom: searchParams.get("lengthFrom") || "",
     lengthTo: searchParams.get("lengthTo") || "",
+    depthFrom: searchParams.get("depthFrom") || "",
+    depthTo: searchParams.get("depthTo") || "",
+    heightFrom: searchParams.get("heightFrom") || "",
+    heightTo: searchParams.get("heightTo") || "",
+    parameterCategoryIds: searchParams.get("parameterCategoryIds") || "",
+    sort: searchParams.get("sort") || "",
   }));
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
   const [moduleCategories, setModuleCategories] = useState([]);
+  const [productParameterCategories, setProductParameterCategories] = useState([]);
 
   const roomCatalog = useMemo(
     () => (
@@ -163,12 +178,26 @@ const CatalogPage = () => {
       priceTo: searchParams.get("priceTo") || "",
       lengthFrom: searchParams.get("lengthFrom") || "",
       lengthTo: searchParams.get("lengthTo") || "",
+      depthFrom: searchParams.get("depthFrom") || "",
+      depthTo: searchParams.get("depthTo") || "",
+      heightFrom: searchParams.get("heightFrom") || "",
+      heightTo: searchParams.get("heightTo") || "",
+      parameterCategoryIds: searchParams.get("parameterCategoryIds") || "",
+      sort: searchParams.get("sort") || "",
     };
     setFilters((prev) => {
       const prevJson = JSON.stringify(prev);
       const nextJson = JSON.stringify(nextFilters);
       return prevJson === nextJson ? prev : nextFilters;
     });
+
+    const nextPage = Number(searchParams.get("page") || 1);
+    const safePage = Number.isFinite(nextPage) && nextPage > 0 ? Math.floor(nextPage) : 1;
+    setPage((prev) => (prev === safePage ? prev : safePage));
+
+    const nextLimit = Number(searchParams.get("limit") || 24);
+    const safeLimit = Number.isFinite(nextLimit) && nextLimit > 0 ? Math.min(Math.floor(nextLimit), 60) : 24;
+    setLimit((prev) => (prev === safeLimit ? prev : safeLimit));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
@@ -191,13 +220,21 @@ const CatalogPage = () => {
       if (value) params.set(key, value);
     });
 
+    if (page && page !== 1) params.set("page", String(page));
+    if (limit && limit !== 24) params.set("limit", String(limit));
+
     if (fromProduct) params.set("fromProduct", "1");
     if (similarModuleId) params.set("similarModuleId", String(similarModuleId));
     if (similarKitId) params.set("similarKitId", String(similarKitId));
     if (similarCatalogItemId) params.set("similarCatalogItemId", String(similarCatalogItemId));
 
     setSearchParams(params, { replace: true });
-  }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, fromProduct, similarModuleId, similarKitId, similarCatalogItemId, setSearchParams]);
+  }, [debouncedQuery, activeCategory, activeSubCategory, debouncedFilters, page, limit, fromProduct, similarModuleId, similarKitId, similarCatalogItemId, setSearchParams]);
+
+  useEffect(() => {
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQuery, debouncedFilters, activeCategory, activeSubCategory, fromProduct, similarModuleId, similarKitId, similarCatalogItemId]);
 
   useEffect(() => {
     const loadSimilarCatalogItems = async () => {
@@ -313,8 +350,12 @@ const CatalogPage = () => {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const [categoriesRes] = await Promise.all([get("/module-categories")]);
+        const [categoriesRes, parameterCategoriesRes] = await Promise.all([
+          get("/module-categories"),
+          get("/product-parameter-categories", { limit: 500 }),
+        ]);
         setModuleCategories(categoriesRes?.data || []);
+        setProductParameterCategories(Array.isArray(parameterCategoriesRes?.data) ? parameterCategoriesRes.data : []);
       } catch (error) {
         console.error("Ошибка загрузки категорий", error);
       }
@@ -328,8 +369,14 @@ const CatalogPage = () => {
       setLoading(true);
       try {
         const queryParams = { search: debouncedQuery, ...debouncedFilters, isActive: true };
+        const kitQueryParams = {
+          ...queryParams,
+          ...(queryParams.priceFrom ? { minPrice: queryParams.priceFrom } : {}),
+          ...(queryParams.priceTo ? { maxPrice: queryParams.priceTo } : {}),
+        };
         const colorId = searchParams.get("colorId");
         if (colorId) queryParams.colorId = colorId;
+        if (colorId) kitQueryParams.colorId = colorId;
 
         if (roomCategoryCodes.has(activeCategory)) {
           const room = roomCatalog.find((x) => x.code === activeCategory);
@@ -343,12 +390,11 @@ const CatalogPage = () => {
               isKitchenRoot
                 ? get("/modules", queryParams)
                 : get("/catalog-items", {
-                    search: debouncedQuery,
+                    ...queryParams,
                     categoryGroup: room?.group,
-                    isActive: true,
                   }),
               get("/kit-solutions", {
-                ...queryParams,
+                ...kitQueryParams,
                 ...(isKitchenRoot ? {} : { categoryGroup: room?.group }),
               }),
             ]);
@@ -383,7 +429,7 @@ const CatalogPage = () => {
 
           // Кухня: "Готовые решения" живут в /kit-solutions, но выбираются внутри кухни
           if (activeCategory === "kitchen" && activeSubCategory === "__kitchen_kits") {
-            const res = await get("/kit-solutions", queryParams);
+            const res = await get("/kit-solutions", kitQueryParams);
             if (active) {
               setKitSolutions((res?.data || []).map((k) => ({ ...k, __type: "kitSolution" })));
               setItems([]);
@@ -392,10 +438,9 @@ const CatalogPage = () => {
           }
 
           const res = await get("/catalog-items", {
-            search: debouncedQuery,
+            ...queryParams,
             categoryGroup: room?.group,
             category: activeSubCategory || undefined,
-            isActive: true,
           });
           if (active) {
             setItems((res?.data || []).map((x) => ({ ...x, __type: "catalogItem" })));
@@ -407,7 +452,7 @@ const CatalogPage = () => {
         if (activeCategory === "all") {
           const [modulesRes, kitsRes, catalogItemsRes] = await Promise.all([
             get("/modules", queryParams),
-            get("/kit-solutions", queryParams),
+            get("/kit-solutions", kitQueryParams),
             get("/catalog-items", queryParams),
           ]);
           if (active) {
@@ -425,7 +470,7 @@ const CatalogPage = () => {
           if (activeSubCategory) queryParams.baseSku = activeSubCategory;
           const res = await get("/modules", queryParams);
           if (active) {
-            setItems(res?.data || []);
+            setItems((res?.data || []).map((x) => ({ ...x, __type: "module" })));
             setKitSolutions([]);
           }
         }
@@ -500,6 +545,46 @@ const CatalogPage = () => {
       ? [...safeKits, ...safeModules]
       : safeModules;
   }, [activeCategory, activeSubCategory, kitSolutions, items, fromProduct, similarModuleId, similarKitId, similarCatalogItemId, similarItems, similarKitItems, similarCatalogItems, roomCategoryCodes]);
+
+  const filterFacets = useMemo(() => {
+    const all = Array.isArray(displayItems) ? displayItems : [];
+    const modulesOnly = all.filter((x) => x?.__type === "module");
+    const uniqSorted = (arr) => Array.from(new Set(arr.filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), "ru"));
+
+    const facadeColors = uniqSorted(modulesOnly.map((x) => String(x?.facade_color || "").trim()).filter(Boolean));
+    const corpusColors = uniqSorted(modulesOnly.map((x) => String(x?.corpus_color || "").trim()).filter(Boolean));
+
+    const takeDims = (key) =>
+      uniqSorted(
+        all
+          .map((x) => {
+            const v = Number(x?.[key]);
+            return Number.isFinite(v) && v > 0 ? String(Math.round(v)) : null;
+          })
+          .filter(Boolean)
+      ).sort((a, b) => Number(a) - Number(b));
+
+    const lengths = takeDims("length_mm");
+    const depths = takeDims("depth_mm");
+    const heights = takeDims("height_mm");
+
+    const prices = all
+      .map((x) => Number(x?.final_price ?? x?.price))
+      .filter((v) => Number.isFinite(v) && v >= 0);
+    const minPrice = prices.length ? Math.floor(Math.min(...prices)) : 0;
+    const maxPrice = prices.length ? Math.ceil(Math.max(...prices)) : 0;
+
+    return { facadeColors, corpusColors, lengths, depths, heights, minPrice, maxPrice };
+  }, [displayItems]);
+
+  const pagedItems = useMemo(() => {
+    const start = Math.max(0, (Number(page) - 1) * Number(limit));
+    const end = start + Number(limit);
+    return displayItems.slice(start, end);
+  }, [displayItems, page, limit]);
+
+  const canPrevPage = page > 1;
+  const canNextPage = displayItems.length > page * limit;
   const handleAddToCart = useCallback((product) => addItem(product), [addItem]);
 
   const SidebarContent = () => (
@@ -542,23 +627,170 @@ const CatalogPage = () => {
           />
         ))}
       </FilterGroup>
-      <FilterGroup title="Фильтры" onReset={() => setFilters({ facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "" })}>
+      <FilterGroup title="Фильтры" onReset={() => setFilters({ facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "", depthFrom: "", depthTo: "", heightFrom: "", heightTo: "", parameterCategoryIds: "", sort: "" })}>
+        <FilterSection title="Сортировка">
+          <select
+            value={filters.sort}
+            onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}
+            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
+          >
+            <option value="">По умолчанию</option>
+            <option value="popular_desc">Популярные</option>
+            <option value="price_desc">Цена: по убыванию</option>
+            <option value="price_asc">Цена: по возрастанию</option>
+          </select>
+        </FilterSection>
         <FilterSection title="Цвета">
-          <SecureInput value={filters.facadeColor} onChange={(v) => setFilters(f => ({ ...f, facadeColor: v }))} placeholder="Цвет фасада" />
-          <SecureInput value={filters.corpusColor} onChange={(v) => setFilters(f => ({ ...f, corpusColor: v }))} placeholder="Цвет корпуса" />
+          <select
+            value={filters.facadeColor}
+            onChange={(e) => setFilters((f) => ({ ...f, facadeColor: e.target.value }))}
+            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
+          >
+            <option value="">Основной цвет (фасад)</option>
+            {filterFacets.facadeColors.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+          <select
+            value={filters.corpusColor}
+            onChange={(e) => setFilters((f) => ({ ...f, corpusColor: e.target.value }))}
+            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
+          >
+            <option value="">Доп. цвет (корпус)</option>
+            {filterFacets.corpusColors.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </FilterSection>
         <FilterSection title="Цена">
-          <div className="grid grid-cols-2 gap-2 px-1 w-full overflow-hidden">
-            <SecureInput type="number" value={filters.priceFrom} onChange={(v) => setFilters(f => ({ ...f, priceFrom: v }))} placeholder="От" />
-            <SecureInput type="number" value={filters.priceTo} onChange={(v) => setFilters(f => ({ ...f, priceTo: v }))} placeholder="До" />
+          <div className="px-1 w-full overflow-hidden space-y-2">
+            <div className="flex items-center justify-between text-xs text-night-500">
+              <span>{filters.priceFrom || filterFacets.minPrice || 0} ₽</span>
+              <span>{filters.priceTo || filterFacets.maxPrice || 0} ₽</span>
+            </div>
+            <div className="relative h-8">
+              <input
+                type="range"
+                min={filterFacets.minPrice || 0}
+                max={filterFacets.maxPrice || 0}
+                value={Number(filters.priceFrom || filterFacets.minPrice || 0)}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  const hi = Number(filters.priceTo || filterFacets.maxPrice || 0);
+                  setFilters((f) => ({
+                    ...f,
+                    priceFrom: String(Math.min(next, hi)),
+                  }));
+                }}
+                className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full"
+              />
+              <input
+                type="range"
+                min={filterFacets.minPrice || 0}
+                max={filterFacets.maxPrice || 0}
+                value={Number(filters.priceTo || filterFacets.maxPrice || 0)}
+                onChange={(e) => {
+                  const next = Number(e.target.value);
+                  const lo = Number(filters.priceFrom || filterFacets.minPrice || 0);
+                  setFilters((f) => ({
+                    ...f,
+                    priceTo: String(Math.max(next, lo)),
+                  }));
+                }}
+                className="absolute inset-x-0 top-1/2 -translate-y-1/2 w-full"
+              />
+            </div>
           </div>
         </FilterSection>
-        <FilterSection title="Размер (мм)">
-          <div className="grid grid-cols-2 gap-2 px-1 w-full overflow-hidden">
-            <SecureInput type="number" value={filters.lengthFrom} onChange={(v) => setFilters(f => ({ ...f, lengthFrom: v }))} placeholder="От" />
-            <SecureInput type="number" value={filters.lengthTo} onChange={(v) => setFilters(f => ({ ...f, lengthTo: v }))} placeholder="До" />
-          </div>
+        <FilterSection title="Размеры (мм)">
+          <select
+            value={filters.lengthFrom && filters.lengthFrom === filters.lengthTo ? filters.lengthFrom : ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilters((f) => ({
+                ...f,
+                lengthFrom: v,
+                lengthTo: v,
+              }));
+            }}
+            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
+          >
+            <option value="">Длина</option>
+            {filterFacets.lengths.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+          <select
+            value={filters.depthFrom && filters.depthFrom === filters.depthTo ? filters.depthFrom : ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilters((f) => ({
+                ...f,
+                depthFrom: v,
+                depthTo: v,
+              }));
+            }}
+            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
+          >
+            <option value="">Ширина / глубина</option>
+            {filterFacets.depths.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+          <select
+            value={filters.heightFrom && filters.heightFrom === filters.heightTo ? filters.heightFrom : ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFilters((f) => ({
+                ...f,
+                heightFrom: v,
+                heightTo: v,
+              }));
+            }}
+            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
+          >
+            <option value="">Высота</option>
+            {filterFacets.heights.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
         </FilterSection>
+
+        {productParameterCategories.length > 0 && (
+          <FilterSection title="Категории параметров">
+            <div className="space-y-2">
+              {productParameterCategories
+                .slice()
+                .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                .map((c) => {
+                  const selectedSet = new Set(
+                    String(filters.parameterCategoryIds || "")
+                      .split(",")
+                      .map((x) => Number(String(x).trim()))
+                      .filter((x) => Number.isFinite(x) && x > 0)
+                  );
+                  const checked = selectedSet.has(Number(c.id));
+                  return (
+                    <label key={c.id} className="flex items-center gap-3 text-sm text-night-800 w-full min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        className="h-4 w-4 flex-shrink-0 accent-accent"
+                        onChange={(e) => {
+                          const next = new Set(selectedSet);
+                          if (e.target.checked) next.add(Number(c.id));
+                          else next.delete(Number(c.id));
+                          const nextStr = Array.from(next.values()).sort((x, y) => x - y).join(",");
+                          setFilters((f) => ({ ...f, parameterCategoryIds: nextStr }));
+                        }}
+                      />
+                      <span className="truncate flex-1 min-w-0">{c.name}</span>
+                    </label>
+                  );
+                })}
+            </div>
+          </FilterSection>
+        )}
       </FilterGroup>
     </aside>
   );
@@ -586,8 +818,38 @@ const CatalogPage = () => {
             <section>
               <h2 className="text-lg sm:text-xl font-semibold text-night-900 mb-4">{displayItems.length} позици{displayItems.length !== 1 ? "й" : "я"}</h2>
               <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-1 md:gap-3">
-                {displayItems.map((product) => <ProductCard key={product.id || product.sku} product={product} onAdd={handleAddToCart} />)}
+                {pagedItems.map((product) => <ProductCard key={product.id || product.sku} product={product} onAdd={handleAddToCart} />)}
               </div>
+
+              {(canPrevPage || canNextPage) && (
+                <div className="mt-6 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    disabled={!canPrevPage}
+                    onClick={() => setPage((p) => Math.max(1, Number(p) - 1))}
+                    className={`px-4 py-2 rounded-xl border text-sm font-semibold transition ${
+                      canPrevPage
+                        ? "border-night-200 bg-white/80 text-night-800 hover:border-night-300"
+                        : "border-night-100 bg-night-50 text-night-300 cursor-not-allowed"
+                    }`}
+                  >
+                    Назад
+                  </button>
+                  <div className="text-sm text-night-600 font-semibold">Страница {page}</div>
+                  <button
+                    type="button"
+                    disabled={!canNextPage}
+                    onClick={() => setPage((p) => Number(p) + 1)}
+                    className={`px-4 py-2 rounded-xl border text-sm font-semibold transition ${
+                      canNextPage
+                        ? "border-night-200 bg-white/80 text-night-800 hover:border-night-300"
+                        : "border-night-100 bg-night-50 text-night-300 cursor-not-allowed"
+                    }`}
+                  >
+                    Вперёд
+                  </button>
+                </div>
+              )}
             </section>
           ) : (
             <div className="glass-card p-8 text-center text-night-500">Не найдено товаров, соответствующих вашему запросу. Попробуйте изменить фильтры.</div>

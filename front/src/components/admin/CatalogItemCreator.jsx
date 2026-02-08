@@ -60,6 +60,8 @@ let collectionsCache = null;
 let collectionsCachePromise = null;
 let productParametersCache = null;
 let productParametersCachePromise = null;
+let productParameterCategoriesCache = null;
+let productParameterCategoriesCachePromise = null;
 
 const toOptionalInt = (value) => {
   if (value === null || value === undefined) return undefined;
@@ -97,7 +99,7 @@ const normalizeNum = (value) => {
   return String(Math.round(n));
 };
 
-const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedValues = null, title = "", onDone }) => {
+const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedValues = null, title = "", onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
 
@@ -118,6 +120,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     colors: [],
     collections: [],
     productParameters: [],
+    productParameterCategories: [],
     isLoaded: false,
   });
   const [isLoadingReferences, setIsLoadingReferences] = useState(true);
@@ -138,6 +141,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
   });
 
   const [selectedParameters, setSelectedParameters] = useState([]);
+  const [selectedParameterCategories, setSelectedParameterCategories] = useState([]);
 
   useEffect(() => {
     getRef.current = get;
@@ -193,6 +197,23 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     });
   };
 
+  const addParameterCategory = (categoryId) => {
+    const id = Number(categoryId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    setSelectedParameterCategories((prev) => {
+      if (prev.some((x) => Number(x) === id)) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const removeParameterCategory = (index) => {
+    setSelectedParameterCategories((prev) => {
+      const next = [...prev];
+      next.splice(index, 1);
+      return next;
+    });
+  };
+
   useEffect(() => {
     const loadRefs = async () => {
       if (referenceData.isLoaded) return;
@@ -222,15 +243,27 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
           });
         }
 
-        const [colorsData, collectionsData, productParametersData] = await Promise.all([
+        if (!productParameterCategoriesCachePromise) {
+          productParameterCategoriesCachePromise = getRef.current("/product-parameter-categories", { limit: 500 }).then((res) => {
+            const data = Array.isArray(res?.data) ? res.data : [];
+            productParameterCategoriesCache = data;
+            return data;
+          });
+        }
+
+        const [colorsData, collectionsData, productParametersData, productParameterCategoriesData] = await Promise.all([
           Array.isArray(colorsCache) ? Promise.resolve(colorsCache) : colorsCachePromise,
           Array.isArray(collectionsCache) ? Promise.resolve(collectionsCache) : collectionsCachePromise,
           Array.isArray(productParametersCache) ? Promise.resolve(productParametersCache) : productParametersCachePromise,
+          Array.isArray(productParameterCategoriesCache)
+            ? Promise.resolve(productParameterCategoriesCache)
+            : productParameterCategoriesCachePromise,
         ]);
         setReferenceData({
           colors: Array.isArray(colorsData) ? colorsData : [],
           collections: Array.isArray(collectionsData) ? collectionsData : [],
           productParameters: Array.isArray(productParametersData) ? productParametersData : [],
+          productParameterCategories: Array.isArray(productParameterCategoriesData) ? productParameterCategoriesData : [],
           isLoaded: true,
         });
       } catch (e) {
@@ -244,6 +277,41 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const applyLoadedItemToForm = useCallback((data) => {
+    setForm((prev) => ({
+      ...prev,
+      baseSku: data.base_sku || "",
+      sku: data.sku || "",
+      name: data.name || "",
+      description: data.description || "",
+      collection_id: data.collection_id != null ? String(data.collection_id) : "",
+      primary_color_id: data.primary_color_id != null ? String(data.primary_color_id) : "",
+      secondary_color_id: data.secondary_color_id != null ? String(data.secondary_color_id) : "",
+      length_mm: data.length_mm != null ? String(data.length_mm) : "",
+      depth_mm: data.depth_mm != null ? String(data.depth_mm) : "",
+      height_mm: data.height_mm != null ? String(data.height_mm) : "",
+      preview_url: data.preview_url || null,
+      final_price: data.final_price != null ? String(data.final_price) : "",
+    }));
+
+    const params = Array.isArray(data.parameters) ? data.parameters : [];
+    setSelectedParameters(
+      params
+        .map((p) => ({
+          parameterId: Number(p.id),
+          quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+        }))
+        .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
+    );
+
+    const cats = Array.isArray(data.parameterCategories) ? data.parameterCategories : [];
+    setSelectedParameterCategories(
+      cats
+        .map((c) => Number(c?.id))
+        .filter((x) => Number.isFinite(x) && x > 0)
+    );
+  }, []);
+
   useEffect(() => {
     if (!initialCatalogItemId) return;
 
@@ -255,35 +323,11 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         if (!active || !data) return;
 
         setItemId(data.id);
-        setForm((prev) => ({
-          ...prev,
-          baseSku: data.base_sku || "",
-          sku: data.sku || "",
-          name: data.name || "",
-          description: data.description || "",
-          collection_id: data.collection_id != null ? String(data.collection_id) : "",
-          primary_color_id: data.primary_color_id != null ? String(data.primary_color_id) : "",
-          secondary_color_id: data.secondary_color_id != null ? String(data.secondary_color_id) : "",
-          length_mm: data.length_mm != null ? String(data.length_mm) : "",
-          depth_mm: data.depth_mm != null ? String(data.depth_mm) : "",
-          height_mm: data.height_mm != null ? String(data.height_mm) : "",
-          preview_url: data.preview_url || null,
-          final_price: data.final_price != null ? String(data.final_price) : "",
-        }));
-
-        const params = Array.isArray(data.parameters) ? data.parameters : [];
-        setSelectedParameters(
-          params
-            .map((p) => ({
-              parameterId: Number(p.id),
-              quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
-            }))
-            .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
-        );
+        applyLoadedItemToForm(data);
         setStep(1);
       })
       .catch((e) => {
-        loggerRef.current?.error("Не удалось загрузить позицию каталога", e);
+        loggerRef.current?.error("Не удалось загрузить позицию каталога для редактирования", e);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -292,7 +336,36 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     return () => {
       active = false;
     };
-  }, [initialCatalogItemId]);
+  }, [applyLoadedItemToForm, initialCatalogItemId]);
+
+  useEffect(() => {
+    if (!duplicateFromId) return;
+
+    let active = true;
+    setLoading(true);
+    getRef.current(`/catalog-items/${duplicateFromId}`)
+      .then((res) => {
+        const data = res?.data;
+        if (!active || !data) return;
+
+        applyLoadedItemToForm(data);
+
+        // important: duplication must create a new item
+        setItemId(null);
+        createLockRef.current = false;
+        setStep(1);
+      })
+      .catch((e) => {
+        loggerRef.current?.error("Не удалось загрузить позицию каталога для создания копии", e);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [applyLoadedItemToForm, duplicateFromId]);
 
   const steps = useMemo(
     () => [
@@ -324,7 +397,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     try {
       const payload = {
         base_sku: toOptionalString(form.baseSku),
-        sku: toOptionalString(form.sku),
+        sku: toOptionalString(effectiveSku),
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
 
@@ -345,6 +418,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         is_active: false,
 
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
       const resp = await post("/catalog-items", payload);
@@ -397,7 +471,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     try {
       const payload = {
         base_sku: toOptionalString(form.baseSku),
-        sku: toOptionalString(form.sku),
+        sku: toOptionalString(effectiveSku),
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
 
@@ -418,6 +492,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         is_active: true,
 
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
       await put(`/catalog-items/${itemId}`, payload);
@@ -439,6 +514,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         preview_url: null,
         final_price: "",
       });
+      setSelectedParameterCategories([]);
     } catch (e) {
       loggerRef.current?.error("Не удалось сохранить позицию каталога", e);
     } finally {
@@ -488,6 +564,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     selectedSecondaryColor?.sku,
   ]);
 
+  const effectiveSku = form.sku || skuPreview;
+
   if (isLoadingReferences) {
     return (
       <div className="max-w-6xl mx-auto">
@@ -534,18 +612,23 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         <div className="glass-card p-6 space-y-4">
           <div className="grid gap-4">
             <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
-              <SecureInput value={form.baseSku} onChange={(v) => setForm((p) => ({ ...p, baseSku: v }))} />
-            </label>
-
-            <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Название</div>
               <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
             </label>
 
             <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">SKU</div>
-              <SecureInput value={form.sku || skuPreview} onChange={(v) => setForm((p) => ({ ...p, sku: v }))} />
+              <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
+              <SecureInput value={form.baseSku} onChange={(v) => setForm((p) => ({ ...p, baseSku: v }))} />
+            </label>
+
+            <label className="space-y-2">
+              <div
+                className="text-xs font-semibold text-night-700"
+                title="SKU формируется автоматически из baseSku/названия + размеров (Д/Г/В) + выбранных цветов. Поле доступно только для просмотра."
+              >
+                SKU
+              </div>
+              <SecureInput value={effectiveSku} onChange={() => {}} disabled />
             </label>
 
             <label className="space-y-2">
@@ -625,6 +708,51 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
                 </div>
               ) : (
                 <div className="text-sm text-night-500">Параметры не выбраны</div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-night-700">Категории параметров изделий</div>
+              <select
+                value=""
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  addParameterCategory(v);
+                  e.currentTarget.value = "";
+                }}
+                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+              >
+                <option value="">Добавить категорию...</option>
+                {(referenceData.productParameterCategories || [])
+                  .slice()
+                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      #{c.id} {c.name}
+                    </option>
+                  ))}
+              </select>
+
+              {(selectedParameterCategories || []).length > 0 ? (
+                <div className="space-y-2">
+                  {selectedParameterCategories.map((id, idx) => {
+                    const full = (referenceData.productParameterCategories || []).find((x) => Number(x.id) === Number(id));
+                    return (
+                      <div key={`${id}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${id}`}</div>
+                          <div className="text-xs text-night-500">ID: {id}</div>
+                        </div>
+                        <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => removeParameterCategory(idx)}>
+                          Удалить
+                        </SecureButton>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-sm text-night-500">Категории не выбраны</div>
               )}
             </div>
           </div>
@@ -883,7 +1011,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
             </SecureButton>
 
             <SecureButton type="button" onClick={finalizeItem} className="px-4 py-2 flex items-center gap-2" disabled={loading}>
-              {loading ? <FaSpinner className="animate-spin" /> : <FaSave />} Сохранить
+              {loading ? <FaSpinner className="animate-spin" /> : <FaSave />} {submitLabel}
             </SecureButton>
           </div>
         </div>

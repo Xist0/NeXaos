@@ -322,9 +322,14 @@ const ProductPage = () => {
     if (!item) return list;
 
     if (item.sku) list.push({ label: "Артикул", value: String(item.sku) });
-    if (item.base_sku) list.push({ label: "Базовый SKU", value: String(item.base_sku) });
-    if (item.category_group) list.push({ label: "Категория", value: String(item.category_group) });
-    if (item.category) list.push({ label: "Подкатегория", value: String(item.category) });
+    if (item.category_group || item.category) {
+      const left = String(item.category_group || "").trim();
+      const right = String(item.category || "").trim();
+      list.push({
+        label: "Категория",
+        value: [left, right].filter(Boolean).join(" / "),
+      });
+    }
 
     const primaryColor = item.primary_color?.name || item.facade_color;
     const secondaryColor = item.secondary_color?.name || item.corpus_color;
@@ -334,9 +339,6 @@ const ProductPage = () => {
     if (item.length_mm) list.push({ label: "Длина", value: `${item.length_mm} мм` });
     if (item.depth_mm) list.push({ label: "Глубина", value: `${item.depth_mm} мм` });
     if (item.height_mm) list.push({ label: "Высота", value: `${item.height_mm} мм` });
-
-    if (item.base_price) list.push({ label: "Базовая цена", value: formatCurrency(item.base_price) });
-    if (item.final_price) list.push({ label: "Итоговая цена", value: formatCurrency(item.final_price) });
 
     const params = Array.isArray(item.parameters) ? item.parameters : [];
     if (params.length > 0) {
@@ -351,6 +353,16 @@ const ProductPage = () => {
         .filter(Boolean)
         .join(", ");
       if (label) list.push({ label: "Параметры", value: label });
+    }
+
+    const cats = Array.isArray(item.parameterCategories) ? item.parameterCategories : [];
+    if (cats.length > 0) {
+      const normalized = cats
+        .map((c) => ({ id: Number(c?.id), name: String(c?.name || "").trim() }))
+        .filter((c) => Number.isFinite(c.id) && c.id > 0 && Boolean(c.name));
+      if (normalized.length > 0) {
+        list.push({ label: "Категории параметров", type: "parameterCategories", categories: normalized });
+      }
     }
 
     return list;
@@ -817,14 +829,44 @@ const ProductPage = () => {
       {fullCharacteristics.length > 0 && (
         <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12">
           <h3 className="font-bold text-night-900 mb-3 sm:mb-6 text-lg sm:text-2xl">Характеристики</h3>
-          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-night-800 leading-relaxed">
-            {fullCharacteristics.map((row) => (
-              <div key={row.label} className="min-w-0">
-                <span className="text-night-500">{row.label}:</span>{" "}
-                <span className="font-semibold text-night-900 break-words">{row.value || "—"}</span>
+          {(() => {
+            const leftRows = fullCharacteristics.filter((r) => r?.type !== "parameterCategories" && r?.label !== "Параметры");
+            const rightRows = fullCharacteristics.filter((r) => r?.type === "parameterCategories" || r?.label === "Параметры");
+
+            const renderRow = (row) => (
+              <div key={row.label} className="grid grid-cols-[160px_1fr] gap-3 min-w-0">
+                <span className="text-night-500 truncate">{row.label}:</span>
+                {row?.type === "parameterCategories" ? (
+                  <span className="font-semibold text-night-900 min-w-0">
+                    <span className="flex flex-wrap gap-x-2 gap-y-1">
+                      {(Array.isArray(row.categories) ? row.categories : []).map((c) => (
+                        <Link
+                          key={c.id}
+                          to={`/catalog?parameterCategoryIds=${encodeURIComponent(String(c.id))}`}
+                          className="text-accent underline underline-offset-2 hover:opacity-90"
+                        >
+                          {c.name}
+                        </Link>
+                      ))}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="font-semibold text-night-900 break-words min-w-0">{row.value || "—"}</span>
+                )}
               </div>
-            ))}
-          </div>
+            );
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-4 text-sm text-night-800 leading-relaxed">
+                <div className="space-y-2">
+                  {leftRows.map(renderRow)}
+                </div>
+                <div className="space-y-2">
+                  {rightRows.map(renderRow)}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

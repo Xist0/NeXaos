@@ -55,6 +55,8 @@ const useCartStore = create((set, get) => ({
         existing.quantity = Math.min(existing.quantity + quantity, 99);
         return { items: [...state.items] };
       }
+      const rawType = String(product?.__type || "");
+      const productType = rawType === "kitSolution" ? "kit-solutions" : rawType === "catalogItem" ? "catalog-items" : "modules";
       return {
         items: [
           ...state.items,
@@ -64,6 +66,7 @@ const useCartStore = create((set, get) => ({
             price: product.final_price || product.price || 0,
             image: product.image || product.preview_url || product.image_url,
             sku: product.sku,
+            entity_type: productType,
             quantity,
           },
         ],

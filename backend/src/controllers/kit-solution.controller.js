@@ -37,6 +37,8 @@ const list = asyncHandler(async (req, res) => {
     maxPrice: req.query.maxPrice,
     categoryGroup: req.query.categoryGroup,
     category: req.query.category,
+    parameterCategoryIds: req.query.parameterCategoryIds,
+    sort: req.query.sort,
     limit: req.query.limit,
     offset: req.query.offset,
   };

@@ -19,7 +19,7 @@ const sanitizePayload = (entity, payload) => {
 };
 
 const list = async (entity, queryParams = {}) => {
-  const { limit, offset, search } = queryParams;
+  const { limit, offset, search, sort } = queryParams;
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
   const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
 
@@ -34,101 +34,207 @@ const list = async (entity, queryParams = {}) => {
   
   // Фильтрация для модулей
   if (entity.table === "modules") {
+    const baseFields =
+      entity.selectFields && entity.selectFields.length
+        ? entity.selectFields.map((f) => `modules.${f}`).join(", ")
+        : "modules.*";
+
+    sql = `SELECT ${baseFields}, pop.popularity_qty
+      FROM modules
+      LEFT JOIN module_descriptions md ON modules.description_id = md.id
+      LEFT JOIN (
+        SELECT entity_type, entity_id, SUM(COALESCE(qty, 0))::int AS popularity_qty
+        FROM order_items
+        WHERE entity_type IS NOT NULL AND entity_id IS NOT NULL
+        GROUP BY entity_type, entity_id
+      ) pop ON pop.entity_type = 'modules' AND pop.entity_id = modules.id`;
+
     // Поиск по названию и артикулу
     if (search) {
-      conditions.push(`(name ILIKE $${params.length + 1} OR sku ILIKE $${params.length + 1})`);
-      params.push(`%${search}%`);
+      const p = `$${params.length + 1}`;
+      conditions.push(
+        `(
+          to_tsvector('russian',
+            COALESCE(modules.name, '') || ' ' ||
+            COALESCE(modules.sku, '') || ' ' ||
+            COALESCE(modules.short_desc, '') || ' ' ||
+            COALESCE(md.description, '') || ' ' ||
+            COALESCE(md.characteristics::text, '')
+          ) @@ websearch_to_tsquery('russian', ${p})
+          OR modules.name % ${p}
+          OR modules.sku % ${p}
+          OR COALESCE(md.description, '') % ${p}
+          OR EXISTS (
+            SELECT 1
+            FROM product_parameter_links ppl
+            JOIN product_parameters pp ON pp.id = ppl.parameter_id
+            WHERE ppl.entity_type = 'modules'
+              AND ppl.entity_id = modules.id
+              AND (pp.name ILIKE ('%' || ${p} || '%') OR pp.name % ${p})
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM product_parameter_category_links ppcl
+            JOIN product_parameter_categories ppc ON ppc.id = ppcl.category_id
+            WHERE ppcl.entity_type = 'modules'
+              AND ppcl.entity_id = modules.id
+              AND (ppc.name ILIKE ('%' || ${p} || '%') OR ppc.name % ${p})
+          )
+        )`
+      );
+      params.push(String(search));
     }
     
     // Фильтр по цвету фасада
     if (queryParams.facadeColor) {
-      conditions.push(`facade_color = $${params.length + 1}`);
+      conditions.push(`modules.facade_color = $${params.length + 1}`);
       params.push(queryParams.facadeColor);
     }
     
     // Фильтр по цвету корпуса
     if (queryParams.corpusColor) {
-      conditions.push(`corpus_color = $${params.length + 1}`);
+      conditions.push(`modules.corpus_color = $${params.length + 1}`);
       params.push(queryParams.corpusColor);
     }
     
     // Фильтр по цене (от)
     if (queryParams.priceFrom) {
-      conditions.push(`final_price >= $${params.length + 1}`);
+      conditions.push(`modules.final_price >= $${params.length + 1}`);
       params.push(parseFloat(queryParams.priceFrom));
     }
     
     // Фильтр по цене (до)
     if (queryParams.priceTo) {
-      conditions.push(`final_price <= $${params.length + 1}`);
+      conditions.push(`modules.final_price <= $${params.length + 1}`);
       params.push(parseFloat(queryParams.priceTo));
     }
     
     // Фильтр по длине (от)
     if (queryParams.lengthFrom) {
-      conditions.push(`length_mm >= $${params.length + 1}`);
+      conditions.push(`modules.length_mm >= $${params.length + 1}`);
       params.push(parseInt(queryParams.lengthFrom, 10));
     }
     
     // Фильтр по длине (до)
     if (queryParams.lengthTo) {
-      conditions.push(`length_mm <= $${params.length + 1}`);
+      conditions.push(`modules.length_mm <= $${params.length + 1}`);
       params.push(parseInt(queryParams.lengthTo, 10));
     }
     
     // Фильтр по глубине (от)
     if (queryParams.depthFrom) {
-      conditions.push(`depth_mm >= $${params.length + 1}`);
+      conditions.push(`modules.depth_mm >= $${params.length + 1}`);
       params.push(parseInt(queryParams.depthFrom, 10));
     }
     
     // Фильтр по глубине (до)
     if (queryParams.depthTo) {
-      conditions.push(`depth_mm <= $${params.length + 1}`);
+      conditions.push(`modules.depth_mm <= $${params.length + 1}`);
       params.push(parseInt(queryParams.depthTo, 10));
     }
     
     // Фильтр по высоте (от)
     if (queryParams.heightFrom) {
-      conditions.push(`height_mm >= $${params.length + 1}`);
+      conditions.push(`modules.height_mm >= $${params.length + 1}`);
       params.push(parseInt(queryParams.heightFrom, 10));
     }
     
     // Фильтр по высоте (до)
     if (queryParams.heightTo) {
-      conditions.push(`height_mm <= $${params.length + 1}`);
+      conditions.push(`modules.height_mm <= $${params.length + 1}`);
       params.push(parseInt(queryParams.heightTo, 10));
     }
     
     // Фильтр по категории
     if (queryParams.categoryId) {
-      conditions.push(`module_category_id = $${params.length + 1}`);
+      conditions.push(`modules.module_category_id = $${params.length + 1}`);
       params.push(parseInt(queryParams.categoryId, 10));
     }
     
     // Фильтр по основе артикула (НМР1, НМР2, НМР.М1 и т.д.)
     if (queryParams.baseSku) {
-      conditions.push(`base_sku = $${params.length + 1}`);
+      conditions.push(`modules.base_sku = $${params.length + 1}`);
       params.push(queryParams.baseSku);
     }
-    
+
+    // Фильтр по категориям параметров изделия (multi)
+    if (queryParams.parameterCategoryIds) {
+      const ids = String(queryParams.parameterCategoryIds)
+        .split(",")
+        .map((x) => Number(String(x).trim()))
+        .filter((x) => Number.isFinite(x) && x > 0);
+      if (ids.length > 0) {
+        conditions.push(
+          `EXISTS (
+            SELECT 1
+            FROM product_parameter_category_links ppcl
+            WHERE ppcl.entity_type = 'modules'
+              AND ppcl.entity_id = modules.id
+              AND ppcl.category_id = ANY($${params.length + 1}::int[])
+          )`
+        );
+        params.push(ids);
+      }
+    }
     // Фильтр по активности
     if (queryParams.isActive !== undefined) {
-      conditions.push(`is_active = $${params.length + 1}`);
+      conditions.push(`modules.is_active = $${params.length + 1}`);
       params.push(queryParams.isActive === 'true' || queryParams.isActive === true);
     }
-    
+
     if (conditions.length > 0) {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
-    
-    sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+
+    let orderBy = `modules.${entity.idColumn} DESC`;
+    if (sort === "price_desc") orderBy = `modules.final_price DESC NULLS LAST, modules.${entity.idColumn} DESC`;
+    if (sort === "price_asc") orderBy = `modules.final_price ASC NULLS LAST, modules.${entity.idColumn} DESC`;
+    if (sort === "popular_desc") orderBy = `pop.popularity_qty DESC NULLS LAST, modules.${entity.idColumn} DESC`;
+
+    sql += ` ORDER BY ${orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(safeLimit, safeOffset);
   } else if (entity.table === "catalog_items") {
+    sql = `SELECT ${fields}, pop.popularity_qty
+      FROM catalog_items
+      LEFT JOIN (
+        SELECT entity_type, entity_id, SUM(COALESCE(qty, 0))::int AS popularity_qty
+        FROM order_items
+        WHERE entity_type IS NOT NULL AND entity_id IS NOT NULL
+        GROUP BY entity_type, entity_id
+      ) pop ON pop.entity_type = 'catalog-items' AND pop.entity_id = catalog_items.id`;
+
     // Поиск по названию и артикулу
     if (search) {
-      conditions.push(`(name ILIKE $${params.length + 1} OR sku ILIKE $${params.length + 1})`);
-      params.push(`%${search}%`);
+      const p = `$${params.length + 1}`;
+      conditions.push(
+        `(
+          to_tsvector('russian',
+            COALESCE(catalog_items.name, '') || ' ' ||
+            COALESCE(catalog_items.sku, '') || ' ' ||
+            COALESCE(catalog_items.description, '')
+          ) @@ websearch_to_tsquery('russian', ${p})
+          OR catalog_items.name % ${p}
+          OR catalog_items.sku % ${p}
+          OR COALESCE(catalog_items.description, '') % ${p}
+          OR EXISTS (
+            SELECT 1
+            FROM product_parameter_links ppl
+            JOIN product_parameters pp ON pp.id = ppl.parameter_id
+            WHERE ppl.entity_type = 'catalog-items'
+              AND ppl.entity_id = catalog_items.id
+              AND (pp.name ILIKE ('%' || ${p} || '%') OR pp.name % ${p})
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM product_parameter_category_links ppcl
+            JOIN product_parameter_categories ppc ON ppc.id = ppcl.category_id
+            WHERE ppcl.entity_type = 'catalog-items'
+              AND ppcl.entity_id = catalog_items.id
+              AND (ppc.name ILIKE ('%' || ${p} || '%') OR ppc.name % ${p})
+          )
+        )`
+      );
+      params.push(String(search));
     }
 
     if (queryParams.categoryGroup) {
@@ -151,11 +257,36 @@ const list = async (entity, queryParams = {}) => {
       params.push(queryParams.isActive === 'true' || queryParams.isActive === true);
     }
 
+    // Фильтр по категориям параметров изделия (multi)
+    if (queryParams.parameterCategoryIds) {
+      const ids = String(queryParams.parameterCategoryIds)
+        .split(",")
+        .map((x) => Number(String(x).trim()))
+        .filter((x) => Number.isFinite(x) && x > 0);
+      if (ids.length > 0) {
+        conditions.push(
+          `EXISTS (
+            SELECT 1
+            FROM product_parameter_category_links ppcl
+            WHERE ppcl.entity_type = 'catalog-items'
+              AND ppcl.entity_id = catalog_items.id
+              AND ppcl.category_id = ANY($${params.length + 1}::int[])
+          )`
+        );
+        params.push(ids);
+      }
+    }
+
     if (conditions.length > 0) {
       sql += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    let orderBy = `catalog_items.${entity.idColumn} DESC`;
+    if (sort === "price_desc") orderBy = `final_price DESC NULLS LAST, catalog_items.${entity.idColumn} DESC`;
+    if (sort === "price_asc") orderBy = `final_price ASC NULLS LAST, catalog_items.${entity.idColumn} DESC`;
+    if (sort === "popular_desc") orderBy = `pop.popularity_qty DESC NULLS LAST, catalog_items.${entity.idColumn} DESC`;
+
+    sql += ` ORDER BY ${orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(safeLimit, safeOffset);
   } else {
     // Для других таблиц

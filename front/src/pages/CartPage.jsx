@@ -52,7 +52,22 @@ const CartPage = () => {
       const order = orderResponse?.data || orderResponse;
       if (!order?.id) throw new Error("Не удалось создать заказ");
 
-      await Promise.all(items.map(item => post("/order-items", { order_id: order.id, module_id: item.id, qty: item.quantity, price: item.price, cost_price: item.price * 0.7, })) );
+      await Promise.all(
+        items.map((item) => {
+          const entityType = String(item?.entity_type || "modules");
+          const entityId = Number(item?.id);
+          const payload = {
+            order_id: order.id,
+            qty: item.quantity,
+            price: item.price,
+            cost_price: item.price * 0.7,
+            entity_type: entityType,
+            entity_id: entityId,
+            ...(entityType === "modules" ? { module_id: entityId } : {}),
+          };
+          return post("/order-items", payload);
+        })
+      );
       clearCart();
       setIsSuccessModalOpen(true);
       logger.info("Заказ успешно оформлен");

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaArrowLeft, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaCopy, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import SecureButton from "../ui/SecureButton";
@@ -12,6 +12,7 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
 
   const [mode, setMode] = useState("list");
   const [editingId, setEditingId] = useState(null);
+  const [duplicateFromId, setDuplicateFromId] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -64,6 +65,11 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
   const openEdit = (id) => {
     setEditingId(id);
     setMode("edit");
+  };
+
+  const openDuplicate = (id) => {
+    setDuplicateFromId(id);
+    setMode("duplicate");
   };
 
   const removeItem = async (id) => {
@@ -139,6 +145,43 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
     );
   }
 
+  if (mode === "duplicate") {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold text-night-900">Создание копии: {title}</h2>
+            <p className="text-sm text-night-500">Форма заполнена как при редактировании, но будет создана новая позиция.</p>
+          </div>
+          <SecureButton
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setDuplicateFromId(null);
+              setMode("list");
+            }}
+            className="px-4 py-2 flex items-center gap-2"
+          >
+            <FaArrowLeft /> К списку
+          </SecureButton>
+        </div>
+
+        <CatalogItemCreator
+          title={title}
+          duplicateFromId={duplicateFromId}
+          submitLabel="Сохранить новый товар"
+          fixedValues={fixedValues}
+          onDone={async () => {
+            setDuplicateFromId(null);
+            setMode("list");
+            hasLoadedRef.current = false;
+            await loadItems({ force: true });
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -201,6 +244,9 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
                     <div className="flex justify-end gap-2">
                       <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => openEdit(it.id)}>
                         <FaEdit />
+                      </SecureButton>
+                      <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => openDuplicate(it.id)}>
+                        <FaCopy />
                       </SecureButton>
                       <SecureButton type="button" variant="danger" className="px-3 py-2 text-xs" onClick={() => removeItem(it.id)}>
                         <FaTrash />

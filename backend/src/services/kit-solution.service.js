@@ -629,7 +629,7 @@ const removeKitSolution = async (kitSolutionId) => {
  * @returns {Promise<Array>} Список готовых решений
  */
 const listKitSolutions = async (filters = {}) => {
-  const { search, colorId, minPrice, maxPrice, categoryGroup, category, includeInactive, limit, offset } = filters;
+  const { search, colorId, minPrice, maxPrice, categoryGroup, category, parameterCategoryIds, includeInactive, sort, limit, offset } = filters;
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 500);
   const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
 
@@ -641,8 +641,36 @@ const listKitSolutions = async (filters = {}) => {
   let paramIndex = 1;
 
   if (search) {
-    conditions.push(`(ks.name ILIKE $${paramIndex} OR ks.sku ILIKE $${paramIndex})`);
-    params.push(`%${search}%`);
+    const p = `$${paramIndex}`;
+    conditions.push(
+      `(
+        to_tsvector('russian',
+          COALESCE(ks.name, '') || ' ' ||
+          COALESCE(ks.sku, '') || ' ' ||
+          COALESCE(ks.description, '')
+        ) @@ websearch_to_tsquery('russian', ${p})
+        OR ks.name % ${p}
+        OR ks.sku % ${p}
+        OR COALESCE(ks.description, '') % ${p}
+        OR EXISTS (
+          SELECT 1
+          FROM product_parameter_links ppl
+          JOIN product_parameters pp ON pp.id = ppl.parameter_id
+          WHERE ppl.entity_type = 'kit-solutions'
+            AND ppl.entity_id = ks.id
+            AND (pp.name ILIKE ('%' || ${p} || '%') OR pp.name % ${p})
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM product_parameter_category_links ppcl
+          JOIN product_parameter_categories ppc ON ppc.id = ppcl.category_id
+          WHERE ppcl.entity_type = 'kit-solutions'
+            AND ppcl.entity_id = ks.id
+            AND (ppc.name ILIKE ('%' || ${p} || '%') OR ppc.name % ${p})
+        )
+      )`
+    );
+    params.push(String(search));
     paramIndex++;
   }
 
@@ -676,10 +704,36 @@ const listKitSolutions = async (filters = {}) => {
     paramIndex++;
   }
 
+  if (parameterCategoryIds) {
+    const ids = String(parameterCategoryIds)
+      .split(",")
+      .map((x) => Number(String(x).trim()))
+      .filter((x) => Number.isFinite(x) && x > 0);
+    if (ids.length > 0) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1
+          FROM product_parameter_category_links ppcl
+          WHERE ppcl.entity_type = 'kit-solutions'
+            AND ppcl.entity_id = ks.id
+            AND ppcl.category_id = ANY($${paramIndex}::int[])
+        )`
+      );
+      params.push(ids);
+      paramIndex++;
+    }
+  }
+
+  let orderBy = "ks.id DESC";
+  if (sort === "price_desc") orderBy = "ks.final_price DESC NULLS LAST, ks.id DESC";
+  if (sort === "price_asc") orderBy = "ks.final_price ASC NULLS LAST, ks.id DESC";
+  if (sort === "popular_desc") orderBy = "pop.popularity_qty DESC NULLS LAST, ks.id DESC";
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const sql = `
     SELECT 
       ks.*,
+      pop.popularity_qty,
       c1.id as primary_color_id,
       c1.name as primary_color_name,
       c1.sku as primary_color_sku,
@@ -692,6 +746,12 @@ const listKitSolutions = async (filters = {}) => {
       img.url as image_preview_url,
       (SELECT COUNT(*) FROM kit_solution_modules WHERE kit_solution_id = ks.id) as modules_count
     FROM kit_solutions ks
+    LEFT JOIN (
+      SELECT entity_type, entity_id, SUM(COALESCE(qty, 0))::int AS popularity_qty
+      FROM order_items
+      WHERE entity_type IS NOT NULL AND entity_id IS NOT NULL
+      GROUP BY entity_type, entity_id
+    ) pop ON pop.entity_type = 'kit-solutions' AND pop.entity_id = ks.id
     LEFT JOIN colors c1 ON ks.primary_color_id = c1.id
     LEFT JOIN colors c2 ON ks.secondary_color_id = c2.id
     LEFT JOIN kitchen_types kt ON ks.kitchen_type_id = kt.id
@@ -703,7 +763,7 @@ const listKitSolutions = async (filters = {}) => {
       LIMIT 1
     ) img ON true
     ${whereClause}
-    ORDER BY ks.id DESC
+    ORDER BY ${orderBy}
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
   `;
 

@@ -3,7 +3,7 @@ import SecureButton from "../ui/SecureButton";
 import ModuleCreator from "./ModuleCreator";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
-import { FaArrowLeft, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaCopy, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
 import { getImageUrl } from "../../utils/image";
 
 const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) => {
@@ -11,6 +11,7 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
   const logger = useLogger();
   const [mode, setMode] = useState("list");
   const [editingId, setEditingId] = useState(null);
+  const [duplicateFromId, setDuplicateFromId] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -69,6 +70,11 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
     setMode("edit");
   };
 
+  const openDuplicate = (id) => {
+    setDuplicateFromId(id);
+    setMode("duplicate");
+  };
+
   const filteredItems = useMemo(() => {
     if (!fixedModuleCategoryId) return items;
     return items.filter((m) => Number(m?.module_category_id) === Number(fixedModuleCategoryId));
@@ -89,6 +95,41 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
         <ModuleCreator
           fixedModuleCategoryId={fixedModuleCategoryId}
           onDone={async () => {
+            setMode("list");
+            hasLoadedRef.current = false;
+            await loadModules({ force: true });
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (mode === "duplicate") {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold text-night-900">Создание копии модуля</h2>
+            <p className="text-sm text-night-500">Форма заполнена как при редактировании, но будет создан новый модуль.</p>
+          </div>
+          <SecureButton
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setDuplicateFromId(null);
+              setMode("list");
+            }}
+            className="px-4 py-2 flex items-center gap-2"
+          >
+            <FaArrowLeft /> К списку
+          </SecureButton>
+        </div>
+        <ModuleCreator
+          duplicateFromId={duplicateFromId}
+          fixedModuleCategoryId={fixedModuleCategoryId}
+          submitLabel="Сохранить новый товар"
+          onDone={async () => {
+            setDuplicateFromId(null);
             setMode("list");
             hasLoadedRef.current = false;
             await loadModules({ force: true });
@@ -181,6 +222,15 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
                         <div className="flex justify-end gap-2">
                           <SecureButton type="button" size="sm" variant="outline" onClick={() => openEdit(m.id)} className="h-8 px-3 flex items-center gap-2">
                             <FaEdit /> Ред.
+                          </SecureButton>
+                          <SecureButton
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openDuplicate(m.id)}
+                            className="h-8 px-3 flex items-center gap-2"
+                          >
+                            <FaCopy /> Копия
                           </SecureButton>
                           <SecureButton type="button" size="sm" variant="ghost" onClick={() => handleDelete(m.id)} className="h-8 px-3 flex items-center gap-2 text-red-600 hover:bg-red-50">
                             <FaTrash /> Удал.

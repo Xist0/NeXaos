@@ -27,5 +27,8 @@ module.exports = [
   require("./026_add_base_sku_to_catalog_items_and_kit_solutions"),
   require("./027_create_product_parameters"),
   require("./028_add_public_id_to_products"),
+  require("./029_create_product_parameter_categories"),
+  require("./030_enable_catalog_search"),
+  require("./031_add_entity_to_order_items"),
 ];
 

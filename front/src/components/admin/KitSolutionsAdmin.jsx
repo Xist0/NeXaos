@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import SecureButton from "../ui/SecureButton";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
-import { FaArrowLeft, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaCopy, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
 import KitSolutionCreator from "./KitSolutionCreator";
 import { getImageUrl } from "../../utils/image";
 
@@ -12,6 +12,7 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
 
   const [mode, setMode] = useState("list");
   const [editingId, setEditingId] = useState(null);
+  const [duplicateFromId, setDuplicateFromId] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -81,6 +82,47 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
     setEditingId(id);
     setMode("edit");
   };
+
+  const openDuplicate = (id) => {
+    setDuplicateFromId(id);
+    setMode("duplicate");
+  };
+
+  if (mode === "duplicate") {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="text-xl font-semibold text-night-900">Создание копии: {title}</h2>
+            <p className="text-sm text-night-500">Форма заполнена как при редактировании, но будет создано новое готовое решение.</p>
+          </div>
+          <SecureButton
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setDuplicateFromId(null);
+              setMode("list");
+            }}
+            className="px-4 py-2 flex items-center gap-2"
+          >
+            <FaArrowLeft /> К списку
+          </SecureButton>
+        </div>
+
+        <KitSolutionCreator
+          duplicateFromId={duplicateFromId}
+          submitLabel="Сохранить новый товар"
+          fixedValues={fixedValues}
+          onDone={async () => {
+            setDuplicateFromId(null);
+            setMode("list");
+            hasLoadedRef.current = false;
+            await loadKits({ force: true });
+          }}
+        />
+      </div>
+    );
+  }
 
   if (mode === "create") {
     return (
@@ -207,6 +249,15 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
                             className="h-8 px-3 flex items-center gap-2"
                           >
                             <FaEdit /> Ред.
+                          </SecureButton>
+                          <SecureButton
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openDuplicate(k.id)}
+                            className="h-8 px-3 flex items-center gap-2"
+                          >
+                            <FaCopy /> Копия
                           </SecureButton>
                           <SecureButton
                             type="button"

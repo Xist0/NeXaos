@@ -88,13 +88,21 @@ const getById = asyncHandler(async (req, res) => {
     `SELECT 
       oi.id,
       oi.module_id,
+      oi.entity_type,
+      oi.entity_id,
       oi.qty,
       oi.price,
       oi.cost_price,
-      m.name as module_name,
-      m.sku as module_sku
+      COALESCE(m.name, ci.name, ks.name) as item_name,
+      COALESCE(m.sku, ci.sku, ks.sku) as item_sku
     FROM order_items oi
-    LEFT JOIN modules m ON oi.module_id = m.id
+    LEFT JOIN modules m
+      ON (oi.entity_type = 'modules' AND oi.entity_id = m.id)
+      OR (oi.entity_type IS NULL AND oi.module_id = m.id)
+    LEFT JOIN catalog_items ci
+      ON oi.entity_type = 'catalog-items' AND oi.entity_id = ci.id
+    LEFT JOIN kit_solutions ks
+      ON oi.entity_type = 'kit-solutions' AND oi.entity_id = ks.id
     WHERE oi.order_id = $1`,
     [orderId]
   );

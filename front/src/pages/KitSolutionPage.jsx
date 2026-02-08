@@ -117,8 +117,8 @@ const KitSolutionPage = () => {
 
       const primaryUrl = typeof primary === "string" ? null : (primary?.image_url || null);
       const secondaryUrl = typeof secondary === "string" ? null : (secondary?.image_url || null);
-      const pImg = primaryUrl ? getThumbUrl(primaryUrl, { w: 96, h: 96, q: 70, fit: "inside" }) : null;
-      const sImg = secondaryUrl ? getThumbUrl(secondaryUrl, { w: 96, h: 96, q: 70, fit: "inside" }) : null;
+      const pImg = primaryUrl ? getImageUrl(primaryUrl) : null;
+      const sImg = secondaryUrl ? getImageUrl(secondaryUrl) : null;
 
       const pFill = pHex || "#e5e7eb";
       const sFill = sHex || "#e5e7eb";
@@ -295,8 +295,14 @@ const KitSolutionPage = () => {
     if (!kit) return list;
 
     if (kit.sku) list.push({ label: "Артикул", value: String(kit.sku) });
-    if (kit.category_group) list.push({ label: "Категория", value: String(kit.category_group) });
-    if (kit.category) list.push({ label: "Подкатегория", value: String(kit.category) });
+    if (kit.category_group || kit.category) {
+      const left = String(kit.category_group || "").trim();
+      const right = String(kit.category || "").trim();
+      list.push({
+        label: "Категория",
+        value: [left, right].filter(Boolean).join(" / "),
+      });
+    }
 
     if (kit.primary_color_name) list.push({ label: "Цвет (основной)", value: String(kit.primary_color_name) });
     if (kit.secondary_color_name) list.push({ label: "Цвет (доп.)", value: String(kit.secondary_color_name) });
@@ -305,8 +311,30 @@ const KitSolutionPage = () => {
     if (kit.total_depth_mm) list.push({ label: "Глубина", value: `${kit.total_depth_mm} мм` });
     if (kit.total_height_mm) list.push({ label: "Высота", value: `${kit.total_height_mm} мм` });
 
-    if (kit.base_price) list.push({ label: "Базовая цена", value: formatCurrency(kit.base_price) });
-    if (kit.final_price) list.push({ label: "Итоговая цена", value: formatCurrency(kit.final_price) });
+    const params = Array.isArray(kit.parameters) ? kit.parameters : [];
+    if (params.length > 0) {
+      const label = params
+        .map((p) => {
+          const name = String(p?.name || "").trim();
+          const qty = Number(p?.quantity);
+          if (!name) return null;
+          if (Number.isFinite(qty) && qty > 1) return `${name} ×${qty}`;
+          return name;
+        })
+        .filter(Boolean)
+        .join(", ");
+      if (label) list.push({ label: "Параметры", value: label });
+    }
+
+    const cats = Array.isArray(kit.parameterCategories) ? kit.parameterCategories : [];
+    if (cats.length > 0) {
+      const normalized = cats
+        .map((c) => ({ id: Number(c?.id), name: String(c?.name || "").trim() }))
+        .filter((c) => Number.isFinite(c.id) && c.id > 0 && Boolean(c.name));
+      if (normalized.length > 0) {
+        list.push({ label: "Категории параметров", type: "parameterCategories", categories: normalized });
+      }
+    }
 
     return list;
   }, [kit]);
@@ -663,14 +691,44 @@ const KitSolutionPage = () => {
       {fullCharacteristics.length > 0 && (
         <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12">
           <h3 className="font-bold text-night-900 mb-3 sm:mb-6 text-lg sm:text-2xl">Характеристики</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {fullCharacteristics.map((row) => (
-              <div key={row.label} className="rounded-xl border border-night-100 bg-white/60 p-4">
-                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">{row.label}</div>
-                <div className="mt-1 text-night-900 font-semibold break-words">{row.value || "—"}</div>
+          {(() => {
+            const leftRows = fullCharacteristics.filter((r) => r?.type !== "parameterCategories" && r?.label !== "Параметры");
+            const rightRows = fullCharacteristics.filter((r) => r?.type === "parameterCategories" || r?.label === "Параметры");
+
+            const renderRow = (row) => (
+              <div key={row.label} className="grid grid-cols-[160px_1fr] gap-3 min-w-0">
+                <span className="text-night-500 truncate">{row.label}:</span>
+                {row?.type === "parameterCategories" ? (
+                  <span className="font-semibold text-night-900 min-w-0">
+                    <span className="flex flex-wrap gap-x-2 gap-y-1">
+                      {(Array.isArray(row.categories) ? row.categories : []).map((c) => (
+                        <Link
+                          key={c.id}
+                          to={`/catalog?parameterCategoryIds=${encodeURIComponent(String(c.id))}`}
+                          className="text-accent underline underline-offset-2 hover:opacity-90"
+                        >
+                          {c.name}
+                        </Link>
+                      ))}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="font-semibold text-night-900 break-words min-w-0">{row.value || "—"}</span>
+                )}
               </div>
-            ))}
-          </div>
+            );
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-4 text-sm text-night-800 leading-relaxed">
+                <div className="space-y-2">
+                  {leftRows.map(renderRow)}
+                </div>
+                <div className="space-y-2">
+                  {rightRows.map(renderRow)}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

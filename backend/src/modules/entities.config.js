@@ -504,6 +504,8 @@
       columns: {
         order_id: { type: "integer", required: true },
         module_id: { type: "integer" },
+        entity_type: { type: "string", allowNull: true, max: 64 },
+        entity_id: { type: "integer", allowNull: true },
         qty: { type: "integer" },
         price: { type: "number", precision: 2 },
         cost_price: { type: "number", precision: 2 },
@@ -693,6 +695,14 @@
     {
       route: "product-parameters",
       table: "product_parameters",
+      idColumn: "id",
+      columns: {
+        name: { type: "string", required: true, max: 255 },
+      },
+    },
+    {
+      route: "product-parameter-categories",
+      table: "product_parameter_categories",
       idColumn: "id",
       columns: {
         name: { type: "string", required: true, max: 255 },

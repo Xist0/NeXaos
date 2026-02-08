@@ -17,7 +17,53 @@ import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
 import { formatCurrency } from "../../utils/format";
-import { getImageUrl, placeholderImage } from "../../utils/image";
+import ColorBadge from "../ui/ColorBadge";
+import { getImageUrl, getThumbUrl, placeholderImage } from "../../utils/image";
+
+const LazyImg = ({ src, alt, className, onError }) => {
+  const holderRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isVisible) return;
+    const el = holderRef.current;
+    if (!el) return;
+
+    if (typeof IntersectionObserver === "undefined") {
+      setIsVisible(true);
+      return;
+    }
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setIsVisible(true);
+          obs.disconnect();
+        }
+      },
+      { root: null, rootMargin: "50px", threshold: 0.01 }
+    );
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [isVisible]);
+
+  return (
+    <span ref={holderRef} className={className}>
+      {isVisible && (
+        <img
+          src={src}
+          alt={alt}
+          className={className}
+          loading="lazy"
+          decoding="async"
+          fetchPriority="low"
+          onError={onError}
+        />
+      )}
+    </span>
+  );
+};
 
 const toOptionalInt = (value) => {
   if (value === null || value === undefined) return undefined;
@@ -39,7 +85,7 @@ const toOptionalString = (value) => {
   return str ? str : undefined;
 };
 
-const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId = null, onDone }) => {
+const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedModuleCategoryId = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
   const getRef = useRef(get);
@@ -82,6 +128,11 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
   });
 
   const [selectedParameters, setSelectedParameters] = useState([]);
+  const [selectedParameterCategories, setSelectedParameterCategories] = useState([]);
+
+  const [openPrimary, setOpenPrimary] = useState(false);
+  const [openSecondary, setOpenSecondary] = useState(false);
+  const colorPickerRef = useRef(null);
 
   useEffect(() => {
     if (!fixedModuleCategoryId) return;
@@ -97,6 +148,45 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
       };
     });
   }, [fixedModuleCategoryId]);
+
+  useEffect(() => {
+    const onPointerDown = (e) => {
+      if (!openPrimary && !openSecondary) return;
+      const el = colorPickerRef.current;
+      if (!el) return;
+      if (el.contains(e.target)) return;
+      setOpenPrimary(false);
+      setOpenSecondary(false);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [openPrimary, openSecondary]);
+
+  const colorsByType = useMemo(() => {
+    const list = [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])];
+    return {
+      facade: list.filter((c) => c?.type === "facade"),
+      corpus: list.filter((c) => c?.type === "corpus"),
+      universal: list.filter((c) => !c?.type),
+    };
+  }, [referenceData.colorsFacade, referenceData.colorsCorpus]);
+
+  const selectedPrimaryColor = useMemo(() => {
+    const id = Number(form.primary_color_id);
+    if (!Number.isFinite(id) || id <= 0) return null;
+    const list = [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])];
+    return list.find((c) => Number(c.id) === id) || null;
+  }, [form.primary_color_id, referenceData.colorsFacade, referenceData.colorsCorpus]);
+
+  const selectedSecondaryColor = useMemo(() => {
+    const id = Number(form.secondary_color_id);
+    if (!Number.isFinite(id) || id <= 0) return null;
+    const list = [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])];
+    return list.find((c) => Number(c.id) === id) || null;
+  }, [form.secondary_color_id, referenceData.colorsFacade, referenceData.colorsCorpus]);
 
   const addParameter = (parameterId) => {
     const id = Number(parameterId);
@@ -130,6 +220,23 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
     });
   };
 
+  const addParameterCategory = (categoryId) => {
+    const id = Number(categoryId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    setSelectedParameterCategories((prev) => {
+      if (prev.some((x) => Number(x) === id)) return prev;
+      return [...prev, id];
+    });
+  };
+
+  const removeParameterCategory = (index) => {
+    setSelectedParameterCategories((prev) => {
+      const next = [...prev];
+      next.splice(index, 1);
+      return next;
+    });
+  };
+
   const [referenceData, setReferenceData] = useState({
     baseSkus: [],
     colorsFacade: [],
@@ -137,6 +244,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
     collections: [],
     moduleCategories: [],
     productParameters: [],
+    productParameterCategories: [],
     isLoaded: false
   });
   const [isLoadingReferences, setIsLoadingReferences] = useState(true);
@@ -145,6 +253,52 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
     getRef.current = get;
     loggerRef.current = logger;
   }, [get]);
+
+  const applyLoadedModuleToForm = useCallback((data) => {
+    const sku = String(data?.sku || "");
+    const skuParts = sku.split("-");
+    const maybeNonce = skuParts[skuParts.length - 1];
+    if (/^[a-z0-9]{4}$/i.test(maybeNonce)) {
+      skuNonceRef.current = maybeNonce;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      baseSku: data.base_sku || "",
+      description_id: data.description_id ?? null,
+      module_category_id: data.module_category_id ?? "",
+      collection_id: data.collection_id != null ? String(data.collection_id) : "",
+      sku: data.sku || "",
+      name: data.name || "",
+      short_desc: data.short_desc || "",
+      length_mm: data.length_mm != null ? String(data.length_mm) : prev.length_mm,
+      depth_mm: data.depth_mm != null ? String(data.depth_mm) : prev.depth_mm,
+      height_mm: data.height_mm != null ? String(data.height_mm) : prev.height_mm,
+      facade_color: data.facade_color || "",
+      corpus_color: data.corpus_color || "",
+      primary_color_id: data.primary_color_id != null ? String(data.primary_color_id) : "",
+      secondary_color_id: data.secondary_color_id != null ? String(data.secondary_color_id) : "",
+      preview_url: data.preview_url || null,
+      final_price: data.final_price != null ? String(data.final_price) : "",
+    }));
+
+    const params = Array.isArray(data.parameters) ? data.parameters : [];
+    setSelectedParameters(
+      params
+        .map((p) => ({
+          parameterId: Number(p.id),
+          quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+        }))
+        .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
+    );
+
+    const cats = Array.isArray(data.parameterCategories) ? data.parameterCategories : [];
+    setSelectedParameterCategories(
+      cats
+        .map((c) => Number(c?.id))
+        .filter((x) => Number.isFinite(x) && x > 0)
+    );
+  }, []);
 
   useEffect(() => {
     if (!initialModuleId) return;
@@ -156,42 +310,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         const data = res?.data;
         if (!active || !data) return;
 
-        const sku = String(data.sku || "");
-        const skuParts = sku.split("-");
-        const maybeNonce = skuParts[skuParts.length - 1];
-        if (/^[a-z0-9]{4}$/i.test(maybeNonce)) {
-          skuNonceRef.current = maybeNonce;
-        }
-
-        setForm((prev) => ({
-          ...prev,
-          baseSku: data.base_sku || "",
-          description_id: data.description_id ?? null,
-          module_category_id: data.module_category_id ?? "",
-          collection_id: data.collection_id != null ? String(data.collection_id) : "",
-          sku: data.sku || "",
-          name: data.name || "",
-          short_desc: data.short_desc || "",
-          length_mm: data.length_mm != null ? String(data.length_mm) : prev.length_mm,
-          depth_mm: data.depth_mm != null ? String(data.depth_mm) : prev.depth_mm,
-          height_mm: data.height_mm != null ? String(data.height_mm) : prev.height_mm,
-          facade_color: data.facade_color || "",
-          corpus_color: data.corpus_color || "",
-          primary_color_id: data.primary_color_id != null ? String(data.primary_color_id) : "",
-          secondary_color_id: data.secondary_color_id != null ? String(data.secondary_color_id) : "",
-          preview_url: data.preview_url || null,
-          final_price: data.final_price != null ? String(data.final_price) : "",
-        }));
-
-        const params = Array.isArray(data.parameters) ? data.parameters : [];
-        setSelectedParameters(
-          params
-            .map((p) => ({
-              parameterId: Number(p.id),
-              quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
-            }))
-            .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
-        );
+        applyLoadedModuleToForm(data);
         setStep(2);
       })
       .catch((e) => {
@@ -204,19 +323,49 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
     return () => {
       active = false;
     };
-  }, [initialModuleId]);
+  }, [applyLoadedModuleToForm, initialModuleId]);
+
+  useEffect(() => {
+    if (!duplicateFromId) return;
+
+    let active = true;
+    setLoading(true);
+    getRef.current(`/modules/${duplicateFromId}`)
+      .then((res) => {
+        const data = res?.data;
+        if (!active || !data) return;
+        applyLoadedModuleToForm(data);
+
+        // important: duplication must create a new module
+        setModuleId(null);
+        createLockRef.current = false;
+        skuNonceRef.current = null;
+        setStep(2);
+      })
+      .catch((e) => {
+        loggerRef.current?.error("Не удалось загрузить модуль для создания копии", e);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [applyLoadedModuleToForm, duplicateFromId]);
 
   useEffect(() => {
     const loadReferencesOnce = async () => {
       if (referenceData.isLoaded) return;
       setIsLoadingReferences(true);
       try {
-        const [descriptionsRes, allColorsRes, moduleCategoriesRes, collectionsRes, productParametersRes] = await Promise.all([
+        const [descriptionsRes, allColorsRes, moduleCategoriesRes, collectionsRes, productParametersRes, productParameterCategoriesRes] = await Promise.all([
           getRef.current("/module-descriptions", { limit: 200 }),
           getRef.current("/colors", { limit: 500, is_active: true }),
           getRef.current("/module-categories", { limit: 200 }),
           getRef.current("/collections", { limit: 500, isActive: true }),
           getRef.current("/product-parameters", { limit: 500 }),
+          getRef.current("/product-parameter-categories", { limit: 500 }),
         ]);
 
         const baseSkus = Array.isArray(descriptionsRes?.data)
@@ -230,14 +379,24 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
           : [];
 
         const allColors = Array.isArray(allColorsRes?.data) ? allColorsRes.data : [];
-        // В colors нет type в entities.config.js, но в данных у тебя оно встречается — оставляем фильтр. [file:84]
+        // В colors нет type в entities.config.js, но в данных у тебя оно встречается — оставляем фильтр.
         const colorsFacade = allColors.filter((c) => c.type === "facade" || !c.type);
         const colorsCorpus = allColors.filter((c) => c.type === "corpus");
 
         const moduleCategories = Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [];
         const collections = Array.isArray(collectionsRes?.data) ? collectionsRes.data : [];
         const productParameters = Array.isArray(productParametersRes?.data) ? productParametersRes.data : [];
-        setReferenceData({ baseSkus, colorsFacade, colorsCorpus, collections, moduleCategories, productParameters, isLoaded: true });
+        const productParameterCategories = Array.isArray(productParameterCategoriesRes?.data) ? productParameterCategoriesRes.data : [];
+        setReferenceData({
+          baseSkus,
+          colorsFacade,
+          colorsCorpus,
+          collections,
+          moduleCategories,
+          productParameters,
+          productParameterCategories,
+          isLoaded: true
+        });
       } catch (e) {
         loggerRef.current?.error("Ошибка загрузки справочников:", e);
       } finally {
@@ -371,7 +530,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
     }));
   };
 
-  // ВАЖНО: создаем модуль сразу перед шагом "Фото", чтобы получить числовой ID для images. [file:84][file:89]
+  // ВАЖНО: создаем модуль сразу перед шагом "Фото", чтобы получить числовой ID для images.
   const createModuleIfNeeded = useCallback(async () => {
     if (moduleId) return moduleId;
     if (createLockRef.current) return null;
@@ -385,7 +544,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
     setLoading(true);
 
     try {
-      // Собираем payload строго по columns modules. [file:84]
+      // Собираем payload строго по columns modules.
       const payload = {
         name: String(form.name || "").trim(),
         sku: toOptionalString(form.sku),
@@ -415,12 +574,13 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         is_active: false,
 
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
 
         // если у тебя это обязательно на UI — оставляем
         module_category_id: toOptionalInt(form.module_category_id)
       };
 
-      // При create schema требуются только "name". Остальное опционально. [file:84]
+      // При create schema требуются только "name". Остальное опционально.
       const resp = await post("/modules", payload);
       const id = resp?.data?.id;
       if (!id) throw new Error("API не вернул id при создании модуля");
@@ -491,6 +651,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         is_active: true,
 
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
       const resp = await put(`/modules/${moduleId}`, payload);
@@ -518,8 +679,9 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         preview_url: null,
         final_price: ""
       });
+      setSelectedParameters([]);
+      setSelectedParameterCategories([]);
       setModuleId(null);
-      skuNonceRef.current = null;
       setStep(1);
     } catch (e) {
       logger.error("Ошибка сохранения модуля:", e?.response?.data || e?.message || e);
@@ -566,48 +728,38 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="glass-card p-8">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-accent to-accent-dark bg-clip-text text-transparent mb-4">
-            Создать модуль
-          </h1>
-          <p className="text-night-600 max-w-2xl mx-auto">
-            Поток: Тип → Размеры → Цвета → Фото/превью → Цена → Сохранить.
-          </p>
-        </div>
-
-        {/* Progress */}
-        <div className="flex justify-center mb-16">
-          <div className="flex items-center gap-6">
-            {steps.map((s, idx) => {
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="glass-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="text-sm font-semibold text-night-900">Модуль</div>
+            <div className="text-xs text-night-500">ID: {moduleId || "—"}</div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {steps.map((s) => {
               const Icon = s.icon;
               return (
-                <div key={s.number} className="flex flex-col items-center gap-3 min-w-[120px]">
-                  <div
-                    className={`w-16 h-16 rounded-3xl flex items-center justify-center text-xl font-bold shadow-lg transition-all duration-300 ${
-                      step > s.number
-                        ? "bg-green-500 text-white scale-110 shadow-green-500/25"
-                        : step === s.number
-                        ? "bg-accent text-white shadow-accent/25 ring-4 ring-accent/50"
-                        : "bg-night-100 text-night-500 border-2 border-night-200 hover:bg-night-200"
-                    }`}
-                  >
-                    <Icon className="w-6 h-6" />
-                  </div>
-                  <div className="text-xs font-medium text-night-700 text-center">{s.title}</div>
-                  {idx < steps.length - 1 && (
-                    <div
-                      className={`w-20 h-1 rounded-full mx-4 ${
-                        step > s.number + 1 ? "bg-green-500" : step > s.number ? "bg-accent" : "bg-night-200"
-                      }`}
-                    />
-                  )}
-                </div>
+                <SecureButton
+                  key={s.number}
+                  type="button"
+                  variant={step === s.number ? "primary" : "outline"}
+                  className="px-3 py-2 text-xs flex items-center gap-2"
+                  onClick={() => {
+                    if (s.number === 4) return;
+                    if (s.number === 5) return;
+                    if (s.number === 6) return;
+                    setStep(s.number);
+                  }}
+                >
+                  <Icon /> {s.number}. {s.title}
+                </SecureButton>
               );
             })}
           </div>
         </div>
+      </div>
+
+      <div className="glass-card p-8">
 
         {/* Step 1 */}
         {step === 1 && (
@@ -713,24 +865,9 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         {/* Step 2 */}
         {step === 2 && (
           <div className="space-y-8">
-            <div className="flex items-start gap-4 mb-12">
-              <button
-                onClick={() => setStep(1)}
-                className="flex items-center gap-2 text-night-600 hover:text-night-900 p-3 -m-3 rounded-xl hover:bg-night-100"
-              >
-                <FaArrowLeft /> Назад
-              </button>
-              <div className="flex-1 border-b-4 border-accent" />
-            </div>
 
             <div className="bg-gradient-to-r from-night-50 to-accent/5 p-8 rounded-3xl border mb-8">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-end">
-                <div>
-                  <label className="block text-sm font-semibold text-night-700 mb-3">SKU</label>
-                  <div className="text-3xl font-mono font-bold text-night-900 bg-white px-6 py-4 rounded-2xl border-2 border-accent shadow-lg">
-                    {form.sku || "B100-800"}
-                  </div>
-                </div>
                 <div>
                   <label className="block text-sm font-semibold text-night-700 mb-3">Название</label>
                   <SecureInput
@@ -739,6 +876,16 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
                     placeholder="B100 800мм"
                     className="text-xl"
                   />
+                  <label className="block text-sm font-semibold text-night-700 mb-3 mt-6">baseSku (для артикула)</label>
+                  <SecureInput value={form.baseSku || ""} onChange={() => {}} disabled placeholder="Выбран на предыдущем шаге" />
+
+                  <label
+                    className="block text-sm font-semibold text-night-700 mb-3 mt-6"
+                    title="SKU формируется автоматически из baseSku + длины + выбранного цвета фасада + случайного суффикса. Поле доступно только для просмотра."
+                  >
+                    SKU
+                  </label>
+                  <SecureInput value={form.sku || ""} onChange={() => {}} disabled />
                 </div>
               </div>
 
@@ -900,17 +1047,63 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
               )}
             </div>
 
-            <div className="flex justify-between pt-8 border-t">
-              <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-12 py-4 h-16 text-lg">
-                Назад
-              </SecureButton>
-              <SecureButton
-                type="button"
-                onClick={() => setStep(3)}
-                className="px-12 py-4 h-16 text-lg bg-accent hover:bg-accent-dark shadow-xl"
-                disabled={!isStepValid(2)}
+            <div className="mt-6 space-y-3">
+              <div className="text-sm font-semibold text-night-900">Категории параметров изделий</div>
+              <select
+                value={""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  addParameterCategory(v);
+                  e.currentTarget.value = "";
+                }}
+                className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
               >
-                Далее: цвета
+                <option value="">+ Добавить категорию…</option>
+                {(referenceData.productParameterCategories || [])
+                  .slice()
+                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                  .map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      #{c.id} {c.name}
+                    </option>
+                  ))}
+              </select>
+
+              {(selectedParameterCategories || []).length === 0 ? (
+                <div className="text-sm text-night-500">Категории не выбраны</div>
+              ) : (
+                <div className="space-y-2">
+                  {selectedParameterCategories.map((id, idx) => {
+                    const full = (referenceData.productParameterCategories || []).find((x) => Number(x.id) === Number(id));
+                    return (
+                      <div key={`${id}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-2xl p-3 bg-white">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${id}`}</div>
+                          <div className="text-xs text-night-500">ID: {id}</div>
+                        </div>
+                        <SecureButton
+                          type="button"
+                          variant="outline"
+                          className="px-3 py-2 text-xs"
+                          onClick={() => removeParameterCategory(idx)}
+                        >
+                          Удалить
+                        </SecureButton>
+                      </div>
+                    );
+                  })}
+
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between pt-8 border-t">
+              <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-4 py-2 flex items-center gap-2">
+                <FaArrowLeft /> Назад
+              </SecureButton>
+              <SecureButton type="button" onClick={() => setStep(3)} className="px-4 py-2" disabled={!isStepValid(2)}>
+                Далее
               </SecureButton>
             </div>
           </div>
@@ -918,102 +1111,198 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
 
         {/* Step 3 */}
         {step === 3 && (
-          <div className="space-y-12">
-            <div className="flex items-start gap-4 mb-12">
-              <button
-                onClick={() => setStep(2)}
-                className="flex items-center gap-2 text-night-600 hover:text-night-900 p-3 -m-3 rounded-xl hover:bg-night-100"
-              >
+          <div className="glass-card p-6 space-y-4">
+            <div className="space-y-3" ref={colorPickerRef}>
+              <div className="relative py-2">
+                <div className="border-t border-night-200" />
+                <span className="absolute -top-2 left-3 px-2 text-xs text-night-500 bg-white/70">Выбор цвета</span>
+              </div>
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-night-700">Основной цвет</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpenPrimary((v) => !v);
+                      setOpenSecondary(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
+                  >
+                    <span className="flex items-center gap-2">
+                      {selectedPrimaryColor ? (
+                        <ColorBadge colorData={selectedPrimaryColor} />
+                      ) : (
+                        <span className="text-xs text-night-500">Выберите цвет</span>
+                      )}
+                    </span>
+                    <span className="text-night-400">▾</span>
+                  </button>
+
+                  {openPrimary && (
+                    <div className="relative">
+                      <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
+                        <div className="p-2 space-y-2">
+                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Основные цвета</div>
+                          <div className="space-y-1">
+                            {colorsByType.facade.map((c) => {
+                              const isSelected = Number(form.primary_color_id) === Number(c.id);
+                              return (
+                                <button
+                                  key={`primary-opt-${c.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    const code = c.code || c.sku;
+                                    handleFacadeColorSelect(code);
+                                    setOpenPrimary(false);
+                                  }}
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                    isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
+                                  }`}
+                                >
+                                  <LazyImg
+                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                    alt={c.name}
+                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                                  />
+                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="my-2 border-t border-night-200" />
+                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
+                          <div className="space-y-1">
+                            {colorsByType.universal.map((c) => {
+                              const isSelected = Number(form.primary_color_id) === Number(c.id);
+                              return (
+                                <button
+                                  key={`primary-univ-${c.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    const code = c.code || c.sku;
+                                    handleFacadeColorSelect(code);
+                                    setOpenPrimary(false);
+                                  }}
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                    isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
+                                  }`}
+                                >
+                                  <LazyImg
+                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                    alt={c.name}
+                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                                  />
+                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-night-700">Доп. цвет</div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!canSelectCorpus) return;
+                      setOpenSecondary((v) => !v);
+                      setOpenPrimary(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border bg-white transition ${
+                      canSelectCorpus ? "border-night-200 hover:border-accent" : "border-night-200 opacity-50 cursor-not-allowed"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {selectedSecondaryColor ? (
+                        <ColorBadge colorData={selectedSecondaryColor} />
+                      ) : (
+                        <span className="text-xs text-night-500">Выберите цвет</span>
+                      )}
+                    </span>
+                    <span className="text-night-400">▾</span>
+                  </button>
+
+                  {openSecondary && canSelectCorpus && (
+                    <div className="relative">
+                      <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
+                        <div className="p-2 space-y-2">
+                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Доп. цвета</div>
+                          <div className="space-y-1">
+                            {colorsByType.corpus.map((c) => {
+                              const isSelected = Number(form.secondary_color_id) === Number(c.id);
+                              return (
+                                <button
+                                  key={`secondary-opt-${c.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    const code = c.code || c.sku;
+                                    handleCorpusColorSelect(code);
+                                    setOpenSecondary(false);
+                                  }}
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                    isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
+                                  }`}
+                                >
+                                  <LazyImg
+                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                    alt={c.name}
+                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                                  />
+                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="my-2 border-t border-night-200" />
+                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
+                          <div className="space-y-1">
+                            {colorsByType.universal.map((c) => {
+                              const isSelected = Number(form.secondary_color_id) === Number(c.id);
+                              return (
+                                <button
+                                  key={`secondary-univ-${c.id}`}
+                                  type="button"
+                                  onClick={() => {
+                                    const code = c.code || c.sku;
+                                    handleCorpusColorSelect(code);
+                                    setOpenSecondary(false);
+                                  }}
+                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
+                                    isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
+                                  }`}
+                                >
+                                  <LazyImg
+                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
+                                    alt={c.name}
+                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
+                                  />
+                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between pt-8 border-t">
+              <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
                 <FaArrowLeft /> Назад
-              </button>
-              <div className="flex-1 border-b-4 border-accent" />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-12">
-              <div className="space-y-6">
-                <h3 className="text-2xl font-bold text-night-900">
-                  <span className="text-accent">Фасад</span>
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4">
-                  {referenceData.colorsFacade.map((color) => {
-                    const code = color.code || color.sku;
-                    const isSelected = form.facade_color === code;
-                    return (
-                      <div
-                        key={color.id}
-                        className={`glass-card p-6 cursor-pointer hover:shadow-2xl hover:scale-105 border-4 rounded-2xl group transition-all ${
-                          isSelected ? "border-accent ring-8 ring-accent/40 shadow-2xl scale-105" : "hover:border-accent"
-                        }`}
-                        onClick={() => handleFacadeColorSelect(code)}
-                      >
-                        <img
-                          src={getImageUrl(color.image_url)}
-                          alt={color.name}
-                          className="w-full h-32 rounded-xl object-cover mb-4 group-hover:scale-110 transition-transform"
-                        />
-                        <div className="font-mono font-bold text-lg text-center mb-1">{code}</div>
-                        <div className="text-night-700 text-sm text-center">{color.name}</div>
-                        {isSelected && (
-                          <div className="absolute inset-0 bg-accent/20 rounded-2xl flex items-center justify-center">
-                            <FaCheckCircle className="w-12 h-12 text-accent shadow-2xl" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                <h3 className="text-2xl font-bold text-night-900">Корпус</h3>
-                <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 gap-4 ${!canSelectCorpus ? "opacity-50 pointer-events-none" : ""}`}>
-                  {referenceData.colorsCorpus.map((color) => {
-                    const code = color.code || color.sku;
-                    const isSelected = form.corpus_color === code;
-                    return (
-                      <div
-                        key={color.id}
-                        className={`glass-card p-6 cursor-pointer hover:shadow-xl hover:scale-102 border-3 rounded-2xl group transition-all ${
-                          isSelected ? "border-green-500 ring-4 ring-green-500/30 shadow-xl" : "hover:border-green-400"
-                        }`}
-                        onClick={() => handleCorpusColorSelect(code)}
-                      >
-                        <img
-                          src={getImageUrl(color.image_url)}
-                          alt={color.name}
-                          className="w-full h-32 rounded-xl object-cover mb-4 group-hover:scale-105 transition-transform"
-                        />
-                        <div className="font-mono font-bold text-base text-center mb-1">{code}</div>
-                        <div className="text-night-700 text-xs text-center">{color.name}</div>
-                        {isSelected && (
-                          <div className="absolute inset-0 bg-green-500/20 rounded-2xl flex items-center justify-center">
-                            <FaCheckCircle className="w-10 h-10 text-green-600 shadow-xl" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {!canSelectCorpus && (
-                  <div className="p-6 bg-yellow-50 border-2 border-yellow-200 rounded-2xl text-center">
-                    <div className="text-yellow-700">Сначала выберите фасад</div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between pt-12 border-t">
-              <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-16 py-4 h-20 text-xl">
-                Назад
               </SecureButton>
-              <SecureButton
-                type="button"
-                onClick={goToPhotos}
-                className="px-16 py-4 h-20 text-xl bg-accent hover:bg-accent-dark shadow-xl"
-                disabled={!isStepValid(3) || loading}
-              >
+              <SecureButton type="button" onClick={goToPhotos} className="px-4 py-2" disabled={!isStepValid(3) || loading}>
                 {loading ? <FaSpinner className="animate-spin mr-2" /> : null}
-                Далее: фото
+                Далее
               </SecureButton>
             </div>
           </div>
@@ -1022,15 +1311,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         {/* Step 4 Photos */}
         {step === 4 && (
           <div className="space-y-8">
-            <div className="flex items-start gap-4 mb-12">
-              <button
-                onClick={() => setStep(3)}
-                className="flex items-center gap-2 text-night-600 hover:text-night-900 p-3 -m-3 rounded-xl hover:bg-night-100"
-              >
-                <FaArrowLeft /> Назад
-              </button>
-              <div className="flex-1 border-b-4 border-accent" />
-            </div>
 
             <div className="text-center mb-10">
               <h3 className="text-2xl font-bold text-night-900 mb-2">Фото и превью</h3>
@@ -1064,17 +1344,12 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
               </div>
             )}
 
-            <div className="flex justify-between pt-12 border-t">
-              <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-16 py-4 h-20 text-xl">
-                Назад
+            <div className="flex justify-between pt-8 border-t">
+              <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">
+                <FaArrowLeft /> Назад
               </SecureButton>
-              <SecureButton
-                type="button"
-                onClick={goToPrice}
-                className="px-16 py-4 h-20 text-xl bg-accent hover:bg-accent-dark shadow-xl"
-                disabled={!moduleId || loading}
-              >
-                Далее: цена
+              <SecureButton type="button" onClick={goToPrice} className="px-4 py-2" disabled={!moduleId || loading}>
+                Далее
               </SecureButton>
             </div>
           </div>
@@ -1083,15 +1358,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         {/* Step 5 Price */}
         {step === 5 && (
           <div className="space-y-12">
-            <div className="flex items-start gap-4 mb-16">
-              <button
-                onClick={() => setStep(4)}
-                className="flex items-center gap-2 text-night-600 hover:text-night-900 p-3 -m-3 rounded-xl hover:bg-night-100"
-              >
-                <FaArrowLeft /> Назад к фото
-              </button>
-              <div className="flex-1 border-b-4 border-accent" />
-            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
               <div className="space-y-6 p-8 bg-gradient-to-br from-night-50 rounded-3xl border-2 border-night-200">
@@ -1144,18 +1410,12 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
               </div>
             </div>
 
-            <div className="flex gap-6 pt-16 border-t-4 border-accent">
-              <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="flex-1 px-16 py-6 h-20 text-xl">
-                Назад: фото
+            <div className="flex justify-between pt-8 border-t">
+              <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 flex items-center gap-2">
+                <FaArrowLeft /> Назад
               </SecureButton>
-              <SecureButton
-                type="button"
-                onClick={finalizeModule}
-                className="flex-1 px-16 py-6 h-20 text-xl bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-2xl"
-                disabled={!moduleId || !isStepValid(5) || !form.preview_url || loading}
-              >
-                {loading ? <FaSpinner className="animate-spin mr-2" /> : <FaSave className="mr-2" />}
-                Сохранить
+              <SecureButton type="button" onClick={finalizeModule} className="px-4 py-2" disabled={!moduleId || !isStepValid(5) || !form.preview_url || loading}>
+                {loading ? <FaSpinner className="animate-spin mr-2" /> : <FaSave className="mr-2" />} {submitLabel}
               </SecureButton>
             </div>
 

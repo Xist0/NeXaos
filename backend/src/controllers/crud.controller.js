@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const config = require("../config/env");
 const productParametersService = require("../services/product-parameters.service");
+const productParameterCategoriesService = require("../services/product-parameter-categories.service");
 
 const normalizeSkuForFolder = (sku) => {
   const transliterate = (str) => {
@@ -361,6 +362,12 @@ const createCrudController = (entity) => {
         }
       }
     }
+
+    if (entity.route === "modules" || entity.route === "catalog-items") {
+      const entityType = entity.route;
+      data.parameters = await productParametersService.getEntityParameters({ entityType, entityId: data.id });
+      data.parameterCategories = await productParameterCategoriesService.getEntityCategories({ entityType, entityId: data.id });
+    }
     
     res.status(200).json({ data });
   };
@@ -389,6 +396,17 @@ const createCrudController = (entity) => {
       } else {
         data.parameters = await productParametersService.getEntityParameters({ entityType, entityId: data.id });
       }
+
+      const cats = req.body?.parameterCategories;
+      if (Array.isArray(cats)) {
+        data.parameterCategories = await productParameterCategoriesService.setEntityCategories({
+          entityType,
+          entityId: data.id,
+          items: cats,
+        });
+      } else {
+        data.parameterCategories = await productParameterCategoriesService.getEntityCategories({ entityType, entityId: data.id });
+      }
     }
     res.status(201).json({ data });
   };
@@ -416,6 +434,17 @@ const createCrudController = (entity) => {
         });
       } else {
         data.parameters = await productParametersService.getEntityParameters({ entityType, entityId: data.id });
+      }
+
+      const cats = req.body?.parameterCategories;
+      if (Array.isArray(cats)) {
+        data.parameterCategories = await productParameterCategoriesService.setEntityCategories({
+          entityType,
+          entityId: data.id,
+          items: cats,
+        });
+      } else {
+        data.parameterCategories = await productParameterCategoriesService.getEntityCategories({ entityType, entityId: data.id });
       }
     }
     res.status(200).json({ data });
