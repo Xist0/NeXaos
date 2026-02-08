@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import SecureButton from "../../ui/SecureButton";
 import SecureInput from "../../ui/SecureInput";
-import { getThumbUrl } from "../../../utils/image";
+import { getImageUrl, getThumbUrl } from "../../../utils/image";
 import ColorBadge from "../../ui/ColorBadge";
 
 const LazyImg = ({ src, alt, className, crossOrigin, onError }) => {
