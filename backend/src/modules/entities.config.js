@@ -1,6 +1,7 @@
   const Joi = require("joi");
   const { hashPassword } = require("../services/user.service");
   const { query } = require("../config/db");
+  const crypto = require("crypto");
   const { buildArticle } = require("../utils/article");
   const { resolveCategoryGroupCode, resolveCategoryCode } = require("../utils/category-codes");
 
@@ -277,6 +278,7 @@
       table: "modules",
       idColumn: "id",
       columns: {
+        public_id: { type: "string", max: 100, allowNull: true },
         sku: { type: "string", max: 255 },
         name: { type: "string", required: true, max: 255 },
         short_desc: { type: "string", allowNull: true },
@@ -326,6 +328,9 @@
       },
       beforeCreate: async (payload) => {
         const next = { ...payload };
+        if (!next.public_id) {
+          next.public_id = crypto.randomUUID();
+        }
         if (!next.sku) {
           let subcategory = "";
           if (next.module_category_id) {
@@ -350,9 +355,9 @@
           }
 
           const generated = buildArticle({
-            category: "Кухня",
+            category: null,
             section: null,
-            subcategory,
+            subcategory: null,
             name: next.base_sku || next.name,
             size1: next.length_mm,
             size2: next.depth_mm,
@@ -366,6 +371,9 @@
       },
       beforeUpdate: async (payload) => {
         const next = { ...payload };
+        if (Object.prototype.hasOwnProperty.call(next, "public_id")) {
+          delete next.public_id;
+        }
         const hasSkuInPayload = Object.prototype.hasOwnProperty.call(next, "sku") && next.sku;
 
         if (
@@ -395,9 +403,9 @@
           }
 
           const generated = buildArticle({
-            category: "Кухня",
+            category: null,
             section: null,
-            subcategory,
+            subcategory: null,
             name: next.base_sku || next.name,
             size1: next.length_mm,
             size2: next.depth_mm,
@@ -683,10 +691,19 @@
       },
     },
     {
+      route: "product-parameters",
+      table: "product_parameters",
+      idColumn: "id",
+      columns: {
+        name: { type: "string", required: true, max: 255 },
+      },
+    },
+    {
       route: "kit-solutions",
       table: "kit_solutions",
       idColumn: "id",
       columns: {
+        public_id: { type: "string", max: 100, allowNull: true },
         name: { type: "string", required: true, max: 255 },
         base_sku: { type: "string", max: 255, allowNull: true },
         sku: { type: "string", max: 255 },
@@ -705,12 +722,27 @@
         collection_id: { type: "integer" },
         is_active: { type: "boolean" },
       },
+      beforeCreate: async (payload) => {
+        const next = { ...payload };
+        if (!next.public_id) {
+          next.public_id = crypto.randomUUID();
+        }
+        return next;
+      },
+      beforeUpdate: async (payload) => {
+        const next = { ...payload };
+        if (Object.prototype.hasOwnProperty.call(next, "public_id")) {
+          delete next.public_id;
+        }
+        return next;
+      },
     },
     {
       route: "catalog-items",
       table: "catalog_items",
       idColumn: "id",
       columns: {
+        public_id: { type: "string", max: 100, allowNull: true },
         base_sku: { type: "string", max: 255, allowNull: true },
         sku: { type: "string", max: 255, allowNull: true },
         name: { type: "string", required: true, max: 255 },
@@ -730,6 +762,9 @@
       },
       beforeCreate: async (payload) => {
         const next = { ...payload };
+        if (!next.public_id) {
+          next.public_id = crypto.randomUUID();
+        }
         if (!next.sku) {
           let primaryColor = null;
           if (next.primary_color_id) {
@@ -742,13 +777,11 @@
             secondaryColor = rows?.[0]?.sku || null;
           }
 
-          const category = next.category_group;
-          const subcategory = next.category;
           const articleName = next.base_sku || next.name;
           const generated = buildArticle({
-            category: category ? resolveCategoryGroupCode(category) : category,
+            category: null,
             section: null,
-            subcategory: subcategory ? resolveCategoryCode(subcategory) : subcategory,
+            subcategory: null,
             name: articleName,
             size1: next.length_mm,
             size2: next.depth_mm,
@@ -762,6 +795,9 @@
       },
       beforeUpdate: async (payload) => {
         const next = { ...payload };
+        if (Object.prototype.hasOwnProperty.call(next, "public_id")) {
+          delete next.public_id;
+        }
         const hasSkuInPayload = Object.prototype.hasOwnProperty.call(next, "sku") && next.sku;
 
         if (
@@ -779,13 +815,11 @@
             secondaryColor = rows?.[0]?.sku || null;
           }
 
-          const category = next.category_group;
-          const subcategory = next.category;
           const articleName = next.base_sku || next.name;
           const generated = buildArticle({
-            category: category ? resolveCategoryGroupCode(category) : category,
+            category: null,
             section: null,
-            subcategory: subcategory ? resolveCategoryCode(subcategory) : subcategory,
+            subcategory: null,
             name: articleName,
             size1: next.length_mm,
             size2: next.depth_mm,

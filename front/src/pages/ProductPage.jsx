@@ -11,6 +11,7 @@ import useLogger from "../hooks/useLogger";
 import { getThumbUrl, getImageUrl } from "../utils/image";
 import ProductGallery from "../components/ui/ProductGallery";
 import apiClient from "../services/apiClient";
+import { resolveColor } from "../utils/colors";
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -47,11 +48,6 @@ const ProductPage = () => {
     });
     const arr = Array.from(unique.values());
     arr.sort((a, b) => {
-      const as = String(a?.sku || "");
-      const bs = String(b?.sku || "");
-      if (as && bs) return as.localeCompare(bs, "ru");
-      if (as) return -1;
-      if (bs) return 1;
       return Number(a?.id || 0) - Number(b?.id || 0);
     });
     return arr;
@@ -151,7 +147,7 @@ const ProductPage = () => {
   }, [id, navigate]);
 
   useEffect(() => {
-    if (!item?.base_sku) {
+    if (item?.__type !== "module" || !item?.base_sku) {
       setModuleDescription(null);
       return;
     }
@@ -342,8 +338,63 @@ const ProductPage = () => {
     if (item.base_price) list.push({ label: "Базовая цена", value: formatCurrency(item.base_price) });
     if (item.final_price) list.push({ label: "Итоговая цена", value: formatCurrency(item.final_price) });
 
+    const params = Array.isArray(item.parameters) ? item.parameters : [];
+    if (params.length > 0) {
+      const label = params
+        .map((p) => {
+          const name = String(p?.name || "").trim();
+          const qty = Number(p?.quantity);
+          if (!name) return null;
+          if (Number.isFinite(qty) && qty > 1) return `${name} ×${qty}`;
+          return name;
+        })
+        .filter(Boolean)
+        .join(", ");
+      if (label) list.push({ label: "Параметры", value: label });
+    }
+
     return list;
   }, [item]);
+
+  const renderColorCircle = useCallback(
+    (primary, secondary) => {
+      const pLabel = typeof primary === "string" ? primary : (primary?.name || "");
+      const sLabel = typeof secondary === "string" ? secondary : (secondary?.name || "");
+      const pHex = resolveColor(pLabel)?.hex || null;
+      const sHex = resolveColor(sLabel)?.hex || null;
+
+      const primaryUrl = typeof primary === "string" ? null : (primary?.image_url || null);
+      const secondaryUrl = typeof secondary === "string" ? null : (secondary?.image_url || null);
+      const pImg = primaryUrl ? resolveThumb(primaryUrl, { w: 96, h: 96, q: 70, fit: "inside" }) : null;
+      const sImg = secondaryUrl ? resolveThumb(secondaryUrl, { w: 96, h: 96, q: 70, fit: "inside" }) : null;
+
+      const pFill = pHex || "#e5e7eb";
+      const sFill = sHex || "#e5e7eb";
+      return (
+        <div className="w-14 h-14 rounded-full border border-night-200 bg-white overflow-hidden flex-shrink-0">
+          <div className="w-full h-full flex">
+            <div
+              className="h-full w-1/2"
+              style={
+                pImg
+                  ? { backgroundImage: `url(${pImg})`, backgroundSize: "cover", backgroundPosition: "center" }
+                  : { backgroundColor: pFill }
+              }
+            />
+            <div
+              className="h-full w-1/2"
+              style={
+                sImg
+                  ? { backgroundImage: `url(${sImg})`, backgroundSize: "cover", backgroundPosition: "center" }
+                  : { backgroundColor: sFill }
+              }
+            />
+          </div>
+        </div>
+      );
+    },
+    [resolveThumb]
+  );
 
   if (loading) {
     return (
@@ -393,10 +444,14 @@ const ProductPage = () => {
             <div>
               {(() => {
                 const selectedSize = item?.length_mm ? Number(item.length_mm) : null;
+                const selectedPrimaryId = item?.primary_color?.id ?? item?.primary_color_id ?? null;
+                const selectedSecondaryId = item?.secondary_color?.id ?? item?.secondary_color_id ?? null;
                 const selectedPrimary = (item?.primary_color?.name || item?.facade_color || "").trim();
                 const selectedSecondary = (item?.secondary_color?.name || item?.corpus_color || "").trim();
                 const selectedColorLabel = [selectedPrimary, selectedSecondary].filter(Boolean).join(" + ");
-                const selectedColorKey = selectedColorLabel || String(item?.id || "");
+                const selectedColorKey = selectedPrimaryId || selectedSecondaryId
+                  ? `${String(selectedPrimaryId ?? "")}||${String(selectedSecondaryId ?? "")}`
+                  : (selectedColorLabel || String(item?.id || ""));
 
                 const sizes = Array.from(
                   new Set(
@@ -412,7 +467,9 @@ const ProductPage = () => {
                       const primary = (v.primary_color?.name || v.facade_color || "").trim();
                       const secondary = (v.secondary_color?.name || v.corpus_color || "").trim();
                       const label = [primary, secondary].filter(Boolean).join(" + ");
-                      const key = label || String(v.id);
+                      const pid = v?.primary_color?.id ?? v?.primary_color_id ?? null;
+                      const sid = v?.secondary_color?.id ?? v?.secondary_color_id ?? null;
+                      const key = pid || sid ? `${String(pid ?? "")}||${String(sid ?? "")}` : (label || String(v.id));
                       const imgUrl = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
                       return [key, { key, label, primary, secondary, imgUrl, sample: v }];
                     })
@@ -531,6 +588,8 @@ const ProductPage = () => {
                         {colors.map(({ key, label, primary, secondary, imgUrl, sample }) => {
                           const isActive = key === selectedColorKey;
                           const safeLabel = encodeURIComponent(label || String(sample?.id || ""));
+                          const pColor = sample?.primary_color || sample?.facade_color || null;
+                          const sColor = sample?.secondary_color || sample?.corpus_color || null;
                           return (
                             <button
                               key={key}
@@ -558,23 +617,13 @@ const ProductPage = () => {
                                 scrollToCenterSmooth(colorRowRef.current, e.currentTarget);
                                 navigate(`/catalog/${next.id}`);
                               }}
-                              className={`snap-center flex-shrink-0 rounded-xl border bg-white transition p-1 ${
+                              className={`snap-center flex-shrink-0 rounded-full border bg-white transition flex items-center justify-center ${
                                 isActive ? "border-accent ring-2 ring-accent/40" : "border-night-200 hover:border-night-300"
                               }`}
                               aria-label={label || "Цвет"}
                               title={label || ""}
                             >
-                              <div className="w-11 h-14 rounded-md overflow-hidden">
-                                {imgUrl ? (
-                                  <img
-                                    src={resolveThumb(imgUrl, { w: 220, h: 280, q: 70, fit: "inside" })}
-                                    alt={label || item.name}
-                                    className="w-full h-full object-cover"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                ) : null}
-                              </div>
+                              {renderColorCircle(pColor, sColor)}
                             </button>
                           );
                         })}
@@ -719,7 +768,6 @@ const ProductPage = () => {
 
                   return list.map((v) => {
                   const isActive = String(v.id) === String(item.id);
-                  const vImg = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
 
                   const primaryLabel = getPrimaryLabel(v);
                   const secondaryLabel = getSecondaryLabel(v);
@@ -729,10 +777,8 @@ const ProductPage = () => {
                   const showSize = sizesVary && sizeKey(v) !== selectedSizeKey;
                   const showColor = colorsVary && colorKey(v) !== selectedColorKey;
 
-                  const pUrl = getPrimarySampleUrl(v);
-                  const sUrl = getSecondarySampleUrl(v);
-                  const pBg = pUrl ? `url(${resolveThumb(pUrl, { w: 64, h: 64, q: 70, fit: "inside" })})` : "none";
-                  const sBg = sUrl ? `url(${resolveThumb(sUrl, { w: 64, h: 64, q: 70, fit: "inside" })})` : "none";
+                  const pColor = v?.primary_color || v?.facade_color || null;
+                  const sColor = v?.secondary_color || v?.corpus_color || null;
                   return (
                     <button
                       key={v.id}
@@ -744,36 +790,12 @@ const ProductPage = () => {
                       }}
                       className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${isActive ? "border-accent bg-accent/5" : "border-night-200 hover:border-night-300"}`}
                     >
-                      <div className="relative w-14 h-16 rounded-lg bg-night-50 overflow-hidden border border-night-200 flex-shrink-0">
-                        <div className="absolute left-1 top-1 w-4 h-4 rounded-full border border-white shadow overflow-hidden" aria-hidden>
-                          <div
-                            className="absolute inset-y-0 left-0 w-1/2"
-                            style={
-                              pBg === "none"
-                                ? { backgroundColor: "#e5e7eb" }
-                                : { backgroundImage: pBg, backgroundSize: "cover", backgroundPosition: "center" }
-                            }
-                          />
-                          <div
-                            className="absolute inset-y-0 right-0 w-1/2"
-                            style={
-                              sBg === "none"
-                                ? { backgroundColor: "#e5e7eb" }
-                                : { backgroundImage: sBg, backgroundSize: "cover", backgroundPosition: "center" }
-                            }
-                          />
-                        </div>
-                        {vImg ? (
-                          <img src={resolveThumb(vImg, { w: 280, h: 320, q: 70, fit: "inside" })} alt={v.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
-                        ) : null}
-                      </div>
+                      <div className="w-20 flex items-center justify-center flex-shrink-0">{renderColorCircle(pColor, sColor)}</div>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-night-900 truncate">
-                          {primaryLabel || "—"}
+                          {showSize && sizeLabel ? `${Math.round(Number(sizeLabel) / 10)} см` : (colorLabel || "—")}
                         </div>
-                        {secondaryLabel ? (
-                          <div className="text-xs text-night-500 truncate">{secondaryLabel}</div>
-                        ) : null}
+                        {showSize && showColor ? <div className="text-xs text-night-500 truncate">{colorLabel || ""}</div> : null}
                       </div>
                     </button>
                   );
@@ -795,11 +817,11 @@ const ProductPage = () => {
       {fullCharacteristics.length > 0 && (
         <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12">
           <h3 className="font-bold text-night-900 mb-3 sm:mb-6 text-lg sm:text-2xl">Характеристики</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-night-800 leading-relaxed">
             {fullCharacteristics.map((row) => (
-              <div key={row.label} className="rounded-xl border border-night-100 bg-white/60 p-4">
-                <div className="text-xs font-semibold text-night-500 uppercase tracking-wide">{row.label}</div>
-                <div className="mt-1 text-night-900 font-semibold break-words">{row.value || "—"}</div>
+              <div key={row.label} className="min-w-0">
+                <span className="text-night-500">{row.label}:</span>{" "}
+                <span className="font-semibold text-night-900 break-words">{row.value || "—"}</span>
               </div>
             ))}
           </div>

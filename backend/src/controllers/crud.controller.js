@@ -3,6 +3,7 @@ const crudService = require("../services/crud.service");
 const path = require("path");
 const fs = require("fs");
 const config = require("../config/env");
+const productParametersService = require("../services/product-parameters.service");
 
 const normalizeSkuForFolder = (sku) => {
   const transliterate = (str) => {
@@ -196,6 +197,7 @@ const createCrudController = (entity) => {
         }
       }
     }
+
     
     res.status(200).json({ data });
   };
@@ -374,6 +376,20 @@ const createCrudController = (entity) => {
       : value;
 
     const data = await crudService.create(entity, payload);
+
+    if (entity.route === "modules" || entity.route === "catalog-items") {
+      const entityType = entity.route;
+      const params = req.body?.parameters;
+      if (Array.isArray(params)) {
+        data.parameters = await productParametersService.setEntityParameters({
+          entityType,
+          entityId: data.id,
+          items: params,
+        });
+      } else {
+        data.parameters = await productParametersService.getEntityParameters({ entityType, entityId: data.id });
+      }
+    }
     res.status(201).json({ data });
   };
 
@@ -388,6 +404,20 @@ const createCrudController = (entity) => {
       : value;
 
     const data = await crudService.update(entity, req.params.id, payload);
+
+    if (entity.route === "modules" || entity.route === "catalog-items") {
+      const entityType = entity.route;
+      const params = req.body?.parameters;
+      if (Array.isArray(params)) {
+        data.parameters = await productParametersService.setEntityParameters({
+          entityType,
+          entityId: data.id,
+          items: params,
+        });
+      } else {
+        data.parameters = await productParametersService.getEntityParameters({ entityType, entityId: data.id });
+      }
+    }
     res.status(200).json({ data });
   };
 

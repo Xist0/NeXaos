@@ -81,6 +81,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
     final_price: ""
   });
 
+  const [selectedParameters, setSelectedParameters] = useState([]);
+
   useEffect(() => {
     if (!fixedModuleCategoryId) return;
     setForm((prev) => {
@@ -96,12 +98,45 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
     });
   }, [fixedModuleCategoryId]);
 
+  const addParameter = (parameterId) => {
+    const id = Number(parameterId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    setSelectedParameters((prev) => {
+      const idx = prev.findIndex((x) => Number(x.parameterId) === id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantity: Math.max(1, Number(next[idx].quantity || 1) + 1) };
+        return next;
+      }
+      return [...prev, { parameterId: id, quantity: 1 }];
+    });
+  };
+
+  const updateParameterQty = (index, qty) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      const q = Number(qty);
+      next[index] = { ...next[index], quantity: Number.isFinite(q) ? Math.max(1, Math.round(q)) : 1 };
+      return next;
+    });
+  };
+
+  const removeParameter = (index) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      next.splice(index, 1);
+      return next;
+    });
+  };
+
   const [referenceData, setReferenceData] = useState({
     baseSkus: [],
     colorsFacade: [],
     colorsCorpus: [],
     collections: [],
     moduleCategories: [],
+    productParameters: [],
     isLoaded: false
   });
   const [isLoadingReferences, setIsLoadingReferences] = useState(true);
@@ -147,6 +182,16 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
           preview_url: data.preview_url || null,
           final_price: data.final_price != null ? String(data.final_price) : "",
         }));
+
+        const params = Array.isArray(data.parameters) ? data.parameters : [];
+        setSelectedParameters(
+          params
+            .map((p) => ({
+              parameterId: Number(p.id),
+              quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+            }))
+            .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
+        );
         setStep(2);
       })
       .catch((e) => {
@@ -166,11 +211,12 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
       if (referenceData.isLoaded) return;
       setIsLoadingReferences(true);
       try {
-        const [descriptionsRes, allColorsRes, moduleCategoriesRes, collectionsRes] = await Promise.all([
+        const [descriptionsRes, allColorsRes, moduleCategoriesRes, collectionsRes, productParametersRes] = await Promise.all([
           getRef.current("/module-descriptions", { limit: 200 }),
           getRef.current("/colors", { limit: 500, is_active: true }),
           getRef.current("/module-categories", { limit: 200 }),
-          getRef.current("/collections", { limit: 500, isActive: true })
+          getRef.current("/collections", { limit: 500, isActive: true }),
+          getRef.current("/product-parameters", { limit: 500 }),
         ]);
 
         const baseSkus = Array.isArray(descriptionsRes?.data)
@@ -190,7 +236,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
 
         const moduleCategories = Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [];
         const collections = Array.isArray(collectionsRes?.data) ? collectionsRes.data : [];
-        setReferenceData({ baseSkus, colorsFacade, colorsCorpus, collections, moduleCategories, isLoaded: true });
+        const productParameters = Array.isArray(productParametersRes?.data) ? productParametersRes.data : [];
+        setReferenceData({ baseSkus, colorsFacade, colorsCorpus, collections, moduleCategories, productParameters, isLoaded: true });
       } catch (e) {
         loggerRef.current?.error("Ошибка загрузки справочников:", e);
       } finally {
@@ -367,6 +414,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         // чтобы модуль не светился до финального шага
         is_active: false,
 
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+
         // если у тебя это обязательно на UI — оставляем
         module_category_id: toOptionalInt(form.module_category_id)
       };
@@ -440,6 +489,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
         final_price: toOptionalNumber(form.final_price),
         price: toOptionalNumber(form.final_price),
         is_active: true,
+
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
       };
 
       const resp = await put(`/modules/${moduleId}`, payload);
@@ -790,6 +841,64 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, fixedModuleCategoryId
               onChange={(v) => setForm((prev) => ({ ...prev, short_desc: v }))}
               rows={4}
             />
+
+            <div className="mt-6 space-y-3">
+              <div className="text-sm font-semibold text-night-900">Параметры</div>
+              <select
+                value={""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  addParameter(v);
+                  e.currentTarget.value = "";
+                }}
+                className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
+              >
+                <option value="">+ Добавить параметр…</option>
+                {(referenceData.productParameters || [])
+                  .slice()
+                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                  .map((p) => (
+                    <option key={p.id} value={String(p.id)}>
+                      #{p.id} {p.name}
+                    </option>
+                  ))}
+              </select>
+
+              {(selectedParameters || []).length === 0 ? (
+                <div className="text-sm text-night-500">Параметры не выбраны</div>
+              ) : (
+                <div className="space-y-2">
+                  {selectedParameters.map((p, idx) => {
+                    const full = (referenceData.productParameters || []).find((x) => Number(x.id) === Number(p.parameterId));
+                    return (
+                      <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-2xl p-3 bg-white">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${p.parameterId}`}</div>
+                          <div className="text-xs text-night-500">ID: {p.parameterId}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <SecureInput
+                            type="number"
+                            value={String(p.quantity ?? 1)}
+                            onChange={(v) => updateParameterQty(idx, v)}
+                            className="w-24"
+                          />
+                          <SecureButton
+                            type="button"
+                            variant="outline"
+                            className="px-3 py-2 text-xs"
+                            onClick={() => removeParameter(idx)}
+                          >
+                            Удалить
+                          </SecureButton>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
             <div className="flex justify-between pt-8 border-t">
               <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-12 py-4 h-16 text-lg">

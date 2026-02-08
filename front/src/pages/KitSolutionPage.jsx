@@ -10,6 +10,7 @@ import FavoriteButton from "../components/ui/FavoriteButton";
 import useLogger from "../hooks/useLogger";
 import { getImageUrl, placeholderImage } from "../utils/image";
 import ProductGallery from "../components/ui/ProductGallery";
+import { resolveColor } from "../utils/colors";
 
 const KitSolutionPage = () => {
   const { id } = useParams();
@@ -105,6 +106,46 @@ const KitSolutionPage = () => {
       setTimeout(() => updateRowScrollState(rowRef, setState), 180);
     },
     [updateRowScrollState]
+  );
+
+  const renderColorCircle = useCallback(
+    (primary, secondary) => {
+      const pLabel = typeof primary === "string" ? primary : (primary?.name || "");
+      const sLabel = typeof secondary === "string" ? secondary : (secondary?.name || "");
+      const pHex = resolveColor(pLabel)?.hex || null;
+      const sHex = resolveColor(sLabel)?.hex || null;
+
+      const primaryUrl = typeof primary === "string" ? null : (primary?.image_url || null);
+      const secondaryUrl = typeof secondary === "string" ? null : (secondary?.image_url || null);
+      const pImg = primaryUrl ? getThumbUrl(primaryUrl, { w: 96, h: 96, q: 70, fit: "inside" }) : null;
+      const sImg = secondaryUrl ? getThumbUrl(secondaryUrl, { w: 96, h: 96, q: 70, fit: "inside" }) : null;
+
+      const pFill = pHex || "#e5e7eb";
+      const sFill = sHex || "#e5e7eb";
+      return (
+        <div className="w-14 h-14 rounded-full border border-night-200 bg-white overflow-hidden flex-shrink-0">
+          <div className="w-full h-full flex">
+            <div
+              className="h-full w-1/2"
+              style={
+                pImg
+                  ? { backgroundImage: `url(${pImg})`, backgroundSize: "cover", backgroundPosition: "center" }
+                  : { backgroundColor: pFill }
+              }
+            />
+            <div
+              className="h-full w-1/2"
+              style={
+                sImg
+                  ? { backgroundImage: `url(${sImg})`, backgroundSize: "cover", backgroundPosition: "center" }
+                  : { backgroundColor: sFill }
+              }
+            />
+          </div>
+        </div>
+      );
+    },
+    []
   );
 
   useEffect(() => {
@@ -306,6 +347,11 @@ const KitSolutionPage = () => {
               {(() => {
                 const selectedSize = kit?.total_length_mm ? Number(kit.total_length_mm) : null;
                 const selectedColor = kit?.primary_color_name || kit?.primary_color?.name || "";
+                const selectedPrimaryId = kit?.primary_color?.id ?? kit?.primary_color_id ?? null;
+                const selectedSecondaryId = kit?.secondary_color?.id ?? kit?.secondary_color_id ?? null;
+                const selectedColorKey = selectedPrimaryId || selectedSecondaryId
+                  ? `${String(selectedPrimaryId ?? "")}||${String(selectedSecondaryId ?? "")}`
+                  : selectedColor;
 
                 const sizes = Array.from(
                   new Set(
@@ -320,7 +366,10 @@ const KitSolutionPage = () => {
                     variantItems.map((v) => {
                       const label = v.primary_color_name || v.primary_color?.name || "";
                       const imgUrl = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
-                      return [label || String(v.id), { label, imgUrl, sample: v }];
+                      const pid = v?.primary_color?.id ?? v?.primary_color_id ?? null;
+                      const sid = v?.secondary_color?.id ?? v?.secondary_color_id ?? null;
+                      const key = pid || sid ? `${String(pid ?? "")}||${String(sid ?? "")}` : (label || String(v.id));
+                      return [key, { key, label, imgUrl, sample: v }];
                     })
                   ).values()
                 );
@@ -434,12 +483,14 @@ const KitSolutionPage = () => {
                           className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory scroll-smooth px-1"
                           style={{ scrollbarWidth: "none" }}
                         >
-                        {colors.map(({ label, imgUrl, sample }) => {
-                          const isActive = Boolean(selectedColor) && selectedColor === label;
+                        {colors.map(({ key, label, imgUrl, sample }) => {
+                          const isActive = key === selectedColorKey;
                           const safeLabel = encodeURIComponent(label || String(sample?.id || ""));
+                          const pColor = sample?.primary_color || (sample?.primary_color_name ? { name: sample.primary_color_name, image_url: sample.primary_color_image } : null);
+                          const sColor = sample?.secondary_color || (sample?.secondary_color_name ? { name: sample.secondary_color_name, image_url: sample.secondary_color_image } : null);
                           return (
                             <button
-                              key={label || sample?.id}
+                              key={key}
                               type="button"
                               data-color={safeLabel}
                               onClick={(e) => {
@@ -447,31 +498,24 @@ const KitSolutionPage = () => {
                                 const candidates = currentLen
                                   ? variantItems.filter((x) => Number(x.total_length_mm) === Number(currentLen))
                                   : variantItems;
-                                const next =
-                                  candidates.find((x) => (x.primary_color_name || x.primary_color?.name || "") === label) ||
-                                  variantItems.find((x) => (x.primary_color_name || x.primary_color?.name || "") === label) ||
-                                  sample;
+                                const match = (x) => {
+                                  const xpid = x?.primary_color?.id ?? x?.primary_color_id ?? null;
+                                  const xsid = x?.secondary_color?.id ?? x?.secondary_color_id ?? null;
+                                  const xkey = xpid || xsid ? `${String(xpid ?? "")}||${String(xsid ?? "")}` : (x.primary_color_name || x.primary_color?.name || "");
+                                  return xkey === key;
+                                };
+                                const next = candidates.find(match) || variantItems.find(match) || sample;
                                 if (!next || String(next.id) === String(kit.id)) return;
                                 scrollToCenterSmooth(colorRowRef.current, e.currentTarget);
                                 navigate(`/catalog/kit/${next.id}`);
                               }}
-                              className={`snap-center flex-shrink-0 rounded-xl border bg-white transition p-1 ${
+                              className={`snap-center flex-shrink-0 rounded-full border bg-white transition flex items-center justify-center ${
                                 isActive ? "border-accent ring-2 ring-accent/40" : "border-night-200 hover:border-night-300"
                               }`}
                               aria-label={label || "Цвет"}
                               title={label || ""}
                             >
-                              <div className="w-11 h-14 rounded-md overflow-hidden">
-                                {imgUrl ? (
-                                  <img
-                                    src={getImageUrl(imgUrl)}
-                                    alt={label || kit.name}
-                                    className="w-full h-full object-cover"
-                                    loading="lazy"
-                                    decoding="async"
-                                  />
-                                ) : null}
-                              </div>
+                              {renderColorCircle(pColor, sColor)}
                             </button>
                           );
                         })}
@@ -580,9 +624,10 @@ const KitSolutionPage = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {variantItems.map((v) => {
                   const isActive = String(v.id) === String(kit.id);
-                  const vImg = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
                   const primaryColorLabel = v.primary_color_name || v.primary_color?.name || "";
                   const sizeLabel = v.total_length_mm ? String(v.total_length_mm) : "";
+                  const pColor = v?.primary_color || (v?.primary_color_name ? { name: v.primary_color_name, image_url: v.primary_color_image } : null);
+                  const sColor = v?.secondary_color || (v?.secondary_color_name ? { name: v.secondary_color_name, image_url: v.secondary_color_image } : null);
                   return (
                     <button
                       key={v.id}
@@ -594,11 +639,7 @@ const KitSolutionPage = () => {
                       }}
                       className={`flex items-center gap-3 rounded-xl border p-3 text-left transition ${isActive ? "border-accent bg-accent/5" : "border-night-200 hover:border-night-300"}`}
                     >
-                      <div className="w-14 h-16 rounded-lg bg-night-50 overflow-hidden border border-night-200 flex-shrink-0">
-                        {vImg ? (
-                          <img src={getImageUrl(vImg)} alt={v.name} className="w-full h-full object-contain" loading="lazy" decoding="async" />
-                        ) : null}
-                      </div>
+                      <div className="w-20 flex items-center justify-center flex-shrink-0">{renderColorCircle(pColor, sColor)}</div>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-night-900 truncate">{sizeLabel ? `${sizeLabel} мм` : v.sku || v.name}</div>
                         <div className="text-xs text-night-500 truncate">{primaryColorLabel || ""}</div>

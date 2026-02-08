@@ -25,5 +25,7 @@ module.exports = [
   require("./024_backfill_kitchen_ready_kit_solution_categories"),
   require("./025_backfill_kitchen_ready_kit_solution_categories_by_components"),
   require("./026_add_base_sku_to_catalog_items_and_kit_solutions"),
+  require("./027_create_product_parameters"),
+  require("./028_add_public_id_to_products"),
 ];
 

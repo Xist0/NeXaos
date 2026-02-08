@@ -4,6 +4,7 @@ const logger = require("../utils/logger");
 const crypto = require("crypto");
 const { buildArticle } = require("../utils/article");
 const { resolveCategoryGroupCode, resolveCategoryCode } = require("../utils/category-codes");
+const productParametersService = require("./product-parameters.service");
 const fs = require("fs");
 const path = require("path");
 const config = require("../config/env");
@@ -229,6 +230,7 @@ const getKitSolutionWithModules = async (kitSolutionId, options = {}) => {
 
   return {
     ...kitSolution,
+    parameters: await productParametersService.getEntityParameters({ entityType: "kit-solutions", entityId: kitSolutionId }),
     components,
     modules: modulesByType,
     modulesCount: {
@@ -254,20 +256,15 @@ const getKitSolutionWithModules = async (kitSolutionId, options = {}) => {
  * @param {Array<number>} moduleIds - Массив ID модулей
  * @returns {Promise<Object>} Созданное/обновленное готовое решение
  */
-const saveKitSolutionWithModules = async (kitData, moduleIds = [], moduleItems = null, componentItems = null) => {
-  const inferPositionTypeFromBaseSku = (baseSku) => {
-    const s = String(baseSku || "").trim();
-    if (/^В/i.test(s)) return "top";
-    if (/^Н/i.test(s)) return "bottom";
-    return null;
-  };
-
+const saveKitSolutionWithModules = async (payload) => {
   const {
     id,
+    public_id,
     name,
     base_sku,
     sku,
     description,
+    parameters,
     category_group,
     category,
     kitchen_type_id,
@@ -293,9 +290,6 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = [], moduleItems =
     ? String(category).trim()
     : null;
 
-  const categoryGroupCode = normalizedCategoryGroup ? resolveCategoryGroupCode(normalizedCategoryGroup) : null;
-  const categoryCode = normalizedCategory ? resolveCategoryCode(normalizedCategory) : null;
-
   let resolvedSku = sku;
   if (!resolvedSku) {
     let primaryColor = null;
@@ -311,9 +305,9 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = [], moduleItems =
 
     const articleName = base_sku != null && String(base_sku).trim() ? String(base_sku).trim() : name;
     const generated = buildArticle({
-      category: categoryGroupCode,
+      category: null,
       section: null,
-      subcategory: categoryCode,
+      subcategory: null,
       name: articleName,
       size1: total_length_mm,
       size2: total_depth_mm,
@@ -393,15 +387,17 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = [], moduleItems =
     await query(`DELETE FROM kit_solution_modules WHERE kit_solution_id = $1`, [id]);
   } else {
     // Создание нового решения
+    const nextPublicId = String(public_id || "").trim() || crypto.randomUUID();
     const { rows } = await query(
       `INSERT INTO kit_solutions 
-       (name, base_sku, sku, description, category_group, category, kitchen_type_id, collection_id,
+       (public_id, name, base_sku, sku, description, category_group, category, kitchen_type_id, collection_id,
         primary_color_id, secondary_color_id, material_id,
         total_length_mm, total_depth_mm, total_height_mm,
         countertop_length_mm, countertop_depth_mm, base_price, final_price, preview_url, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
        RETURNING id`,
       [
+        nextPublicId,
         name,
         base_sku != null && String(base_sku).trim() ? String(base_sku).trim() : null,
         resolvedSku,
@@ -425,6 +421,14 @@ const saveKitSolutionWithModules = async (kitData, moduleIds = [], moduleItems =
       ]
     );
     kitSolutionId = rows[0].id;
+  }
+
+  if (Array.isArray(parameters)) {
+    await productParametersService.setEntityParameters({
+      entityType: "kit-solutions",
+      entityId: kitSolutionId,
+      items: parameters,
+    });
   }
 
   const normalizedModuleItems = Array.isArray(moduleItems)

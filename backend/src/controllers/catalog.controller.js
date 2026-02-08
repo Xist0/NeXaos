@@ -1,6 +1,7 @@
 const ApiError = require("../utils/api-error");
 const asyncHandler = require("../utils/async-handler");
 const { query } = require("../config/db");
+const productParametersService = require("../services/product-parameters.service");
 
 const getById = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -59,6 +60,7 @@ const getById = asyncHandler(async (req, res) => {
   if (modules.length) {
     const moduleRow = await attachImages({ ...modules[0] }, "modules");
     await attachColors(moduleRow);
+    moduleRow.parameters = await productParametersService.getEntityParameters({ entityType: "modules", entityId: moduleRow.id });
     return res.status(200).json({ data: { ...moduleRow, __type: "module" } });
   }
 
@@ -72,6 +74,7 @@ const getById = asyncHandler(async (req, res) => {
   if (catalogItems.length) {
     const catalogRow = await attachImages({ ...catalogItems[0] }, "catalog-items");
     await attachColors(catalogRow);
+    catalogRow.parameters = await productParametersService.getEntityParameters({ entityType: "catalog-items", entityId: catalogRow.id });
     return res.status(200).json({ data: { ...catalogRow, __type: "catalogItem" } });
   }
 

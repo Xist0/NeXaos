@@ -58,6 +58,8 @@ let colorsCache = null;
 let colorsCachePromise = null;
 let collectionsCache = null;
 let collectionsCachePromise = null;
+let productParametersCache = null;
+let productParametersCachePromise = null;
 
 const toOptionalInt = (value) => {
   if (value === null || value === undefined) return undefined;
@@ -115,6 +117,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
   const [referenceData, setReferenceData] = useState({
     colors: [],
     collections: [],
+    productParameters: [],
     isLoaded: false,
   });
   const [isLoadingReferences, setIsLoadingReferences] = useState(true);
@@ -133,6 +136,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     preview_url: null,
     final_price: "",
   });
+
+  const [selectedParameters, setSelectedParameters] = useState([]);
 
   useEffect(() => {
     getRef.current = get;
@@ -156,6 +161,38 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
     };
   }, [openPrimary, openSecondary]);
 
+  const addParameter = (parameterId) => {
+    const id = Number(parameterId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    setSelectedParameters((prev) => {
+      const idx = prev.findIndex((x) => Number(x.parameterId) === id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantity: Math.max(1, Number(next[idx].quantity || 1) + 1) };
+        return next;
+      }
+      return [...prev, { parameterId: id, quantity: 1 }];
+    });
+  };
+
+  const updateParameterQty = (index, qty) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      const q = Number(qty);
+      next[index] = { ...next[index], quantity: Number.isFinite(q) ? Math.max(1, Math.round(q)) : 1 };
+      return next;
+    });
+  };
+
+  const removeParameter = (index) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      next.splice(index, 1);
+      return next;
+    });
+  };
+
   useEffect(() => {
     const loadRefs = async () => {
       if (referenceData.isLoaded) return;
@@ -177,13 +214,23 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
           });
         }
 
-        const [colorsData, collectionsData] = await Promise.all([
+        if (!productParametersCachePromise) {
+          productParametersCachePromise = getRef.current("/product-parameters", { limit: 500 }).then((res) => {
+            const data = Array.isArray(res?.data) ? res.data : [];
+            productParametersCache = data;
+            return data;
+          });
+        }
+
+        const [colorsData, collectionsData, productParametersData] = await Promise.all([
           Array.isArray(colorsCache) ? Promise.resolve(colorsCache) : colorsCachePromise,
           Array.isArray(collectionsCache) ? Promise.resolve(collectionsCache) : collectionsCachePromise,
+          Array.isArray(productParametersCache) ? Promise.resolve(productParametersCache) : productParametersCachePromise,
         ]);
         setReferenceData({
           colors: Array.isArray(colorsData) ? colorsData : [],
           collections: Array.isArray(collectionsData) ? collectionsData : [],
+          productParameters: Array.isArray(productParametersData) ? productParametersData : [],
           isLoaded: true,
         });
       } catch (e) {
@@ -223,6 +270,16 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
           preview_url: data.preview_url || null,
           final_price: data.final_price != null ? String(data.final_price) : "",
         }));
+
+        const params = Array.isArray(data.parameters) ? data.parameters : [];
+        setSelectedParameters(
+          params
+            .map((p) => ({
+              parameterId: Number(p.id),
+              quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+            }))
+            .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
+        );
         setStep(1);
       })
       .catch((e) => {
@@ -286,6 +343,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         final_price: 0,
         preview_url: form.preview_url || null,
         is_active: false,
+
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
       };
 
       const resp = await post("/catalog-items", payload);
@@ -357,6 +416,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
         final_price: toOptionalNumber(form.final_price),
         preview_url: form.preview_url,
         is_active: true,
+
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
       };
 
       await put(`/catalog-items/${itemId}`, payload);
@@ -399,14 +460,9 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
 
   const skuPreview = useMemo(() => {
     if (String(form.sku || "").trim()) return "";
-
-    const groupCode = fixedValues?.category_group ? resolveCategoryGroupCode(fixedValues.category_group) : "";
-    const catCode = fixedValues?.category ? resolveCategoryCode(fixedValues.category) : "";
     const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
 
     const parts = [
-      normalizeSkuPart(groupCode),
-      normalizeSkuPart(catCode),
       normalizeSkuPart(articleName),
       normalizeNum(form.length_mm),
       normalizeNum(form.depth_mm),
@@ -520,6 +576,57 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, fixedV
                   ))}
               </select>
             </label>
+
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-night-700">Параметры</div>
+              <select
+                value=""
+                onChange={(e) => {
+                  addParameter(e.target.value);
+                  e.currentTarget.value = "";
+                }}
+                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+              >
+                <option value="">Добавить параметр...</option>
+                {referenceData.productParameters
+                  .slice()
+                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      #{p.id} {p.name}
+                    </option>
+                  ))}
+              </select>
+
+              {selectedParameters.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedParameters.map((p, idx) => {
+                    const full = referenceData.productParameters.find((x) => Number(x.id) === Number(p.parameterId));
+                    return (
+                      <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${p.parameterId}`}</div>
+                          <div className="text-xs text-night-500">ID: {p.parameterId}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <SecureInput
+                            type="number"
+                            value={String(p.quantity ?? 1)}
+                            onChange={(v) => updateParameterQty(idx, v)}
+                            className="w-24"
+                          />
+                          <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => removeParameter(idx)}>
+                            Удалить
+                          </SecureButton>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-sm text-night-500">Параметры не выбраны</div>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-end">

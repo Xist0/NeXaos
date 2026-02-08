@@ -69,6 +69,8 @@ let colorsCache = null;
 let colorsCachePromise = null;
 let collectionsCache = null;
 let collectionsCachePromise = null;
+let productParametersCache = null;
+let productParametersCachePromise = null;
 
 const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedValues = null, onDone }) => {
   const { get, post, put } = useApi();
@@ -95,6 +97,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
     modules: [],
     moduleCategories: [],
     catalogItems: [],
+    productParameters: [],
     isLoaded: false,
   });
 
@@ -128,6 +131,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
   });
 
   const [selectedCatalogItems, setSelectedCatalogItems] = useState([]);
+  const [selectedParameters, setSelectedParameters] = useState([]);
   const [openPrimary, setOpenPrimary] = useState(false);
   const [openSecondary, setOpenSecondary] = useState(false);
   const colorPickerRef = useRef(null);
@@ -142,6 +146,38 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
       universal: list.filter((c) => !c?.type),
     };
   }, [referenceData.colors]);
+
+  const addParameter = (parameterId) => {
+    const id = Number(parameterId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    setSelectedParameters((prev) => {
+      const idx = prev.findIndex((x) => Number(x.parameterId) === id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], quantity: Math.max(1, Number(next[idx].quantity || 1) + 1) };
+        return next;
+      }
+      return [...prev, { parameterId: id, quantity: 1 }];
+    });
+  };
+
+  const updateParameterQty = (index, qty) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      const q = Number(qty);
+      next[index] = { ...next[index], quantity: Number.isFinite(q) ? Math.max(1, Math.round(q)) : 1 };
+      return next;
+    });
+  };
+
+  const removeParameter = (index) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      next.splice(index, 1);
+      return next;
+    });
+  };
 
   const addCatalogItem = (catalogItemId) => {
     const id = Number(catalogItemId);
@@ -222,13 +258,22 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
           });
         }
 
-        const [kitchenTypesRes, materialsRes, colorsData, collectionsData, modulesRes, moduleCategoriesRes] = await Promise.all([
+        if (!productParametersCachePromise) {
+          productParametersCachePromise = getRef.current("/product-parameters", { limit: 500 }).then((res) => {
+            const data = Array.isArray(res?.data) ? res.data : [];
+            productParametersCache = data;
+            return data;
+          });
+        }
+
+        const [kitchenTypesRes, materialsRes, colorsData, collectionsData, modulesRes, moduleCategoriesRes, productParametersData] = await Promise.all([
           getRef.current("/kitchen-types", { limit: 500, isActive: true }),
           getRef.current("/materials", { limit: 500, isActive: true }),
           Array.isArray(colorsCache) ? Promise.resolve(colorsCache) : colorsCachePromise,
           Array.isArray(collectionsCache) ? Promise.resolve(collectionsCache) : collectionsCachePromise,
           getRef.current("/modules", { limit: 500, isActive: true }),
           getRef.current("/module-categories", { limit: 200 }),
+          Array.isArray(productParametersCache) ? Promise.resolve(productParametersCache) : productParametersCachePromise,
         ]);
 
         setReferenceData({
@@ -239,6 +284,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
           modules: Array.isArray(modulesRes?.data) ? modulesRes.data : [],
           moduleCategories: Array.isArray(moduleCategoriesRes?.data) ? moduleCategoriesRes.data : [],
           catalogItems: [],
+          productParameters: Array.isArray(productParametersData) ? productParametersData : [],
           isLoaded: true,
         });
       } catch (e) {
@@ -333,6 +379,16 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
           final_price: data.final_price != null ? String(data.final_price) : "",
           is_active: !!data.is_active,
         }));
+
+        const params = Array.isArray(data.parameters) ? data.parameters : [];
+        setSelectedParameters(
+          params
+            .map((p) => ({
+              parameterId: Number(p.id),
+              quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+            }))
+            .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
+        );
 
         const modulesObj = data.modules || {};
         const bottomList = Array.isArray(modulesObj.bottom) ? modulesObj.bottom : [];
@@ -619,6 +675,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
         preview_url: form.preview_url,
         is_active: false,
 
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+
         moduleIds: moduleIdsPayload,
         moduleItems: moduleItemsPayload,
         componentItems: componentItemsPayload,
@@ -683,6 +741,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
         final_price: price,
         preview_url: form.preview_url,
         is_active: true,
+
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
 
         moduleIds: moduleIdsPayload,
         moduleItems: moduleItemsPayload,
@@ -788,14 +848,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
 
   const skuPreview = useMemo(() => {
     if (String(form.sku || "").trim()) return "";
-
-    const groupCode = fixedValues?.category_group ? resolveCategoryGroupCode(fixedValues.category_group) : "";
-    const catCode = fixedValues?.category ? resolveCategoryCode(fixedValues.category) : "";
     const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
 
     const parts = [
-      normalizeSkuPart(groupCode),
-      normalizeSkuPart(catCode),
       normalizeSkuPart(articleName),
       normalizeNum(form.total_length_mm),
       normalizeNum(form.total_depth_mm),
@@ -1118,6 +1173,59 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, fixedV
                 rows={5}
               />
             </label>
+
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-night-700">Параметры</div>
+              <select
+                value={""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (!v) return;
+                  addParameter(v);
+                  e.currentTarget.value = "";
+                }}
+                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
+              >
+                <option value="">+ Добавить...</option>
+                {(referenceData.productParameters || [])
+                  .slice()
+                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
+                  .map((p) => (
+                    <option key={p.id} value={String(p.id)}>
+                      #{p.id} {p.name}
+                    </option>
+                  ))}
+              </select>
+
+              {(selectedParameters || []).length === 0 ? (
+                <div className="text-xs text-night-500">Параметры не выбраны</div>
+              ) : (
+                <div className="space-y-2">
+                  {selectedParameters.map((p, idx) => {
+                    const full = (referenceData.productParameters || []).find((x) => Number(x.id) === Number(p.parameterId));
+                    return (
+                      <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${p.parameterId}`}</div>
+                          <div className="text-xs text-night-500">ID: {p.parameterId}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <SecureInput
+                            type="number"
+                            value={String(p.quantity ?? 1)}
+                            onChange={(v) => updateParameterQty(idx, v)}
+                            className="w-24"
+                          />
+                          <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => removeParameter(idx)}>
+                            Удалить
+                          </SecureButton>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex justify-between">

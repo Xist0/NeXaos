@@ -1,4 +1,5 @@
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const { withClient } = require("../config/db");
 const logger = require("../utils/logger");
 const migrations = require("../migrations");
@@ -124,14 +125,16 @@ const seedBasicData = async (client) => {
     for (const m of demoModules) {
       await client.query(
         `INSERT INTO modules (
+          public_id,
           sku, name, base_sku,
           module_category_id,
           length_mm, depth_mm, height_mm,
           final_price,
           is_active
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true)
         ON CONFLICT (sku) DO NOTHING`,
         [
+          crypto.randomUUID(),
           m.sku,
           m.name,
           m.base_sku,

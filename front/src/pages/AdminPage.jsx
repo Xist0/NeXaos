@@ -85,6 +85,7 @@ const adminSections = [
       { id: "calculationParameters", label: "Параметры расчета", endpoint: "/calculation-parameters" },
       { id: "materialPrices", label: "Цена материалов", endpoint: "/material-prices" },
       { id: "collections", label: "Коллекции", endpoint: "/collections" },
+      { id: "productParameters", label: "Параметры изделий", endpoint: "/product-parameters" },
       { id: "moduleCategories", label: "Типы модулей", endpoint: "/module-categories" },
       { id: "moduleDescriptions", label: "Подтипы модулей", endpoint: "/module-descriptions", special: "moduleDescriptionCreator" },
       { id: "kitchenTypes", label: "Тип кухни", endpoint: "/kitchen-types" },
@@ -109,6 +110,13 @@ const entityConfigs = {
       ]},
       { name: "is_active", label: "Активен", type: "checkbox" },
       { name: "image_url", label: "Фотография", inputType: "image" },
+    ],
+  },
+  productParameters: {
+    title: "Параметры изделий",
+    endpoint: "/product-parameters",
+    fields: [
+      { name: "name", label: "Название", required: true },
     ],
   },
   collections: {
