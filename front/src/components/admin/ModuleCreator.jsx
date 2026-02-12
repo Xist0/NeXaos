@@ -18,7 +18,7 @@ import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
 import { formatCurrency } from "../../utils/format";
 import ColorBadge from "../ui/ColorBadge";
-import { getImageUrl, getThumbUrl, placeholderImage } from "../../utils/image";
+import { getThumbUrl } from "../../utils/image";
 
 const LazyImg = ({ src, alt, className, onError }) => {
   const holderRef = useRef(null);
@@ -30,7 +30,7 @@ const LazyImg = ({ src, alt, className, onError }) => {
     if (!el) return;
 
     if (typeof IntersectionObserver === "undefined") {
-      setIsVisible(true);
+      queueMicrotask(() => setIsVisible(true));
       return;
     }
 
@@ -85,6 +85,30 @@ const toOptionalString = (value) => {
   return str ? str : undefined;
 };
 
+const normalizeCharacteristics = (value) => {
+  const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const next = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s) continue;
+      next[k] = s;
+      continue;
+    }
+    if (typeof v === "number") {
+      if (!Number.isFinite(v)) continue;
+      next[k] = v;
+      continue;
+    }
+    if (typeof v === "boolean") {
+      next[k] = v;
+      continue;
+    }
+  }
+  return Object.keys(next).length ? next : null;
+};
+
 const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedModuleCategoryId = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
@@ -124,7 +148,9 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     secondary_color_id: "",
 
     preview_url: null, // ставим из ImageManager
-    final_price: ""
+    final_price: "",
+
+    characteristics: {},
   });
 
   const [selectedParameters, setSelectedParameters] = useState([]);
@@ -198,7 +224,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         next[idx] = { ...next[idx], quantity: Math.max(1, Number(next[idx].quantity || 1) + 1) };
         return next;
       }
-      return [...prev, { parameterId: id, quantity: 1 }];
+      return [...prev, { parameterId: id, quantity: 1, value: "" }];
     });
   };
 
@@ -280,6 +306,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
       secondary_color_id: data.secondary_color_id != null ? String(data.secondary_color_id) : "",
       preview_url: data.preview_url || null,
       final_price: data.final_price != null ? String(data.final_price) : "",
+      characteristics: normalizeCharacteristics(data.characteristics) || {},
     }));
 
     const params = Array.isArray(data.parameters) ? data.parameters : [];
@@ -551,6 +578,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url || null,
 
+        characteristics: normalizeCharacteristics(form.characteristics),
+
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
 
@@ -573,7 +602,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         // чтобы модуль не светился до финального шага
         is_active: false,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
 
         // если у тебя это обязательно на UI — оставляем
@@ -632,6 +661,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url,
 
+        characteristics: normalizeCharacteristics(form.characteristics),
+
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
 
@@ -650,7 +681,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         price: toOptionalNumber(form.final_price),
         is_active: true,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
@@ -710,7 +741,9 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
       primary_color_id: "",
       secondary_color_id: "",
       preview_url: null,
-      final_price: ""
+      final_price: "",
+
+      characteristics: {},
     });
     setModuleId(null);
     setStep(1);
@@ -990,7 +1023,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
             />
 
             <div className="mt-6 space-y-3">
-              <div className="text-sm font-semibold text-night-900">Параметры</div>
+              <div className="text-xs font-semibold text-night-700">Параметры</div>
+
               <select
                 value={""}
                 onChange={(e) => {
@@ -1025,6 +1059,19 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
                           <div className="text-xs text-night-500">ID: {p.parameterId}</div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <SecureInput
+                            value={String(p.value ?? "")}
+                            onChange={(v) =>
+                              setSelectedParameters((prev) => {
+                                const next = [...prev];
+                                if (!next[idx]) return prev;
+                                next[idx] = { ...next[idx], value: v };
+                                return next;
+                              })
+                            }
+                            className="w-48"
+                            placeholder="Значение"
+                          />
                           <SecureInput
                             type="number"
                             value={String(p.quantity ?? 1)}

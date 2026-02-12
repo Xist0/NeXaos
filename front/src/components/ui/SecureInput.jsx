@@ -1,10 +1,17 @@
 import { useId } from "react";
 
-const sanitize = (value) =>
-  value
-    .replace(/[\u0000-\u001F\u007F<>]/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trimStart();
+const sanitize = (value) => {
+  const s = String(value ?? "");
+  let out = "";
+  for (let i = 0; i < s.length; i += 1) {
+    const ch = s[i];
+    const code = s.charCodeAt(i);
+    if ((code >= 0 && code <= 31) || code === 127) continue;
+    if (ch === "<" || ch === ">") continue;
+    out += ch;
+  }
+  return out.replace(/\s{2,}/g, " ").trimStart();
+};
 
 const SecureInput = ({ onChange, value, label, className = "", ...rest }) => {
   const id = useId();

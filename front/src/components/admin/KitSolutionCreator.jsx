@@ -18,7 +18,6 @@ import ImageManager from "./ImageManager";
 import ColorBadge from "../ui/ColorBadge";
 import { formatCurrency } from "../../utils/format";
 import { getThumbUrl } from "../../utils/image";
-import { resolveCategoryCode, resolveCategoryGroupCode } from "../../utils/categoryCodes";
 
 const LazyImg = ({ src, alt, className, onError }) => {
   const holderRef = useRef(null);
@@ -30,7 +29,7 @@ const LazyImg = ({ src, alt, className, onError }) => {
     if (!el) return;
 
     if (typeof IntersectionObserver === "undefined") {
-      setIsVisible(true);
+      queueMicrotask(() => setIsVisible(true));
       return;
     }
 
@@ -73,6 +72,30 @@ let productParametersCache = null;
 let productParametersCachePromise = null;
 let productParameterCategoriesCache = null;
 let productParameterCategoriesCachePromise = null;
+
+const normalizeCharacteristics = (value) => {
+  const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const next = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined) continue;
+    if (typeof v === "string") {
+      const s = v.trim();
+      if (!s) continue;
+      next[k] = s;
+      continue;
+    }
+    if (typeof v === "number") {
+      if (!Number.isFinite(v)) continue;
+      next[k] = v;
+      continue;
+    }
+    if (typeof v === "boolean") {
+      next[k] = v;
+      continue;
+    }
+  }
+  return Object.keys(next).length ? next : null;
+};
 
 const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedValues = null, onDone }) => {
   const { get, post, put } = useApi();
@@ -126,6 +149,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     preview_url: null,
     final_price: "",
     is_active: false,
+
+    characteristics: {},
   });
 
   const [selectedModulesByType, setSelectedModulesByType] = useState({
@@ -161,7 +186,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         next[idx] = { ...next[idx], quantity: Math.max(1, Number(next[idx].quantity || 1) + 1) };
         return next;
       }
-      return [...prev, { parameterId: id, quantity: 1 }];
+      return [...prev, { parameterId: id, quantity: 1, value: "" }];
     });
   };
 
@@ -413,6 +438,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           base_price: data.base_price != null ? String(data.base_price) : "",
           final_price: data.final_price != null ? String(data.final_price) : "",
           is_active: !!data.is_active,
+
+          characteristics: normalizeCharacteristics(data.characteristics) || {},
         }));
 
         const params = Array.isArray(data.parameters) ? data.parameters : [];
@@ -421,6 +448,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             .map((p) => ({
               parameterId: Number(p.id),
               quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+              value: p?.value === null || p?.value === undefined ? "" : String(p.value),
             }))
             .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
         );
@@ -494,6 +522,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           preview_url: data.preview_url || null,
           final_price: data.final_price != null ? String(data.final_price) : "",
           is_active: false,
+
+          characteristics: normalizeCharacteristics(data.characteristics) || {},
         }));
 
         const params = Array.isArray(data.parameters) ? data.parameters : [];
@@ -502,6 +532,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             .map((p) => ({
               parameterId: Number(p.id),
               quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+              value: p?.value === null || p?.value === undefined ? "" : String(p.value),
             }))
             .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
         );
@@ -783,6 +814,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         base_sku: String(form.baseSku || "").trim() || null,
         sku: String(effectiveSku).trim(),
         description: String(form.description).trim(),
+
+        characteristics: normalizeCharacteristics(form.characteristics),
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
         kitchen_type_id: Number(form.kitchen_type_id) || null,
@@ -802,7 +835,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         preview_url: form.preview_url,
         is_active: false,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
 
         moduleIds: moduleIdsPayload,
@@ -851,6 +884,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         base_sku: String(form.baseSku || "").trim() || null,
         sku: String(effectiveSku).trim(),
         description: String(form.description).trim(),
+
+        characteristics: normalizeCharacteristics(form.characteristics),
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
         kitchen_type_id: Number(form.kitchen_type_id) || null,
@@ -870,7 +905,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         preview_url: form.preview_url,
         is_active: true,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
 
         moduleIds: moduleIdsPayload,
@@ -902,6 +937,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         preview_url: null,
         final_price: "",
         is_active: false,
+
+        characteristics: {},
       });
       setSelectedModulesByType({ bottom: [], top: [] });
       setSelectedCatalogItems([]);
@@ -950,12 +987,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     const id = await createKitIfNeeded();
     if (!id) return;
     setStep(5);
-  };
-
-  const toOptionalString = (value) => {
-    if (value === null || value === undefined) return undefined;
-    const str = String(value).trim();
-    return str ? str : undefined;
   };
 
   const normalizeSkuPart = (value) => {
@@ -1318,6 +1349,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
             <div className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Параметры</div>
+
               <select
                 value={""}
                 onChange={(e) => {
@@ -1352,6 +1384,19 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                           <div className="text-xs text-night-500">ID: {p.parameterId}</div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <SecureInput
+                            value={String(p.value ?? "")}
+                            onChange={(v) =>
+                              setSelectedParameters((prev) => {
+                                const next = [...prev];
+                                if (!next[idx]) return prev;
+                                next[idx] = { ...next[idx], value: v };
+                                return next;
+                              })
+                            }
+                            className="w-48"
+                            placeholder="Значение"
+                          />
                           <SecureInput
                             type="number"
                             value={String(p.quantity ?? 1)}

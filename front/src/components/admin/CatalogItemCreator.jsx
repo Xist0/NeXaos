@@ -7,7 +7,6 @@ import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
 import ColorBadge from "../ui/ColorBadge";
 import { getThumbUrl } from "../../utils/image";
-import { resolveCategoryCode, resolveCategoryGroupCode } from "../../utils/categoryCodes";
 
 const LazyImg = ({ src, alt, className, onError }) => {
   const holderRef = useRef(null);
@@ -19,7 +18,7 @@ const LazyImg = ({ src, alt, className, onError }) => {
     if (!el) return;
 
     if (typeof IntersectionObserver === "undefined") {
-      setIsVisible(true);
+      queueMicrotask(() => setIsVisible(true));
       return;
     }
 
@@ -81,6 +80,18 @@ const toOptionalString = (value) => {
   if (value === null || value === undefined) return undefined;
   const str = String(value).trim();
   return str ? str : undefined;
+};
+
+const normalizeCharacteristics = (value) => {
+  const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const next = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null || v === undefined) continue;
+    const str = typeof v === "string" ? v.trim() : v;
+    if (str === "") continue;
+    next[k] = str;
+  }
+  return next;
 };
 
 const normalizeSkuPart = (value) => {
@@ -175,7 +186,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         next[idx] = { ...next[idx], quantity: Math.max(1, Number(next[idx].quantity || 1) + 1) };
         return next;
       }
-      return [...prev, { parameterId: id, quantity: 1 }];
+      return [...prev, { parameterId: id, quantity: 1, value: "" }];
     });
   };
 
@@ -300,6 +311,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         .map((p) => ({
           parameterId: Number(p.id),
           quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+          value: p?.value === null || p?.value === undefined ? "" : String(p.value),
         }))
         .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
     );
@@ -401,6 +413,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
 
+        characteristics: normalizeCharacteristics(form.characteristics),
+
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
 
@@ -417,7 +431,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         preview_url: form.preview_url || null,
         is_active: false,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
@@ -491,7 +505,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         preview_url: form.preview_url,
         is_active: true,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity })),
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
@@ -513,6 +527,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         height_mm: "",
         preview_url: null,
         final_price: "",
+
+        characteristics: {},
       });
       setSelectedParameterCategories([]);
     } catch (e) {
@@ -692,6 +708,19 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
                           <div className="text-xs text-night-500">ID: {p.parameterId}</div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <SecureInput
+                            value={String(p.value ?? "")}
+                            onChange={(v) =>
+                              setSelectedParameters((prev) => {
+                                const next = [...prev];
+                                if (!next[idx]) return prev;
+                                next[idx] = { ...next[idx], value: v };
+                                return next;
+                              })
+                            }
+                            className="w-48"
+                            placeholder="Значение"
+                          />
                           <SecureInput
                             type="number"
                             value={String(p.quantity ?? 1)}

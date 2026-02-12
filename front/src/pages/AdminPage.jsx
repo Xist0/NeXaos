@@ -107,7 +107,7 @@ const entityConfigs = {
       { name: "type", label: "Тип цвета", type: "select", options: [
         { value: "facade", label: "Фасад (основной)" },
         { value: "corpus", label: "Корпус (дополнительный)" },
-        { value: "", label: "Универсальный" }
+        { value: "universal", label: "Универсальный" }
       ]},
       { name: "is_active", label: "Активен", type: "checkbox" },
       { name: "image_url", label: "Фотография", inputType: "image" },

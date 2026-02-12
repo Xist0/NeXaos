@@ -91,7 +91,7 @@ const useAuthStore = create((set, get) => ({
     }
   },
 
-  refreshToken: async () => {
+  refreshAccess: async () => {
     try {
       const data = await refreshAccessToken();
       set({
@@ -103,7 +103,7 @@ const useAuthStore = create((set, get) => ({
       localStorage.setItem(USER_KEY, JSON.stringify(data.user));
       localStorage.setItem(CACHE_BUSTER_KEY, String(Date.now()));
       return data.accessToken;
-    } catch (error) {
+    } catch (_error) {
       get().logout();
       return null;
     }

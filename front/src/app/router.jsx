@@ -12,12 +12,7 @@ import AdminPage from "../pages/AdminPage";
 import WorksPage from "../pages/WorksPage";
 import NotFoundPage from "../pages/NotFoundPage";
 import { ROLES } from "../utils/constants";
-import { Navigate, useParams } from "react-router-dom";
-
-const CatalogItemRedirect = () => {
-  const { id } = useParams();
-  return <Navigate to={id ? `/catalog/${id}` : "/catalog"} replace />;
-};
+import CatalogItemRedirect from "../components/routing/CatalogItemRedirect";
 
 export const router = createBrowserRouter([
   {

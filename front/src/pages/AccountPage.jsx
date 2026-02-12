@@ -46,7 +46,7 @@ const AccountPage = () => {
     try {
       const response = await get("/orders");
       setOrders(response?.data || []);
-    } catch (error) {
+    } catch (_error) {
       logger.error("Не удалось загрузить заказы");
       setOrders([]);
     } finally {
@@ -59,7 +59,7 @@ const AccountPage = () => {
     try {
       const response = await get(`/orders/${orderId}`);
       setOrderDetails((prev) => ({ ...prev, [orderId]: response?.data || response }));
-    } catch (error) {
+    } catch (_error) {
       logger.error("Не удалось загрузить детали заказа");
     }
   };
@@ -82,7 +82,7 @@ const AccountPage = () => {
       await post(`/orders/${orderId}/notes`, { note });
       setMessageByOrderId((prev) => ({ ...prev, [orderId]: "" }));
       await refreshOrderDetails(orderId);
-    } catch (error) {
+    } catch (_error) {
       logger.error("Не удалось отправить сообщение");
     } finally {
       setSendingByOrderId((prev) => ({ ...prev, [orderId]: false }));
@@ -110,7 +110,7 @@ const AccountPage = () => {
       useAuthStore.setState({ user: updatedUser });
       localStorage.setItem("nexaos_user", JSON.stringify(updatedUser));
       logger.info("Профиль обновлён");
-    } catch (error) {
+    } catch (_error) {
       logger.error("Не удалось сохранить изменения профиля");
     } finally {
       setSaving(false);

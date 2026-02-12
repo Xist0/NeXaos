@@ -31,7 +31,7 @@ const HomePage = () => {
         if (active) {
           setFeatured(response?.data || []);
         }
-      } catch (error) {
+      } catch (_error) {
         setFeatured([]);
       }
     };

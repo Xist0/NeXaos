@@ -112,6 +112,16 @@ const EntityTable = ({
                         }
                         return item[field.name] ?? "—";
                       })()
+                    ) : field.type === "select" && Array.isArray(field.options) ? (
+                      (() => {
+                        const raw = item[field.name];
+                        const normalizedValue =
+                          (field.name === "type" && (raw === null || raw === undefined || raw === ""))
+                            ? "universal"
+                            : raw;
+                        const opt = field.options.find((o) => String(o?.value) === String(normalizedValue));
+                        return opt?.label ?? (normalizedValue ?? "—");
+                      })()
                     ) : (
                       item[field.name] ?? "—"
                     )}

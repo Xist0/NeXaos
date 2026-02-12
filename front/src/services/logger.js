@@ -46,7 +46,7 @@ const emit = (level, message, meta = {}) => {
       const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
       navigator.sendBeacon(`${API_BASE_URL}/logs`, blob);
     }
-  } catch (err) {
+  } catch (_err) {
     // swallow telemetry errors
   }
 };

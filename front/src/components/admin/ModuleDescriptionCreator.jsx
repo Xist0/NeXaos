@@ -344,12 +344,12 @@ const ModuleDescriptionCreator = ({ descriptionId = null, initialCategoryId = ""
                       return;
                     }
                     if (selectedPrefix && !normalized.startsWith(selectedPrefix)) {
-                      logger.error(`Основа артикула должна начинаться с \"${selectedPrefix}\"`);
+                      logger.error(`Основа артикула должна начинаться с "${selectedPrefix}"`);
                       return;
                     }
                     const dup = checkDuplicate(normalized);
                     if (dup) {
-                      logger.error(`Подтип с основой артикула \"${normalized}\" уже существует (ID: ${dup.id})`);
+                      logger.error(`Подтип с основой артикула "${normalized}" уже существует (ID: ${dup.id})`);
                       return;
                     }
                     setForm((prev) => ({ ...prev, base_sku: normalized, name: prev.name || normalized }));

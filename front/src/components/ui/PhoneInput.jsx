@@ -43,17 +43,19 @@ const PhoneInput = ({ value = "", onChange, className = "", placeholder, require
   };
 
   useEffect(() => {
-    if (value) {
-      // Если пришло значение извне, форматируем его
-      const digits = getDigits(value);
-      if (digits) {
-        setDisplayValue(formatPhone(digits));
+    queueMicrotask(() => {
+      if (value) {
+        // Если пришло значение извне, форматируем его
+        const digits = getDigits(value);
+        if (digits) {
+          setDisplayValue(formatPhone(digits));
+        } else {
+          setDisplayValue("+7 (");
+        }
       } else {
         setDisplayValue("+7 (");
       }
-    } else {
-      setDisplayValue("+7 (");
-    }
+    });
   }, [value]);
 
   const handleChange = (e) => {
@@ -78,7 +80,6 @@ const PhoneInput = ({ value = "", onChange, className = "", placeholder, require
     // Восстанавливаем позицию курсора
     setTimeout(() => {
       if (inputRef.current) {
-        let newPosition = cursorPosition;
         // Корректируем позицию с учетом форматирования
         const beforeCursor = input.slice(0, cursorPosition);
         const digitsBefore = getDigits(beforeCursor).length;

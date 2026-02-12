@@ -12,6 +12,79 @@ const navLinks = [
   { label: "Избранное", to: "/favorites" },
 ];
 
+const MobileMenu = ({ closeMenu, user, role, requireAuth, logout, cartCount }) => (
+  <div className="fixed inset-0 bg-white z-50 lg:hidden">
+    <div className="flex justify-between items-center p-4 border-b border-night-100">
+      <Link to="/" onClick={closeMenu} className="text-xl font-semibold text-night-900">
+        NeXaos
+      </Link>
+      <SecureButton onClick={closeMenu} variant="ghost" className="px-2 py-1 text-2xl">&times;</SecureButton>
+    </div>
+    <nav className="flex flex-col p-4 space-y-2">
+      {navLinks.map((link) => (
+        <NavLink
+          key={link.to}
+          to={link.to}
+          onClick={closeMenu}
+          className={({ isActive }) =>
+            `px-4 py-3 rounded-lg text-lg transition ${isActive ? "bg-night-100 font-semibold text-night-900" : "hover:bg-night-50"}`
+          }
+        >
+          {link.label}
+        </NavLink>
+      ))}
+      {user ? (
+        <NavLink
+          to="/account"
+          onClick={closeMenu}
+          className={({ isActive }) =>
+            `px-4 py-3 rounded-lg text-lg transition ${isActive ? "bg-night-100 font-semibold text-night-900" : "hover:bg-night-50"}`
+          }
+        >
+          Личный профиль
+        </NavLink>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            closeMenu();
+            requireAuth("/account");
+          }}
+          className="px-4 py-3 rounded-lg text-lg transition text-left hover:bg-night-50"
+        >
+          Войти
+        </button>
+      )}
+      <NavLink
+        to="/cart"
+        onClick={closeMenu}
+        className={({ isActive }) =>
+          `px-4 py-3 rounded-lg text-lg transition ${isActive ? "bg-night-100 font-semibold text-night-900" : "hover:bg-night-50"}`
+        }
+      >
+        Корзина{cartCount > 0 ? ` (${cartCount})` : ""}
+      </NavLink>
+      {role === ROLES.ADMIN && (
+        <NavLink to="/admin" onClick={closeMenu} className="px-4 py-3 rounded-lg text-lg transition text-accent-dark font-semibold hover:bg-accent/10">
+          Админ
+        </NavLink>
+      )}
+      {user && (
+        <button
+          type="button"
+          onClick={() => {
+            closeMenu();
+            logout();
+          }}
+          className="px-4 py-3 rounded-lg text-lg transition text-left text-night-700 hover:bg-night-50"
+        >
+          Выйти
+        </button>
+      )}
+    </nav>
+  </div>
+);
+
 const AppLayout = () => {
   const { user, role, logout, requireAuth } = useAuth();
   const { items } = useCart();
@@ -19,60 +92,6 @@ const AppLayout = () => {
   const cartCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   const closeMenu = () => setMenuOpen(false);
-
-  const MobileMenu = () => (
-    <div className="fixed inset-0 bg-white z-50 lg:hidden">
-       <div className="flex justify-between items-center p-4 border-b border-night-100">
-          <Link to="/" onClick={closeMenu} className="text-xl font-semibold text-night-900">
-            NeXaos
-          </Link>
-          <SecureButton onClick={closeMenu} variant="ghost" className="px-2 py-1 text-2xl">&times;</SecureButton>
-       </div>
-       <nav className="flex flex-col p-4 space-y-2">
-        {navLinks.map((link) => (
-          <NavLink key={link.to} to={link.to} onClick={closeMenu} className={({ isActive }) => `px-4 py-3 rounded-lg text-lg transition ${isActive ? "bg-night-100 font-semibold text-night-900" : "hover:bg-night-50"}`}>
-            {link.label}
-          </NavLink>
-        ))}
-        {user ? (
-          <NavLink to="/account" onClick={closeMenu} className={({ isActive }) => `px-4 py-3 rounded-lg text-lg transition ${isActive ? "bg-night-100 font-semibold text-night-900" : "hover:bg-night-50"}`}>
-            Личный профиль
-          </NavLink>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              closeMenu();
-              requireAuth("/account");
-            }}
-            className="px-4 py-3 rounded-lg text-lg transition text-left hover:bg-night-50"
-          >
-            Войти
-          </button>
-        )}
-         <NavLink to="/cart" onClick={closeMenu} className={({ isActive }) => `px-4 py-3 rounded-lg text-lg transition ${isActive ? "bg-night-100 font-semibold text-night-900" : "hover:bg-night-50"}`}>
-            Корзина
-          </NavLink>
-        {role === ROLES.ADMIN && (
-          <NavLink to="/admin" onClick={closeMenu} className="px-4 py-3 rounded-lg text-lg transition text-accent-dark font-semibold hover:bg-accent/10">
-            Админ
-          </NavLink>
-        )}
-        {user && (
-          <button
-            type="button"
-            onClick={() => {
-              closeMenu();
-              logout();
-            }}
-            className="px-4 py-3 rounded-lg text-lg transition text-left text-night-700 hover:bg-night-50"
-          >
-            Выйти
-          </button>
-        )}
-      </nav>
-    </div>
-  )
 
   return (
     <div className="shop-shell bg-night-50/50">
@@ -125,7 +144,16 @@ const AppLayout = () => {
         </div>
       </header>
       
-      {isMenuOpen && <MobileMenu />}
+      {isMenuOpen && (
+        <MobileMenu
+          closeMenu={closeMenu}
+          user={user}
+          role={role}
+          requireAuth={requireAuth}
+          logout={logout}
+          cartCount={cartCount}
+        />
+      )}
 
       <main className="flex-1">
         <Outlet />

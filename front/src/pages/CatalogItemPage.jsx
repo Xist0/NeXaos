@@ -46,7 +46,7 @@ const CatalogItemPage = () => {
           setItem(res?.data || null);
           setSelectedImageIndex(0);
         }
-      } catch (e) {
+      } catch (_e) {
         if (active && !abortController.signal.aborted) {
           loggerRef.current?.error("Не удалось загрузить товар");
           navigate("/catalog");
@@ -68,6 +68,48 @@ const CatalogItemPage = () => {
     const url = item?.preview_url || item?.image_url || null;
     return url ? [{ url }] : [];
   }, [item?.preview_url, item?.image_url]);
+
+  const customCharacteristics = useMemo(() => {
+    const ch = item?.characteristics && typeof item.characteristics === "object" && !Array.isArray(item.characteristics)
+      ? item.characteristics
+      : {};
+    const rows = [];
+
+    const params = Array.isArray(item?.parameters) ? item.parameters : [];
+    if (params.length > 0) {
+      params.forEach((p) => {
+        const name = String(p?.name || "").trim();
+        const qty = Number(p?.quantity);
+        const value = p?.value === null || p?.value === undefined ? "" : String(p.value).trim();
+        if (!name) return;
+        if (value) {
+          rows.push({ label: name, value });
+          return;
+        }
+        if (Number.isFinite(qty) && qty > 1) {
+          rows.push({ label: name, value: `×${qty}` });
+        }
+      });
+    }
+
+    if (ch.product_type) rows.push({ label: "Тип изделия", value: String(ch.product_type) });
+    if (ch.purpose) rows.push({ label: "Назначение", value: String(ch.purpose) });
+    if (ch.material_corpus) rows.push({ label: "Материал корпуса", value: String(ch.material_corpus) });
+    if (ch.material_facade) rows.push({ label: "Материал фасада", value: String(ch.material_facade) });
+    if (ch.opening_type) rows.push({ label: "Тип открывания", value: String(ch.opening_type) });
+    if (ch.guides_type) rows.push({ label: "Тип направляющих", value: String(ch.guides_type) });
+    if (ch.hinges_type) rows.push({ label: "Тип петель", value: String(ch.hinges_type) });
+    if (ch.supports_type) rows.push({ label: "Тип опор", value: String(ch.supports_type) });
+    if (ch.features) rows.push({ label: "Особенности", value: String(ch.features) });
+    if (typeof ch.mirror === "boolean" && ch.mirror) rows.push({ label: "Зеркало", value: "Да" });
+    if (ch.shelf_count) rows.push({ label: "Кол-во полок", value: String(ch.shelf_count) });
+    if (ch.drawer_count) rows.push({ label: "Кол-во ящиков", value: String(ch.drawer_count) });
+    if (ch.front_count) rows.push({ label: "Кол-во фасадов", value: String(ch.front_count) });
+    if (ch.design_style) rows.push({ label: "Стиль дизайна", value: String(ch.design_style) });
+    if (ch.weight_kg) rows.push({ label: "Вес, кг", value: String(ch.weight_kg) });
+    if (ch.country) rows.push({ label: "Страна-производитель", value: String(ch.country) });
+    return rows;
+  }, [item?.characteristics]);
 
   const handleAddToCart = () => {
     if (!item) return;
@@ -172,6 +214,20 @@ const CatalogItemPage = () => {
             <h3 className="font-bold text-night-900 mb-3 text-lg">Описание</h3>
             <div className="text-night-700 leading-relaxed whitespace-pre-line">{item.description || "Описание не указано"}</div>
           </div>
+
+          {customCharacteristics.length > 0 && (
+            <div className="glass-card p-4">
+              <h3 className="font-bold text-night-900 mb-3 text-lg">Характеристики</h3>
+              <div className="space-y-2 text-sm text-night-800 leading-relaxed">
+                {customCharacteristics.map((row) => (
+                  <div key={row.label} className="grid grid-cols-[160px_1fr] gap-3 min-w-0">
+                    <span className="text-night-500 truncate">{row.label}:</span>
+                    <span className="font-semibold text-night-900 break-words min-w-0">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="glass-card p-5 sm:p-6 space-y-4 lg:self-start min-w-0 overflow-hidden">

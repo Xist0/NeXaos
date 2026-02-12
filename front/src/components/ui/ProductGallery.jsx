@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ImageLightbox from "./ImageLightbox";
 import { getImageUrl as defaultGetImageUrl } from "../../utils/image";
 
@@ -29,12 +29,6 @@ const ProductGallery = ({
   const thumbsRef = useRef(null);
   const [thumbScroll, setThumbScroll] = useState({ top: 0, max: 0 });
 
-  const mainImage = useMemo(() => {
-    if (!safeImages.length) return null;
-    const idx = clamp(Number(selectedIndex) || 0, 0, safeImages.length - 1);
-    return safeImages[idx];
-  }, [safeImages, selectedIndex]);
-
   const [displayIndex, setDisplayIndex] = useState(clamp(Number(selectedIndex) || 0, 0, Math.max(0, safeImages.length - 1)));
   const [prevDisplayIndex, setPrevDisplayIndex] = useState(null);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -46,22 +40,25 @@ const ProductGallery = ({
     if (!safeImages.length) return;
     if (next === displayIndex) return;
 
-    setPrevDisplayIndex(displayIndex);
-    setDisplayIndex(next);
-    // Start crossfade on next frame so opacity transition is visible
-    setIsAnimating(false);
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(() => {
-      setIsAnimating(true);
-      rafRef.current = null;
-    });
-
-    if (animTimerRef.current) clearTimeout(animTimerRef.current);
-    animTimerRef.current = setTimeout(() => {
+    // Schedule state updates asynchronously to avoid setState directly in effect body.
+    queueMicrotask(() => {
+      setPrevDisplayIndex(displayIndex);
+      setDisplayIndex(next);
+      // Start crossfade on next frame so opacity transition is visible
       setIsAnimating(false);
-      setPrevDisplayIndex(null);
-      animTimerRef.current = null;
-    }, 260);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        setIsAnimating(true);
+        rafRef.current = null;
+      });
+
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+      animTimerRef.current = setTimeout(() => {
+        setIsAnimating(false);
+        setPrevDisplayIndex(null);
+        animTimerRef.current = null;
+      }, 260);
+    });
   }, [displayIndex, safeImages.length, selectedIndex]);
 
   const syncThumbScrollState = useCallback(() => {
@@ -74,7 +71,12 @@ const ProductGallery = ({
   }, []);
 
   useEffect(() => {
-    syncThumbScrollState();
+    let raf = requestAnimationFrame(() => {
+      syncThumbScrollState();
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+    };
   }, [syncThumbScrollState, safeImages.length]);
 
   const scrollThumbsBy = useCallback((delta) => {

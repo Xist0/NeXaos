@@ -14,7 +14,7 @@ const LazyImg = ({ src, alt, className, crossOrigin, onError }) => {
     if (!el) return;
 
     if (typeof IntersectionObserver === "undefined") {
-      setIsVisible(true);
+      queueMicrotask(() => setIsVisible(true));
       return;
     }
 

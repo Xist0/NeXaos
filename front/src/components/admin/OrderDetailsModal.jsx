@@ -97,8 +97,8 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
       await fetchOrderDetails();
       if (onUpdate) onUpdate();
       logger.info("Заметка добавлена");
-    } catch (error) {
-      logger.error("Не удалось добавить заметку", error);
+    } catch (_error) {
+      logger.error("Не удалось добавить заметку");
     } finally {
       setSavingNote(false);
     }
@@ -112,7 +112,7 @@ const OrderDetailsModal = ({ orderId, isOpen, onClose, onUpdate }) => {
       await fetchOrderDetails();
       if (onUpdate) onUpdate();
       logger.info("Видимость заметки изменена");
-    } catch (error) {
+    } catch (_error) {
       logger.error("Не удалось изменить видимость заметки");
     }
   };

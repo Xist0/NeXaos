@@ -36,13 +36,13 @@ const CatalogPage = () => {
   const [similarCatalogItemId, setSimilarCatalogItemId] = useState(() => searchParams.get("similarCatalogItemId") || null);
   const [fromProduct, setFromProduct] = useState(() => searchParams.get("fromProduct") === "1");
   const [similarItems, setSimilarItems] = useState([]);
-  const [similarLoading, setSimilarLoading] = useState(false);
+  const [, setSimilarLoading] = useState(false);
 
   const [similarKitItems, setSimilarKitItems] = useState([]);
-  const [similarKitLoading, setSimilarKitLoading] = useState(false);
+  const [, setSimilarKitLoading] = useState(false);
 
   const [similarCatalogItems, setSimilarCatalogItems] = useState([]);
-  const [similarCatalogLoading, setSimilarCatalogLoading] = useState(false);
+  const [, setSimilarCatalogLoading] = useState(false);
 
   const [filters, setFilters] = useState(() => ({
     facadeColor: searchParams.get("facadeColor") || "",
@@ -486,9 +486,6 @@ const CatalogPage = () => {
     fetchItems();
     return () => { active = false; };
   }, [debouncedQuery, debouncedFilters, activeCategory, activeSubCategory, moduleCategories, get, searchParams, roomCatalog, roomCategoryCodes]);
-
-  const bottomSubCategories = useMemo(() => activeCategory !== "bottom" ? [] : [{ code: "НМР1", label: "Одностворчатые" }, { code: "НМР2", label: "Двустворчатые" }, { code: "НМР.М1", label: "Под мойку" }, { code: "НМЯ.М1", label: "С ящиком под мойку" }, { code: "НМЯ.2", label: "С 2 ящиками" }, { code: "НМЯ.3", label: "С 3 ящиками" }], [activeCategory]);
-  const topSubCategories = useMemo(() => activeCategory !== "top" ? [] : [{ code: "ВМР1", label: "Одностворчатые" }, { code: "ВМР2", label: "Двустворчатые" }, { code: "ВМВ1", label: "Выдвижные" }], [activeCategory]);
 
   const displayItems = useMemo(() => {
     const safeModules = items.filter((x) => x.is_active);

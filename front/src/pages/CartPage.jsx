@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import useCart from "../hooks/useCart";
 import SecureButton from "../components/ui/SecureButton";
 import { formatCurrency } from "../utils/format";
@@ -71,7 +71,7 @@ const CartPage = () => {
       clearCart();
       setIsSuccessModalOpen(true);
       logger.info("Заказ успешно оформлен");
-    } catch (error) {
+    } catch (_error) {
       logger.error("Не удалось оформить заказ. Попробуйте ещё раз.");
     } finally {
       setIsSubmitting(false);

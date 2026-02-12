@@ -264,6 +264,7 @@ const saveKitSolutionWithModules = async (payload) => {
     base_sku,
     sku,
     description,
+    characteristics,
     parameters,
     category_group,
     category,
@@ -347,21 +348,23 @@ const saveKitSolutionWithModules = async (payload) => {
     await query(
       `UPDATE kit_solutions 
        SET name = $1, base_sku = $2, sku = $3, description = $4,
-           category_group = $5, category = $6,
-           kitchen_type_id = $7,
-           collection_id = $8,
-           primary_color_id = $9, secondary_color_id = $10, material_id = $11,
-           total_length_mm = $12, total_depth_mm = $13, total_height_mm = $14,
-           countertop_length_mm = $15, countertop_depth_mm = $16,
-           base_price = $17, final_price = $18, preview_url = $19,
-           is_active = $20,
+           characteristics = $5,
+           category_group = $6, category = $7,
+           kitchen_type_id = $8,
+           collection_id = $9,
+           primary_color_id = $10, secondary_color_id = $11, material_id = $12,
+           total_length_mm = $13, total_depth_mm = $14, total_height_mm = $15,
+           countertop_length_mm = $16, countertop_depth_mm = $17,
+           base_price = $18, final_price = $19, preview_url = $20,
+           is_active = $21,
            updated_at = now()
-       WHERE id = $21`,
+       WHERE id = $22`,
       [
         name,
         base_sku != null && String(base_sku).trim() ? String(base_sku).trim() : null,
         resolvedSku,
         description,
+        characteristics ?? null,
         normalizedCategoryGroup,
         normalizedCategory,
         normalizedKitchenTypeId,
@@ -390,11 +393,11 @@ const saveKitSolutionWithModules = async (payload) => {
     const nextPublicId = String(public_id || "").trim() || crypto.randomUUID();
     const { rows } = await query(
       `INSERT INTO kit_solutions 
-       (public_id, name, base_sku, sku, description, category_group, category, kitchen_type_id, collection_id,
+       (public_id, name, base_sku, sku, description, characteristics, category_group, category, kitchen_type_id, collection_id,
         primary_color_id, secondary_color_id, material_id,
         total_length_mm, total_depth_mm, total_height_mm,
         countertop_length_mm, countertop_depth_mm, base_price, final_price, preview_url, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
        RETURNING id`,
       [
         nextPublicId,
@@ -402,6 +405,7 @@ const saveKitSolutionWithModules = async (payload) => {
         base_sku != null && String(base_sku).trim() ? String(base_sku).trim() : null,
         resolvedSku,
         description,
+        characteristics ?? null,
         normalizedCategoryGroup,
         normalizedCategory,
         normalizedKitchenTypeId,

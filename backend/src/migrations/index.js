@@ -30,5 +30,7 @@ module.exports = [
   require("./029_create_product_parameter_categories"),
   require("./030_enable_catalog_search"),
   require("./031_add_entity_to_order_items"),
+  require("./032_add_characteristics_to_products"),
+  require("./033_add_value_to_product_parameter_links"),
 ];
 

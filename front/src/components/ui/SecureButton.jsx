@@ -81,7 +81,7 @@ const SecureButton = ({
       type={type}
       data-safe-click
       className={clsx(
-        "relative inline-flex items-center justify-center rounded-full px-6 py-3 font-semibold tracking-wide transition-transform duration-200 shadow-md",
+        "relative inline-flex items-center justify-center rounded-full px-6 py-3 font-semibold tracking-wide transition-transform duration-200 shadow-md [&_svg]:h-5 [&_svg]:w-5 [&_svg]:shrink-0",
         variant === "ghost"
           ? "bg-transparent text-night-900 shadow-none border border-transparent hover:bg-night-100"
           : variant === "outline"

@@ -119,7 +119,7 @@ const ImageManager = ({
             throw new Error(errorData?.message || `HTTP ${response.status}`);
           }
 
-          const data = await response.json();
+          const _data = await response.json();
           successCount++;
           logger.info(`✅ Загружено: ${file.name}`);
           setUploadProgress(((i + 1) / files.length) * 100);

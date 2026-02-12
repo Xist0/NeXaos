@@ -177,8 +177,9 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
         logger.error("Не удалось загрузить данные", error);
         setItems([]);
       } finally {
-        if (!isActive()) return;
-        setLoading(false);
+        if (isActive()) {
+          setLoading(false);
+        }
       }
     },
     [endpoint, get, logger, fixedValues]
@@ -460,7 +461,15 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
         })
         .finally(() => setLoading(false));
     } else {
-      setForm(item);
+      if (endpoint === "/colors") {
+        const normalized = { ...item };
+        if (!normalized.type) {
+          normalized.type = "universal";
+        }
+        setForm(normalized);
+      } else {
+        setForm(item);
+      }
     }
 
     heroWorksMedia.resetPending();
@@ -577,6 +586,12 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
     // Жестко фиксируем значения (например, category_group для вкладок каталога)
     if (fixedValues && typeof fixedValues === "object") {
       Object.assign(payload, fixedValues);
+    }
+
+    if (endpoint === "/colors") {
+      if (payload.type === "universal") {
+        payload.type = null;
+      }
     }
 
     if (!editingId) {
