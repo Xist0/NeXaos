@@ -59,6 +59,8 @@ module.exports = {
       "https://130.49.148.245",
       "http://nexaos.ru",
       "https://nexaos.ru",
+      "http://nehaos.ru",
+      "https://nehaos.ru",
     ]),
   },
   proxy: {

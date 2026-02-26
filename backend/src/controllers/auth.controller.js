@@ -15,9 +15,11 @@ const {
 } = require("../services/user.service");
 
 const loginSchema = Joi.object({
-  email: Joi.string().email().required(),
+  email: Joi.string().email(),
+  // legacy поле (в старом фронте/скриптах)
+  login: Joi.string().email(),
   password: Joi.string().min(6).required(),
-});
+}).or("email", "login");
 
 const login = async (req, res) => {
   const { error, value } = loginSchema.validate(req.body, {
@@ -29,7 +31,8 @@ const login = async (req, res) => {
     throw ApiError.badRequest("Ошибка валидации", error.details);
   }
 
-  const user = await findByEmail(value.email);
+  const email = value.email || value.login;
+  const user = await findByEmail(email);
 
   if (!user || !user.is_active) {
     throw ApiError.unauthorized("Неверные учетные данные");
