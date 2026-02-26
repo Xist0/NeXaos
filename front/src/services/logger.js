@@ -3,7 +3,7 @@ import { API_BASE_URL } from "../utils/constants";
 let lastBeaconAt = 0;
 let lastBeaconKey = "";
 
-const IS_PROD = typeof process !== "undefined" && process.env?.NODE_ENV === "production";
+const IS_PROD = Boolean(import.meta?.env?.PROD);
 
 const SENSITIVE_KEYS = new Set([
   "password",
@@ -40,6 +40,9 @@ const shouldSendBeacon = (payload) => {
   // Не отправляем info-логи на сервер, чтобы не спамить /logs
   if (payload.level === "info") return false;
 
+  // В dev не отправляем telemetry
+  if (!IS_PROD) return false;
+
   // Дедупликация одинаковых сообщений
   if (key === lastBeaconKey && now - lastBeaconAt < 3000) return false;
 
@@ -63,14 +66,12 @@ const emit = (level, message, meta = {}) => {
     timestamp: new Date().toISOString(),
   };
 
+  // В production не логируем в консоль, чтобы не светить данные.
+  // В dev — оставляем для отладки.
   if (!IS_PROD) {
-    if (level === "error") {
-      console.error("[NeXaos]", payload);
-    } else if (level === "warn") {
-      console.warn("[NeXaos]", payload);
-    } else {
-      console.log("[NeXaos]", payload);
-    }
+    if (level === "error") console.error("[NeXaos]", payload);
+    else if (level === "warn") console.warn("[NeXaos]", payload);
+    else console.log("[NeXaos]", payload);
   }
 
   try {
