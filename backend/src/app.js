@@ -57,6 +57,18 @@ const corsOptions = {
       return;
     }
 
+    const normalizedOrigin = String(origin || "").trim();
+    const prodAllowed = [
+      /^https?:\/\/(?:www\.)?nehaos\.ru(?::\d+)?$/i,
+      /^https?:\/\/(?:www\.)?nexaos\.ru(?::\d+)?$/i,
+      /^https?:\/\/130\.49\.148\.245(?::\d+)?$/i,
+    ];
+
+    if (prodAllowed.some((re) => re.test(normalizedOrigin))) {
+      callback(null, true);
+      return;
+    }
+
     if (config.env !== "production") {
       const devAllowed = [
         /^https?:\/\/localhost(?::\d+)?$/i,
@@ -72,7 +84,9 @@ const corsOptions = {
       }
     }
 
-    callback(new Error(`Источник не разрешён: ${origin}`));
+    // Не бросаем исключение: иначе это превращается в 500 и ломает UX.
+    // Возвращаем запрет CORS (браузер сам заблокирует ответ без ACAO).
+    callback(null, false);
   },
   credentials: true,
   optionsSuccessStatus: 200,
