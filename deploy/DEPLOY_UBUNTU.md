@@ -1,7 +1,7 @@
 # NeXaos deploy on Ubuntu (Nginx + systemd)
 
 ## 0) Assumptions
-- Server IP: `130.49.148.245`
+- Domain: `nexaos.ru` (and optional `www.nexaos.ru`)
 - App path:
   - `/var/www/nexaos/front` (Vite build output in `/var/www/nexaos/front/dist`)
   - `/var/www/nexaos/backend`
@@ -97,9 +97,26 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
+## 10) HTTPS (Let's Encrypt)
+Install certbot:
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+```
+
+Issue certificate:
+```bash
+sudo certbot --nginx -d nexaos.ru -d www.nexaos.ru
+```
+
+Auto-renew is usually installed by default. Test renewal:
+```bash
+sudo certbot renew --dry-run
+```
+
 Notes:
 - Backend port `5000` is **not** exposed publicly (nginx proxies to `127.0.0.1:5000`).
 - Frontend is served from `/var/www/nexaos/front/dist`.
+- In production frontend uses `/api` (relative). If you deploy frontend separately (different domain), set `VITE_API_URL=https://api.nexaos.ru` and configure nginx accordingly.
 
 ## 9) Firewall
 Open only 80/443:
@@ -108,9 +125,6 @@ sudo ufw allow 80
 sudo ufw allow 443
 sudo ufw enable
 ```
-
-## 10) HTTPS (recommended)
-If you have a domain, use certbot. With only IP you can still run HTTP.
 
 ---
 

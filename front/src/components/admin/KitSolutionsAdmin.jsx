@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import SecureButton from "../ui/SecureButton";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
-import { FaArrowLeft, FaCopy, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaPlus } from "react-icons/fa";
+import { LuCopy, LuPencil, LuTrash2 } from "react-icons/lu";
 import KitSolutionCreator from "./KitSolutionCreator";
 import { getImageUrl } from "../../utils/image";
 
@@ -215,12 +216,12 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-night-500">
-                  <th className="text-left py-2 px-3">Превью</th>
+                  <th className="text-center py-2 px-3">Превью</th>
                   <th className="text-left py-2 px-3">SKU</th>
                   <th className="text-left py-2 px-3">Название</th>
                   <th className="text-left py-2 px-3">Цена</th>
-                  <th className="text-left py-2 px-3">Активен</th>
-                  <th className="text-right py-2 px-3">Действия</th>
+                  <th className="text-center py-2 px-3">Активен</th>
+                  <th className="text-center py-2 px-3">Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -229,44 +230,49 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
                   return (
                     <tr key={k.id} className="border-t border-night-100">
                       <td className="py-2 px-3">
-                        <div className="w-16 h-12 bg-night-50 rounded overflow-hidden">
+                        <div className="flex justify-center">
+                          <div className="w-16 h-12 bg-night-50 rounded overflow-hidden">
                           {img ? (
                             <img src={img} alt={k.name} className="w-full h-full object-cover" />
                           ) : null}
+                          </div>
                         </div>
                       </td>
                       <td className="py-2 px-3 font-mono text-xs text-night-700">{k.sku || "—"}</td>
                       <td className="py-2 px-3 text-night-900">{k.name || "—"}</td>
                       <td className="py-2 px-3 text-night-900">{k.final_price ?? "—"}</td>
-                      <td className="py-2 px-3 text-night-900">{k.is_active ? "Да" : "Нет"}</td>
+                      <td className="py-2 px-3 text-night-900 text-center">{k.is_active ? "Да" : "Нет"}</td>
                       <td className="py-2 px-3">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-center gap-2">
                           <SecureButton
                             type="button"
                             size="sm"
                             variant="outline"
                             onClick={() => openEdit(k.id)}
-                            className="h-8 px-3 flex items-center gap-2"
+                            className="h-10 px-4 py-2 flex items-center justify-center border-accent/30 text-accent-dark hover:border-accent/50 hover:bg-accent/10"
+                            title="Редактировать"
                           >
-                            <FaEdit /> Ред.
+                            <LuPencil size={16} />
                           </SecureButton>
                           <SecureButton
                             type="button"
                             size="sm"
                             variant="outline"
                             onClick={() => openDuplicate(k.id)}
-                            className="h-8 px-3 flex items-center gap-2"
+                            className="h-10 px-4 py-2 flex items-center justify-center"
+                            title="Копия"
                           >
-                            <FaCopy /> Копия
+                            <LuCopy size={16} />
                           </SecureButton>
                           <SecureButton
                             type="button"
                             size="sm"
-                            variant="ghost"
+                            variant="outline"
                             onClick={() => handleDelete(k.id)}
-                            className="h-8 px-3 flex items-center gap-2 text-red-600 hover:bg-red-50"
+                            className="h-10 px-4 py-2 flex items-center justify-center border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Удалить"
                           >
-                            <FaTrash /> Удал.
+                            <LuTrash2 size={16} />
                           </SecureButton>
                         </div>
                       </td>

@@ -710,6 +710,17 @@
       },
     },
     {
+      route: "product-parameter-value-templates",
+      table: "product_parameter_value_templates",
+      idColumn: "id",
+      selectFields: ["id", "parameter_id", "value", "quantity"],
+      columns: {
+        parameter_id: { type: "integer", required: true },
+        value: { type: "string", allowNull: true },
+        quantity: { type: "integer" },
+      },
+    },
+    {
       route: "kit-solutions",
       table: "kit_solutions",
       idColumn: "id",

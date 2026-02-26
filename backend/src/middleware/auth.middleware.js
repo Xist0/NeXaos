@@ -93,6 +93,35 @@ const optionalAuth = async (req, res, next) => {
   return next();
 };
 
+const requireAnyRole = (roles = []) => {
+  const allowed = Array.isArray(roles) ? roles : [roles];
+  return (req, res, next) => {
+    if (!req.user) {
+      return next(ApiError.unauthorized("Требуется авторизация"));
+    }
+
+    if (allowed.length === 0) {
+      return next();
+    }
+
+    if (!allowed.includes(req.user.roleName)) {
+      return next(ApiError.forbidden("Недостаточно прав для выполнения операции"));
+    }
+
+    return next();
+  };
+};
+
+const requireAdmin = (req, res, next) => {
+  if (!req.user) {
+    return next(ApiError.unauthorized("Требуется авторизация"));
+  }
+  if (req.user.roleName !== "admin") {
+    return next(ApiError.forbidden("Недостаточно прав для выполнения операции"));
+  }
+  return next();
+};
+
 // Middleware для проверки роли (только для админов и менеджеров)
 const requireAdminOrManager = (req, res, next) => {
   if (!req.user) {
@@ -111,5 +140,7 @@ module.exports = {
   authGuard,
   optionalAuth,
   requireAdminOrManager,
+  requireAnyRole,
+  requireAdmin,
 };
 

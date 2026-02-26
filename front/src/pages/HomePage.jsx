@@ -27,9 +27,14 @@ const HomePage = () => {
     let active = true;
     const fetchFeatured = async () => {
       try {
-        const response = await get("/modules", { limit: 6 });
+        const response = await get("/modules", { limit: 50 });
         if (active) {
-          setFeatured(response?.data || []);
+          const list = Array.isArray(response?.data) ? response.data : [];
+          const latest = list
+            .slice()
+            .sort((a, b) => Number(b?.id || 0) - Number(a?.id || 0))
+            .slice(0, 10);
+          setFeatured(latest);
         }
       } catch (_error) {
         setFeatured([]);
@@ -112,13 +117,17 @@ const HomePage = () => {
             Весь каталог →
           </Link>
         </div>
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-3 md:gap-6">
-          {featured.map((product) => (
-            <ProductCard key={product.id} product={product} onAdd={addItem} />
-          ))}
-          {!featured.length && (
-            <div className="glass-card col-span-2 lg:col-span-3 p-6 text-night-500">Загружаем предложения...</div>
-          )}
+        <div className="overflow-x-auto">
+          <div className="flex gap-3 sm:gap-4 snap-x snap-mandatory pb-2">
+            {featured.map((product) => (
+              <div key={product.id} className="w-[220px] sm:w-[240px] md:w-[260px] flex-shrink-0 snap-start">
+                <ProductCard product={product} onAdd={addItem} compact />
+              </div>
+            ))}
+            {!featured.length && (
+              <div className="glass-card w-full p-6 text-night-500">Загружаем предложения...</div>
+            )}
+          </div>
         </div>
       </section>
     </div>

@@ -17,9 +17,9 @@ const seedBasicData = async (client) => {
 
   await client.query(
     `INSERT INTO roles (name, description) 
-     VALUES ($1, $2), ($3, $4) 
+     VALUES ($1, $2), ($3, $4), ($5, $6) 
      ON CONFLICT (name) DO NOTHING`,
-    ["user", "Обычный покупатель", "admin", "Администратор магазина"]
+    ["user", "Обычный покупатель", "admin", "Администратор магазина", "manager", "Менеджер"]
   );
 
   const units = [

@@ -5,6 +5,7 @@ import useCart from "../hooks/useCart";
 import SecureInput from "../components/ui/SecureInput";
 import SecureButton from "../components/ui/SecureButton";
 import ProductCard from "../components/ui/ProductCard";
+import PopoverSelect from "../components/ui/PopoverSelect";
 
 const CatalogPage = () => {
   const { get, post } = useApi();
@@ -299,7 +300,7 @@ const CatalogPage = () => {
       try {
         const res = await post(`/modules/${parsed}/similar`, { limit: 50 });
         const list = Array.isArray(res?.data) ? res.data : [];
-        setSimilarItems(list.filter((x) => x?.is_active));
+        setSimilarItems(list.filter((x) => x?.is_active).map((x) => ({ ...x, __type: "module" })));
       } catch (e) {
         console.error("Ошибка загрузки похожих модулей:", e);
         setSimilarItems([]);
@@ -545,11 +546,39 @@ const CatalogPage = () => {
 
   const filterFacets = useMemo(() => {
     const all = Array.isArray(displayItems) ? displayItems : [];
-    const modulesOnly = all.filter((x) => x?.__type === "module");
+    const modulesOnly = all.filter((x) => x?.__type === "module" || x?.base_sku || x?.module_category_id);
     const uniqSorted = (arr) => Array.from(new Set(arr.filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b), "ru"));
 
-    const facadeColors = uniqSorted(modulesOnly.map((x) => String(x?.facade_color || "").trim()).filter(Boolean));
-    const corpusColors = uniqSorted(modulesOnly.map((x) => String(x?.corpus_color || "").trim()).filter(Boolean));
+    const pickColorLabel = (raw) => {
+      if (!raw) return "";
+      if (typeof raw === "string") return raw.trim();
+      if (typeof raw === "object") {
+        const name = raw?.name ?? raw?.title ?? raw?.label;
+        return name ? String(name).trim() : "";
+      }
+      return String(raw).trim();
+    };
+
+    const getFacadeColor = (m) => {
+      return (
+        pickColorLabel(m?.primary_color) ||
+        pickColorLabel(m?.facade_color) ||
+        pickColorLabel(m?.facadeColor) ||
+        ""
+      );
+    };
+
+    const getCorpusColor = (m) => {
+      return (
+        pickColorLabel(m?.secondary_color) ||
+        pickColorLabel(m?.corpus_color) ||
+        pickColorLabel(m?.corpusColor) ||
+        ""
+      );
+    };
+
+    const facadeColors = uniqSorted(modulesOnly.map(getFacadeColor).filter(Boolean));
+    const corpusColors = uniqSorted(modulesOnly.map(getCorpusColor).filter(Boolean));
 
     const takeDims = (key) =>
       uniqSorted(
@@ -573,6 +602,15 @@ const CatalogPage = () => {
 
     return { facadeColors, corpusColors, lengths, depths, heights, minPrice, maxPrice };
   }, [displayItems]);
+
+  const sortItems = useMemo(
+    () => [
+      { id: "popular_desc", label: "Популярные" },
+      { id: "price_desc", label: "Цена: по убыванию" },
+      { id: "price_asc", label: "Цена: по возрастанию" },
+    ],
+    []
+  );
 
   const pagedItems = useMemo(() => {
     const start = Math.max(0, (Number(page) - 1) * Number(limit));
@@ -626,38 +664,51 @@ const CatalogPage = () => {
       </FilterGroup>
       <FilterGroup title="Фильтры" onReset={() => setFilters({ facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "", depthFrom: "", depthTo: "", heightFrom: "", heightTo: "", parameterCategoryIds: "", sort: "" })}>
         <FilterSection title="Сортировка">
-          <select
+          <PopoverSelect
+            size="sm"
+            items={sortItems}
             value={filters.sort}
-            onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value }))}
-            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
-          >
-            <option value="">По умолчанию</option>
-            <option value="popular_desc">Популярные</option>
-            <option value="price_desc">Цена: по убыванию</option>
-            <option value="price_asc">Цена: по возрастанию</option>
-          </select>
+            onChange={(next) => setFilters((f) => ({ ...f, sort: String(next || "") }))}
+            getKey={(x) => x.id}
+            getLabel={(x) => x.label}
+            placeholder="По умолчанию"
+            allowClear
+            clearLabel="По умолчанию"
+            searchable={false}
+            buttonClassName="rounded-xl bg-white/80 text-night-800 border-night-200 focus:ring-accent/30"
+            popoverClassName="rounded-xl"
+          />
         </FilterSection>
         <FilterSection title="Цвета">
-          <select
+          <PopoverSelect
+            size="sm"
+            items={filterFacets.facadeColors.map((c) => ({ id: c, label: c }))}
             value={filters.facadeColor}
-            onChange={(e) => setFilters((f) => ({ ...f, facadeColor: e.target.value }))}
-            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
-          >
-            <option value="">Основной цвет (фасад)</option>
-            {filterFacets.facadeColors.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
-          <select
+            onChange={(next) => setFilters((f) => ({ ...f, facadeColor: String(next || "") }))}
+            getKey={(x) => x.id}
+            getLabel={(x) => x.label}
+            placeholder="Основной цвет (фасад)"
+            allowClear
+            clearLabel="Основной цвет (фасад)"
+            searchable={filterFacets.facadeColors.length > 8}
+            buttonClassName="rounded-xl bg-white/80 text-night-800 border-night-200 focus:ring-accent/30"
+            popoverClassName="rounded-xl"
+          />
+
+          <PopoverSelect
+            size="sm"
+            items={filterFacets.corpusColors.map((c) => ({ id: c, label: c }))}
             value={filters.corpusColor}
-            onChange={(e) => setFilters((f) => ({ ...f, corpusColor: e.target.value }))}
-            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
-          >
-            <option value="">Доп. цвет (корпус)</option>
-            {filterFacets.corpusColors.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+            onChange={(next) => setFilters((f) => ({ ...f, corpusColor: String(next || "") }))}
+            getKey={(x) => x.id}
+            getLabel={(x) => x.label}
+            placeholder="Доп. цвет (корпус)"
+            allowClear
+            clearLabel="Доп. цвет (корпус)"
+            searchable={filterFacets.corpusColors.length > 8}
+            buttonClassName="rounded-xl bg-white/80 text-night-800 border-night-200 focus:ring-accent/30"
+            popoverClassName="rounded-xl"
+          />
         </FilterSection>
         <FilterSection title="Цена">
           <div className="px-1 w-full overflow-hidden space-y-2">
@@ -700,57 +751,71 @@ const CatalogPage = () => {
           </div>
         </FilterSection>
         <FilterSection title="Размеры (мм)">
-          <select
+          <PopoverSelect
+            size="sm"
+            items={filterFacets.lengths.map((v) => ({ id: String(v), label: String(v) }))}
             value={filters.lengthFrom && filters.lengthFrom === filters.lengthTo ? filters.lengthFrom : ""}
-            onChange={(e) => {
-              const v = e.target.value;
+            onChange={(next) => {
+              const v = String(next || "");
               setFilters((f) => ({
                 ...f,
                 lengthFrom: v,
                 lengthTo: v,
               }));
             }}
-            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
-          >
-            <option value="">Длина</option>
-            {filterFacets.lengths.map((v) => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
-          <select
+            getKey={(x) => x.id}
+            getLabel={(x) => x.label}
+            placeholder="Длина"
+            allowClear
+            clearLabel="Длина"
+            searchable={filterFacets.lengths.length > 10}
+            buttonClassName="rounded-xl bg-white/80 text-night-800 border-night-200 focus:ring-accent/30"
+            popoverClassName="rounded-xl"
+          />
+
+          <PopoverSelect
+            size="sm"
+            items={filterFacets.depths.map((v) => ({ id: String(v), label: String(v) }))}
             value={filters.depthFrom && filters.depthFrom === filters.depthTo ? filters.depthFrom : ""}
-            onChange={(e) => {
-              const v = e.target.value;
+            onChange={(next) => {
+              const v = String(next || "");
               setFilters((f) => ({
                 ...f,
                 depthFrom: v,
                 depthTo: v,
               }));
             }}
-            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
-          >
-            <option value="">Ширина / глубина</option>
-            {filterFacets.depths.map((v) => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
-          <select
+            getKey={(x) => x.id}
+            getLabel={(x) => x.label}
+            placeholder="Ширина / глубина"
+            allowClear
+            clearLabel="Ширина / глубина"
+            searchable={filterFacets.depths.length > 10}
+            buttonClassName="rounded-xl bg-white/80 text-night-800 border-night-200 focus:ring-accent/30"
+            popoverClassName="rounded-xl"
+          />
+
+          <PopoverSelect
+            size="sm"
+            items={filterFacets.heights.map((v) => ({ id: String(v), label: String(v) }))}
             value={filters.heightFrom && filters.heightFrom === filters.heightTo ? filters.heightFrom : ""}
-            onChange={(e) => {
-              const v = e.target.value;
+            onChange={(next) => {
+              const v = String(next || "");
               setFilters((f) => ({
                 ...f,
                 heightFrom: v,
                 heightTo: v,
               }));
             }}
-            className="w-full rounded-xl border border-night-200 bg-white/80 px-3 py-2 text-sm text-night-800 outline-none focus:ring-2 focus:ring-accent/30"
-          >
-            <option value="">Высота</option>
-            {filterFacets.heights.map((v) => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
+            getKey={(x) => x.id}
+            getLabel={(x) => x.label}
+            placeholder="Высота"
+            allowClear
+            clearLabel="Высота"
+            searchable={filterFacets.heights.length > 10}
+            buttonClassName="rounded-xl bg-white/80 text-night-800 border-night-200 focus:ring-accent/30"
+            popoverClassName="rounded-xl"
+          />
         </FilterSection>
 
         {productParameterCategories.length > 0 && (

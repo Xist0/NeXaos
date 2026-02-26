@@ -12,6 +12,16 @@ const REFRESH_TOKEN_SECRET =
   process.env.JWT_SECRET ||
   "your-refresh-secret-change-in-production";
 
+if (process.env.NODE_ENV === "production") {
+  const badSecrets = new Set([
+    "your-access-secret-change-in-production",
+    "your-refresh-secret-change-in-production",
+  ]);
+  if (badSecrets.has(ACCESS_TOKEN_SECRET) || badSecrets.has(REFRESH_TOKEN_SECRET)) {
+    throw new Error("JWT secrets are not configured for production");
+  }
+}
+
 const ACCESS_TOKEN_EXPIRES_IN = process.env.ACCESS_TOKEN_EXPIRES_IN || process.env.JWT_EXPIRES_IN || "1d";
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS || 1);
 

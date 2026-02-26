@@ -47,6 +47,16 @@ const ensureAdminUser = async ({ email, password, fullName = "Test Admin", phone
   return rows[0];
 };
 
+const resetUserPassword = async ({ userId, password }) => {
+  const id = Number(userId);
+  if (!Number.isFinite(id) || id <= 0) throw new Error("userId is invalid");
+  const passwordHash = await hashPassword(password);
+  await query(
+    `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`,
+    [passwordHash, id]
+  );
+};
+
 // ✅ НОВОЕ: функция создания обычного пользователя
 const createUser = async ({ email, password, fullName, phone }) => {
   if (!phone) {
@@ -70,5 +80,6 @@ module.exports = {
   hashPassword,
   ensureAdminUser,
   createUser, // ← экспортируем
+  resetUserPassword,
   toSafeUser,
 };

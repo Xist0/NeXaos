@@ -82,12 +82,14 @@ const CatalogItemPage = () => {
         const qty = Number(p?.quantity);
         const value = p?.value === null || p?.value === undefined ? "" : String(p.value).trim();
         if (!name) return;
+
+        const hasQty = Number.isFinite(qty) && qty > 1;
         if (value) {
-          rows.push({ label: name, value });
+          rows.push({ label: name, value: hasQty ? `${value} (${qty})` : value });
           return;
         }
-        if (Number.isFinite(qty) && qty > 1) {
-          rows.push({ label: name, value: `×${qty}` });
+        if (hasQty) {
+          rows.push({ label: name, value: String(qty) });
         }
       });
     }
@@ -141,7 +143,7 @@ const CatalogItemPage = () => {
       <nav className="text-sm text-night-500 mb-6">
         <Link to="/catalog" className="hover:text-accent transition">Каталог</Link>
         <span className="text-night-900 mx-2">/</span>
-        <span className="font-medium">{item.name}</span>
+        <span className="font-medium inline-block max-w-full align-bottom truncate">{item.name}</span>
       </nav>
 
       <div className="grid gap-8 lg:gap-10 lg:grid-cols-[540px_minmax(0,1fr)_320px] lg:items-start mb-8 sm:mb-12">
@@ -220,8 +222,8 @@ const CatalogItemPage = () => {
               <h3 className="font-bold text-night-900 mb-3 text-lg">Характеристики</h3>
               <div className="space-y-2 text-sm text-night-800 leading-relaxed">
                 {customCharacteristics.map((row) => (
-                  <div key={row.label} className="grid grid-cols-[160px_1fr] gap-3 min-w-0">
-                    <span className="text-night-500 truncate">{row.label}:</span>
+                  <div key={row.label} className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-1 sm:gap-3 min-w-0">
+                    <span className="text-night-500 break-words">{row.label}:</span>
                     <span className="font-semibold text-night-900 break-words min-w-0">{row.value}</span>
                   </div>
                 ))}
@@ -248,7 +250,7 @@ const CatalogItemPage = () => {
             />
             <SecureButton
               onClick={handleAddToCart}
-              className="btn-shimmer !h-11 !px-6 !text-base !rounded-xl !bg-gradient-to-r !from-accent !via-accent-dark !to-accent !text-white !font-semibold !shadow-lg hover:!shadow-xl whitespace-nowrap"
+              className="btn-shimmer !h-11 !px-6 !text-base !rounded-xl !bg-gradient-to-r !from-accent !via-accent-dark !to-accent !text-white !font-semibold !shadow-lg hover:!shadow-xl whitespace-normal sm:whitespace-nowrap w-full sm:w-auto"
             >
               В корзину
             </SecureButton>

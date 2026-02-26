@@ -3,6 +3,7 @@ import SecureButton from "../../ui/SecureButton";
 import SecureInput from "../../ui/SecureInput";
 import { getImageUrl, getThumbUrl } from "../../../utils/image";
 import ColorBadge from "../../ui/ColorBadge";
+import PopoverSelect from "../../ui/PopoverSelect";
 
 const LazyImg = ({ src, alt, className, crossOrigin, onError }) => {
   const holderRef = useRef(null);
@@ -149,8 +150,17 @@ const EntityFormFields = ({
             ((isPrimary && nextIsSecondary) || (isSecondary && nextIsPrimary) || (isPrimary && nextIsPrimary) || (isSecondary && nextIsSecondary));
 
           const renderSingleField = (fieldToRender) => (
-            <label key={fieldToRender.name} className="text-sm text-night-700 space-y-1">
-              <span>{fieldToRender.label}</span>
+            <label
+              key={fieldToRender.name}
+              className={
+                fieldToRender.type === "checkbox"
+                  ? "text-sm text-night-700 flex items-center justify-between gap-4"
+                  : "text-sm text-night-700 space-y-1"
+              }
+            >
+              <span className={fieldToRender.type === "checkbox" ? "font-medium text-night-700" : ""}>
+                {fieldToRender.label}
+              </span>
               {fieldToRender.inputType === "image" ? (
             <div className="space-y-2">
               <input
@@ -179,68 +189,65 @@ const EntityFormFields = ({
               {uploadingField === fieldToRender.name && <p className="text-xs text-night-400">Загружаем файл...</p>}
             </div>
           ) : fieldToRender.type === "checkbox" ? (
-            <div className="w-full">
-              <div className="flex items-start justify-end pt-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      [fieldToRender.name]: !isCheckboxChecked(prev[fieldToRender.name]),
-                    }))
-                  }
-                  className={
-                    "relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent" +
-                    (isCheckboxChecked(form[fieldToRender.name]) ? " bg-accent" : " bg-night-300")
-                  }
-                  aria-pressed={isCheckboxChecked(form[fieldToRender.name])}
-                  aria-label={fieldToRender.label}
-                >
-                  <span
-                    className={
-                      "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform" +
-                      (isCheckboxChecked(form[fieldToRender.name]) ? " translate-x-4" : " translate-x-0.5")
-                    }
-                  />
-                </button>
-              </div>
-            </div>
-          ) : fieldToRender.type === "select" ? (
-            <select
-              value={form[fieldToRender.name] ?? ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, [fieldToRender.name]: e.target.value }))}
-              className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-              required={fieldToRender.required}
-            >
-              <option value="">Выберите...</option>
-              {fieldToRender.options?.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : fieldToRender.type === "moduleCategory" ? (
-            <select
-              value={form[fieldToRender.name] ?? ""}
-              onChange={(e) =>
+            <button
+              type="button"
+              onClick={() =>
                 setForm((prev) => ({
                   ...prev,
-                  [fieldToRender.name]: e.target.value ? Number(e.target.value) : "",
+                  [fieldToRender.name]: !isCheckboxChecked(prev[fieldToRender.name]),
                 }))
               }
-              className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-              required={fieldToRender.required}
+              className={
+                "relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent" +
+                (isCheckboxChecked(form[fieldToRender.name]) ? " bg-accent" : " bg-night-300")
+              }
+              aria-pressed={isCheckboxChecked(form[fieldToRender.name])}
+              aria-label={fieldToRender.label}
             >
-              <option value="">Выберите...</option>
-              {availableModuleCategories
-                .slice()
-                .sort((a, b) => Number(a.id) - Number(b.id))
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
+              <span
+                className={
+                  "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform" +
+                  (isCheckboxChecked(form[fieldToRender.name]) ? " translate-x-5" : " translate-x-0.5")
+                }
+              />
+            </button>
+          ) : fieldToRender.type === "select" ? (
+            <PopoverSelect
+              size="md"
+              items={fieldToRender.options || []}
+              value={form[fieldToRender.name] ?? ""}
+              placeholder="Выберите..."
+              allowClear={!fieldToRender.required}
+              clearLabel="Выберите..."
+              searchable={(fieldToRender.options || []).length > 10}
+              getKey={(option) => String(option.value)}
+              getLabel={(option) => String(option.label ?? option.value ?? "")}
+              onChange={(next) => setForm((prev) => ({ ...prev, [fieldToRender.name]: String(next || "") }))}
+              buttonClassName="rounded-lg"
+              popoverClassName="rounded-lg max-w-xl"
+              maxHeightClassName="max-h-80"
+            />
+          ) : fieldToRender.type === "moduleCategory" ? (
+            <PopoverSelect
+              size="md"
+              items={(availableModuleCategories || []).slice().sort((a, b) => Number(a.id) - Number(b.id))}
+              value={form[fieldToRender.name] ?? ""}
+              placeholder="Выберите..."
+              allowClear={!fieldToRender.required}
+              clearLabel="Выберите..."
+              searchable={(availableModuleCategories || []).length > 10}
+              getKey={(c) => String(c.id)}
+              getLabel={(c) => String(c?.name || "")}
+              onChange={(next) =>
+                setForm((prev) => ({
+                  ...prev,
+                  [fieldToRender.name]: next ? Number(next) : "",
+                }))
+              }
+              buttonClassName="rounded-lg"
+              popoverClassName="rounded-lg max-w-xl"
+              maxHeightClassName="max-h-80"
+            />
           ) : fieldToRender.type === "color" ? (
             <div className="space-y-2">
               {(() => {
@@ -351,45 +358,47 @@ const EntityFormFields = ({
               })()}
             </div>
           ) : fieldToRender.type === "collection" ? (
-            <select
+            <PopoverSelect
+              size="md"
+              items={(collections || []).slice().sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))}
               value={form[fieldToRender.name] ?? ""}
-              onChange={(e) =>
+              placeholder="Не выбрана"
+              allowClear={!fieldToRender.required}
+              clearLabel="Не выбрана"
+              searchable={(collections || []).length > 8}
+              getKey={(c) => String(c.id)}
+              getLabel={(c) => String(c?.name || "")}
+              onChange={(next) =>
                 setForm((prev) => ({
                   ...prev,
-                  [fieldToRender.name]: e.target.value ? Number(e.target.value) : "",
+                  [fieldToRender.name]: next ? Number(next) : "",
                 }))
               }
-              className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-              required={fieldToRender.required}
-            >
-              <option value="">Не выбрана</option>
-              {(collections || [])
-                .slice()
-                .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
+              buttonClassName="rounded-lg"
+              popoverClassName="rounded-lg max-w-xl"
+              maxHeightClassName="max-h-80"
+            />
           ) : endpoint === "/modules" && fieldToRender.name === "description_id" ? (
-            <select
+            <PopoverSelect
+              size="md"
+              items={availableModuleDescriptions || []}
               value={form[fieldToRender.name] ?? ""}
-              onChange={(e) =>
+              placeholder="Не выбран"
+              allowClear
+              clearLabel="Не выбран"
+              searchable={(availableModuleDescriptions || []).length > 10}
+              getKey={(d) => String(d.id)}
+              getLabel={(d) => `#${d.id} ${d.base_sku} — ${d.name}`}
+              onChange={(next) =>
                 setForm((prev) => ({
                   ...prev,
-                  [fieldToRender.name]: e.target.value ? Number(e.target.value) : "",
+                  [fieldToRender.name]: next ? Number(next) : "",
                 }))
               }
-              className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-            >
-              <option value="">Не выбран</option>
-              {availableModuleDescriptions.map((d) => (
-                <option key={d.id} value={d.id}>
-                  #{d.id} {d.base_sku} — {d.name}
-                </option>
-              ))}
-            </select>
+              buttonClassName="rounded-lg"
+              popoverClassName="rounded-lg max-w-2xl"
+              maxHeightClassName="max-h-80"
+            />
           ) : (
             (() => {
               const isMmNumberField =
@@ -505,22 +514,23 @@ const EntityFormFields = ({
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <select
+                      <PopoverSelect
+                        size="md"
+                        items={presets.map((v) => ({ v }))}
                         value={""}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (!v) return;
-                          setForm((prev) => ({ ...prev, [fieldToRender.name]: Number(v) }));
+                        placeholder="Выберите размер..."
+                        searchable={presets.length > 10}
+                        getKey={(it) => String(it.v)}
+                        getLabel={(it) => `${it.v} мм`}
+                        onChange={(next) => {
+                          const v = Number(next);
+                          if (!Number.isFinite(v)) return;
+                          setForm((prev) => ({ ...prev, [fieldToRender.name]: v }));
                         }}
-                        className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-                      >
-                        <option value="">Выберите размер...</option>
-                        {presets.map((v) => (
-                          <option key={v} value={v}>
-                            {v} мм
-                          </option>
-                        ))}
-                      </select>
+                        buttonClassName="rounded-lg"
+                        popoverClassName="rounded-lg max-w-md"
+                        maxHeightClassName="max-h-72"
+                      />
 
                       {presets.length > 0 && (
                         <div className="flex flex-wrap gap-2">

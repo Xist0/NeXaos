@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FaArrowLeft, FaCopy, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaPlus } from "react-icons/fa";
+import { LuCopy, LuPencil, LuTrash2 } from "react-icons/lu";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import SecureButton from "../ui/SecureButton";
@@ -198,12 +199,12 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
         <table className="w-full text-sm">
           <thead className="bg-night-50/70 text-night-600">
             <tr>
-              <th className="text-left px-4 py-3">Превью</th>
+              <th className="text-center px-4 py-3">Превью</th>
               <th className="text-left px-4 py-3">SKU</th>
               <th className="text-left px-4 py-3">Название</th>
               <th className="text-left px-4 py-3">Цена</th>
-              <th className="text-left px-4 py-3">Активен</th>
-              <th className="text-right px-4 py-3">Действия</th>
+              <th className="text-center px-4 py-3">Активен</th>
+              <th className="text-center px-4 py-3">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -223,33 +224,53 @@ const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => 
               items.map((it) => (
                 <tr key={it.id} className="border-t border-night-100">
                   <td className="px-4 py-3">
-                    <img
-                      src={getImageUrl(it.preview_url)}
-                      alt="preview"
-                      className="w-12 h-12 rounded-lg object-cover bg-night-100"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
+                    <div className="flex justify-center">
+                      <img
+                        src={getImageUrl(it.preview_url)}
+                        alt="preview"
+                        className="w-12 h-12 rounded-lg object-cover bg-night-100"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-night-700">{it.sku || "—"}</td>
                   <td className="px-4 py-3 text-night-900 font-medium">{it.name}</td>
                   <td className="px-4 py-3 text-night-700">{it.final_price != null ? `${it.final_price} ₽` : "—"}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${it.is_active ? "bg-green-100 text-green-700" : "bg-night-100 text-night-600"}`}>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`inline-flex justify-center px-2 py-1 rounded-full text-xs font-semibold ${it.is_active ? "bg-green-100 text-green-700" : "bg-night-100 text-night-600"}`}>
                       {it.is_active ? "Да" : "Нет"}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => openEdit(it.id)}>
-                        <FaEdit />
+                    <div className="flex justify-center gap-2">
+                      <SecureButton
+                        type="button"
+                        variant="outline"
+                        className="h-10 px-4 py-2 text-xs flex items-center justify-center border-accent/30 text-accent-dark hover:border-accent/50 hover:bg-accent/10"
+                        onClick={() => openEdit(it.id)}
+                        title="Редактировать"
+                      >
+                        <LuPencil size={16} />
                       </SecureButton>
-                      <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => openDuplicate(it.id)}>
-                        <FaCopy />
+                      <SecureButton
+                        type="button"
+                        variant="outline"
+                        className="h-10 px-4 py-2 text-xs flex items-center justify-center"
+                        onClick={() => openDuplicate(it.id)}
+                        title="Копия"
+                      >
+                        <LuCopy size={16} />
                       </SecureButton>
-                      <SecureButton type="button" variant="danger" className="px-3 py-2 text-xs" onClick={() => removeItem(it.id)}>
-                        <FaTrash />
+                      <SecureButton
+                        type="button"
+                        variant="outline"
+                        className="h-10 px-4 py-2 text-xs flex items-center justify-center border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => removeItem(it.id)}
+                        title="Удалить"
+                      >
+                        <LuTrash2 size={16} />
                       </SecureButton>
                     </div>
                   </td>

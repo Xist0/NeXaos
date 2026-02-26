@@ -3,6 +3,36 @@ import { API_BASE_URL } from "../utils/constants";
 let lastBeaconAt = 0;
 let lastBeaconKey = "";
 
+const IS_PROD = typeof process !== "undefined" && process.env?.NODE_ENV === "production";
+
+const SENSITIVE_KEYS = new Set([
+  "password",
+  "pass",
+  "token",
+  "refreshToken",
+  "accessToken",
+  "authorization",
+  "cookie",
+  "set-cookie",
+]);
+
+const redact = (value, depth = 0) => {
+  if (depth > 6) return "[REDACTED]";
+  if (!value) return value;
+  if (Array.isArray(value)) return value.map((v) => redact(v, depth + 1));
+  if (typeof value !== "object") return value;
+
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (SENSITIVE_KEYS.has(String(k).toLowerCase())) {
+      out[k] = "[REDACTED]";
+      continue;
+    }
+    out[k] = redact(v, depth + 1);
+  }
+  return out;
+};
+
 const shouldSendBeacon = (payload) => {
   const now = Date.now();
   const key = `${payload.level}|${payload.message}`;
@@ -24,7 +54,7 @@ const shouldSendBeacon = (payload) => {
 const emit = (level, message, meta = {}) => {
   // Убеждаемся, что message всегда строка
   const safeMessage = typeof message === "string" && message.trim() ? message : "Лог без сообщения";
-  const safeMeta = meta && typeof meta === "object" ? meta : {};
+  const safeMeta = meta && typeof meta === "object" ? redact(meta) : {};
   
   const payload = {
     level: level || "info",
@@ -33,12 +63,14 @@ const emit = (level, message, meta = {}) => {
     timestamp: new Date().toISOString(),
   };
 
-  if (level === "error") {
-    console.error("[NeXaos]", payload);
-  } else if (level === "warn") {
-    console.warn("[NeXaos]", payload);
-  } else {
-    console.log("[NeXaos]", payload);
+  if (!IS_PROD) {
+    if (level === "error") {
+      console.error("[NeXaos]", payload);
+    } else if (level === "warn") {
+      console.warn("[NeXaos]", payload);
+    } else {
+      console.log("[NeXaos]", payload);
+    }
   }
 
   try {

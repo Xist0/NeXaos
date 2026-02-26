@@ -3,6 +3,7 @@ import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
+import PopoverSelect from "../ui/PopoverSelect";
 import ImageManager from "./ImageManager";
 import { FaPlus, FaSave, FaTimes } from "react-icons/fa";
 import useHeroWorksMedia from "./entityManager/useHeroWorksMedia";
@@ -23,7 +24,7 @@ const defaultField = (field) => ({
   ...field,
 });
 
-const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
+const EntityManager = ({ title, endpoint, fields, fixedValues, allowDelete = true }) => {
   const { request, get, post, put, del } = useApi();
   const logger = useLogger();
   const [items, setItems] = useState([]);
@@ -808,13 +809,50 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
     return skus.sort();
   }, [items, endpoint]);
 
+  const baseSkuItems = useMemo(() => {
+    return (availableBaseSkus || []).map((sku) => ({ sku }));
+  }, [availableBaseSkus]);
+
+  const moduleCategoryItems = useMemo(() => {
+    return (availableModuleCategories || []).slice().sort((a, b) => Number(a.id) - Number(b.id));
+  }, [availableModuleCategories]);
+
+  const kitchenTypeItems = useMemo(() => {
+    return (availableKitchenTypes || []).slice().sort((a, b) => Number(a.id) - Number(b.id));
+  }, [availableKitchenTypes]);
+
+  const materialItems = useMemo(() => {
+    return (availableMaterials || []).slice().sort((a, b) => Number(a.id) - Number(b.id));
+  }, [availableMaterials]);
+
+  const bottomModuleItems = useMemo(() => {
+    return (availableModules || [])
+      .filter((m) => {
+        const baseSku = String(m.base_sku || "");
+        if (baseSku.startsWith("Н")) return true;
+        const cat = (availableModuleCategories || []).find((c) => c.id === Number(m.module_category_id));
+        return cat?.code === "bottom";
+      })
+      .slice()
+      .sort((a, b) => Number(a.id) - Number(b.id));
+  }, [availableModuleCategories, availableModules]);
+
+  const topModuleItems = useMemo(() => {
+    return (availableModules || [])
+      .filter((m) => {
+        const baseSku = String(m.base_sku || "");
+        if (baseSku.startsWith("В")) return true;
+        const cat = (availableModuleCategories || []).find((c) => c.id === Number(m.module_category_id));
+        return cat?.code === "top";
+      })
+      .slice()
+      .sort((a, b) => Number(a.id) - Number(b.id));
+  }, [availableModuleCategories, availableModules]);
+
   const filteredItems = useMemo(() => {
+    if (!items?.length) return [];
     let filtered = items;
 
-    if (endpoint === "/module-descriptions" && !filterModuleCategoryId) {
-      return [];
-    }
-    
     if (fixedValues && typeof fixedValues === "object") {
       filtered = filtered.filter((item) => {
         return Object.entries(fixedValues).every(([k, v]) => String(item?.[k] ?? "") === String(v ?? ""));
@@ -874,53 +912,60 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
       {endpoint === "/modules" && availableBaseSkus.length > 0 && (
         <div className="flex gap-4 items-center border-b border-night-200 pb-4">
           <label className="text-sm font-semibold text-night-700">Фильтр по подтипу:</label>
-          <select
-            value={filterBaseSku}
-            onChange={(e) => setFilterBaseSku(e.target.value)}
-            className="px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-          >
-            <option value="">Все подтипы</option>
-            {availableBaseSkus.map((sku) => (
-              <option key={sku} value={sku}>
-                {sku}
-              </option>
-            ))}
-          </select>
+          <div className="w-72">
+            <PopoverSelect
+              size="md"
+              items={baseSkuItems}
+              value={filterBaseSku}
+              placeholder="Все подтипы"
+              allowClear
+              clearLabel="Все подтипы"
+              searchable={baseSkuItems.length > 10}
+              getKey={(it) => String(it.sku)}
+              getLabel={(it) => String(it.sku)}
+              onChange={(next) => setFilterBaseSku(String(next || ""))}
+              buttonClassName="rounded-lg"
+              popoverClassName="rounded-lg max-w-md"
+              maxHeightClassName="max-h-80"
+            />
+          </div>
         </div>
       )}
 
       {endpoint === "/module-descriptions" && (
         <div className="flex flex-wrap gap-3 items-center border-b border-night-200 pb-4">
           <label className="text-sm font-semibold text-night-700">Категория:</label>
-          <select
-            value={filterModuleCategoryId}
-            onChange={(e) => {
-              const nextId = e.target.value;
-              setFilterModuleCategoryId(nextId);
-              setEditingId(null);
-              const cat = availableModuleCategories.find((c) => String(c.id) === String(nextId)) || null;
-              const prefix = (cat?.sku_prefix ? String(cat.sku_prefix) : "").trim().toUpperCase();
-              const fallbackCode = String(cat?.code || "").toLowerCase();
-              const fallbackPrefix = fallbackCode === "bottom" ? "НМ" : fallbackCode === "top" ? "ВМ" : "";
-              const nextPrefix = prefix || fallbackPrefix;
+          <div className="w-80">
+            <PopoverSelect
+              size="md"
+              items={moduleCategoryItems}
+              value={filterModuleCategoryId}
+              placeholder="Выберите категорию..."
+              allowClear
+              clearLabel="Выберите категорию..."
+              searchable={moduleCategoryItems.length > 10}
+              getKey={(c) => String(c.id)}
+              getLabel={(c) => String(c?.name || "")}
+              onChange={(next) => {
+                const nextId = String(next || "");
+                setFilterModuleCategoryId(nextId);
+                setEditingId(null);
+                const cat = availableModuleCategories.find((c) => String(c.id) === String(nextId)) || null;
+                const prefix = (cat?.sku_prefix ? String(cat.sku_prefix) : "").trim().toUpperCase();
+                const fallbackCode = String(cat?.code || "").toLowerCase();
+                const fallbackPrefix = fallbackCode === "bottom" ? "НМ" : fallbackCode === "top" ? "ВМ" : "";
+                const nextPrefix = prefix || fallbackPrefix;
 
-              setForm({
-                base_sku: nextPrefix,
-                name: "",
-              });
-            }}
-            className="px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-          >
-            <option value="">Выберите категорию...</option>
-            {availableModuleCategories
-              .slice()
-              .sort((a, b) => Number(a.id) - Number(b.id))
-              .map((c) => (
-                <option key={c.id} value={String(c.id)}>
-                  {c.name}
-                </option>
-              ))}
-          </select>
+                setForm({
+                  base_sku: nextPrefix,
+                  name: "",
+                });
+              }}
+              buttonClassName="rounded-lg"
+              popoverClassName="rounded-lg max-w-xl"
+              maxHeightClassName="max-h-80"
+            />
+          </div>
         </div>
       )}
 
@@ -962,84 +1007,82 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-night-700">Тип кухни</p>
-                <select
+                <PopoverSelect
+                  size="md"
+                  items={kitchenTypeItems}
                   value={form.kitchen_type_id ?? ""}
-                  onChange={(e) =>
+                  placeholder="Не выбран"
+                  allowClear
+                  clearLabel="Не выбран"
+                  searchable={kitchenTypeItems.length > 10}
+                  getKey={(t) => String(t.id)}
+                  getLabel={(t) => `#${t.id} ${t.name}`}
+                  onChange={(next) =>
                     setForm((prev) => ({
                       ...prev,
-                      kitchen_type_id: e.target.value ? Number(e.target.value) : "",
+                      kitchen_type_id: next ? Number(next) : "",
                     }))
                   }
-                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-                >
-                  <option value="">Не выбран</option>
-                  {availableKitchenTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      #{t.id} {t.name}
-                    </option>
-                  ))}
-                </select>
+                  buttonClassName="rounded-lg"
+                  popoverClassName="rounded-lg max-w-xl"
+                  maxHeightClassName="max-h-80"
+                />
               </div>
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-night-700">Материал</p>
-                <select
+                <PopoverSelect
+                  size="md"
+                  items={materialItems}
                   value={form.material_id ?? ""}
-                  onChange={(e) =>
+                  placeholder="Не выбран"
+                  allowClear
+                  clearLabel="Не выбран"
+                  searchable={materialItems.length > 10}
+                  getKey={(m) => String(m.id)}
+                  getLabel={(m) => `#${m.id} ${m.name}`}
+                  onChange={(next) =>
                     setForm((prev) => ({
                       ...prev,
-                      material_id: e.target.value ? Number(e.target.value) : "",
+                      material_id: next ? Number(next) : "",
                     }))
                   }
-                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-                >
-                  <option value="">Не выбран</option>
-                  {availableMaterials.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      #{m.id} {m.name}
-                    </option>
-                  ))}
-                </select>
+                  buttonClassName="rounded-lg"
+                  popoverClassName="rounded-lg max-w-xl"
+                  maxHeightClassName="max-h-80"
+                />
               </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-night-700">Нижние модули</p>
-                <select
+                <PopoverSelect
+                  size="md"
+                  items={bottomModuleItems}
                   value={""}
-                  onChange={(e) => {
-                    const moduleId = Number(e.target.value);
+                  placeholder="+ Добавить нижний модуль..."
+                  searchable={bottomModuleItems.length > 10}
+                  getKey={(m) => String(m.id)}
+                  getLabel={(m) => `#${m.id} ${m.name} (${m.length_mm}×${m.depth_mm}×${m.height_mm})`}
+                  onChange={(next) => {
+                    const moduleId = Number(next);
                     if (!moduleId) return;
-                    
-                    const moduleData = availableModules.find(m => m.id === moduleId);
+                    const moduleData = availableModules.find((m) => m.id === moduleId);
                     if (!moduleData) return;
-
-                    setKitSelectedBottomModules(prev => [
+                    setKitSelectedBottomModules((prev) => [
                       ...prev,
                       {
                         id: generateModuleId.current++,
                         moduleId,
                         moduleData,
-                        quantity: 1
-                      }
+                        quantity: 1,
+                      },
                     ]);
                   }}
-                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-                >
-                  <option value="">+ Добавить нижний модуль...</option>
-                  {availableModules
-                    .filter((m) => {
-                      const baseSku = String(m.base_sku || "");
-                      if (baseSku.startsWith("Н")) return true;
-                      const cat = availableModuleCategories.find((c) => c.id === Number(m.module_category_id));
-                      return cat?.code === "bottom";
-                    })
-                    .map((m) => (
-                      <option key={`bottom-${m.id}`} value={m.id}>
-                        #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
-                      </option>
-                    ))}
-                </select>
+                  buttonClassName="rounded-lg"
+                  popoverClassName="rounded-lg max-w-2xl"
+                  maxHeightClassName="max-h-80"
+                />
 
                 <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {kitSelectedBottomModules.map(({id, moduleId, moduleData, quantity}) => {
@@ -1106,41 +1149,33 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
 
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-night-700">Верхние модули</p>
-                <select
+                <PopoverSelect
+                  size="md"
+                  items={topModuleItems}
                   value={""}
-                  onChange={(e) => {
-                    const moduleId = Number(e.target.value);
+                  placeholder="+ Добавить верхний модуль..."
+                  searchable={topModuleItems.length > 10}
+                  getKey={(m) => String(m.id)}
+                  getLabel={(m) => `#${m.id} ${m.name} (${m.length_mm}×${m.depth_mm}×${m.height_mm})`}
+                  onChange={(next) => {
+                    const moduleId = Number(next);
                     if (!moduleId) return;
-                    
-                    const moduleData = availableModules.find(m => m.id === moduleId);
+                    const moduleData = availableModules.find((m) => m.id === moduleId);
                     if (!moduleData) return;
-
-                    setKitSelectedTopModules(prev => [
+                    setKitSelectedTopModules((prev) => [
                       ...prev,
                       {
                         id: generateModuleId.current++,
                         moduleId,
                         moduleData,
-                        quantity: 1
-                      }
+                        quantity: 1,
+                      },
                     ]);
                   }}
-                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-                >
-                  <option value="">+ Добавить верхний модуль...</option>
-                  {availableModules
-                    .filter((m) => {
-                      const baseSku = String(m.base_sku || "");
-                      if (baseSku.startsWith("В")) return true;
-                      const cat = availableModuleCategories.find((c) => c.id === Number(m.module_category_id));
-                      return cat?.code === "top";
-                    })
-                    .map((m) => (
-                      <option key={`top-${m.id}`} value={m.id}>
-                        #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
-                      </option>
-                    ))}
-                </select>
+                  buttonClassName="rounded-lg"
+                  popoverClassName="rounded-lg max-w-2xl"
+                  maxHeightClassName="max-h-80"
+                />
 
                 <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
                   {kitSelectedTopModules.map(({id, moduleId, moduleData, quantity}) => {
@@ -1328,6 +1363,7 @@ const EntityManager = ({ title, endpoint, fields, fixedValues }) => {
         onEdit={handleEdit}
         onDelete={handleDelete}
         dragSort={dragSort}
+        allowDelete={allowDelete}
       />
 
       <HeroWorksMediaModal

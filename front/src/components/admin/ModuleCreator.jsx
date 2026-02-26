@@ -19,6 +19,7 @@ import ImageManager from "./ImageManager";
 import { formatCurrency } from "../../utils/format";
 import ColorBadge from "../ui/ColorBadge";
 import { getThumbUrl } from "../../utils/image";
+import PopoverSelect from "../ui/PopoverSelect";
 
 const LazyImg = ({ src, alt, className, onError }) => {
   const holderRef = useRef(null);
@@ -118,6 +119,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
 
+  const [isActive, setIsActive] = useState(false);
+
   // Реальный ID созданного модуля
   const [moduleId, setModuleId] = useState(initialModuleId);
 
@@ -155,6 +158,46 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
 
   const [selectedParameters, setSelectedParameters] = useState([]);
   const [selectedParameterCategories, setSelectedParameterCategories] = useState([]);
+
+  const [referenceData, setReferenceData] = useState({
+    baseSkus: [],
+    colorsFacade: [],
+    colorsCorpus: [],
+    collections: [],
+    moduleCategories: [],
+    productParameters: [],
+    productParameterCategories: [],
+    isLoaded: false
+  });
+  const [isLoadingReferences, setIsLoadingReferences] = useState(true);
+
+  useEffect(() => {
+    getRef.current = get;
+    loggerRef.current = logger;
+  }, [get]);
+
+  const [parameterTemplatesById, setParameterTemplatesById] = useState({});
+  const templatesLoadingRef = useRef(new Set());
+
+  const ensureParameterTemplatesLoaded = useCallback(
+    async (parameterId) => {
+      const id = Number(parameterId);
+      if (!Number.isFinite(id) || id <= 0) return;
+      if (parameterTemplatesById[String(id)]) return;
+      if (templatesLoadingRef.current.has(id)) return;
+      templatesLoadingRef.current.add(id);
+      try {
+        const res = await getRef.current("/product-parameter-value-templates", { limit: 200, parameterId: id });
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setParameterTemplatesById((prev) => ({ ...prev, [String(id)]: list }));
+      } catch (_e) {
+        setParameterTemplatesById((prev) => ({ ...prev, [String(id)]: [] }));
+      } finally {
+        templatesLoadingRef.current.delete(id);
+      }
+    },
+    [parameterTemplatesById]
+  );
 
   const [openPrimary, setOpenPrimary] = useState(false);
   const [openSecondary, setOpenSecondary] = useState(false);
@@ -263,23 +306,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     });
   };
 
-  const [referenceData, setReferenceData] = useState({
-    baseSkus: [],
-    colorsFacade: [],
-    colorsCorpus: [],
-    collections: [],
-    moduleCategories: [],
-    productParameters: [],
-    productParameterCategories: [],
-    isLoaded: false
-  });
-  const [isLoadingReferences, setIsLoadingReferences] = useState(true);
-
-  useEffect(() => {
-    getRef.current = get;
-    loggerRef.current = logger;
-  }, [get]);
-
   const applyLoadedModuleToForm = useCallback((data) => {
     const sku = String(data?.sku || "");
     const skuParts = sku.split("-");
@@ -309,12 +335,15 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
       characteristics: normalizeCharacteristics(data.characteristics) || {},
     }));
 
+    setIsActive(!!data.is_active);
+
     const params = Array.isArray(data.parameters) ? data.parameters : [];
     setSelectedParameters(
       params
         .map((p) => ({
           parameterId: Number(p.id),
           quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
+          value: p?.value === null || p?.value === undefined ? "" : String(p.value),
         }))
         .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
     );
@@ -326,6 +355,91 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         .filter((x) => Number.isFinite(x) && x > 0)
     );
   }, []);
+
+  const isStepValid = useCallback(
+    (s) => {
+      switch (s) {
+        case 1:
+          return !!form.baseSku && !!form.description_id && !!form.module_category_id;
+        case 2:
+          return !!form.name && Number(form.length_mm) > 0 && !!form.module_category_id;
+        case 3:
+          return !!form.facade_color;
+        case 4:
+          // Фото опционально, но модуль к этому моменту должен быть создан (создаем автоматом)
+          return true;
+        case 5:
+          return Number(form.final_price || 0) > 0;
+        default:
+          return false;
+      }
+    },
+    [form]
+  );
+
+  const saveModuleNow = useCallback(async () => {
+    if (!moduleId) {
+      loggerRef.current?.error("Нет moduleId. Сначала создайте модуль.");
+      return;
+    }
+
+    if (!isStepValid(1) || !isStepValid(2) || !isStepValid(3)) {
+      loggerRef.current?.error("Не заполнены обязательные поля (тип/размеры/цвет фасада).");
+      return;
+    }
+
+    if (isActive) {
+      if (!form.preview_url) {
+        loggerRef.current?.error("Для активного товара нужно выбрать превью.");
+        return;
+      }
+      if (!isStepValid(5)) {
+        loggerRef.current?.error("Для активного товара цена должна быть > 0.");
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const payload = {
+        name: String(form.name || "").trim(),
+        sku: toOptionalString(form.sku),
+        short_desc: form.short_desc ? String(form.short_desc) : null,
+        preview_url: form.preview_url || null,
+
+        characteristics: normalizeCharacteristics(form.characteristics),
+
+        base_sku: toOptionalString(form.baseSku),
+        description_id: toOptionalInt(form.description_id),
+        collection_id: toOptionalInt(form.collection_id),
+
+        length_mm: toOptionalInt(form.length_mm),
+        depth_mm: toOptionalInt(form.depth_mm),
+        height_mm: toOptionalInt(form.height_mm),
+
+        facade_color: form.facade_color || null,
+        corpus_color: form.corpus_color || null,
+        primary_color_id: toOptionalInt(form.primary_color_id),
+        secondary_color_id: toOptionalInt(form.secondary_color_id),
+        module_category_id: toOptionalInt(form.module_category_id),
+
+        final_price: isActive ? toOptionalNumber(form.final_price) : toOptionalNumber(form.final_price) ?? 0,
+        price: isActive ? toOptionalNumber(form.final_price) : toOptionalNumber(form.final_price) ?? 0,
+        is_active: !!isActive,
+
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
+        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
+      };
+
+      await put(`/modules/${moduleId}`, payload);
+      loggerRef.current?.info("Сохранено");
+      onDone?.();
+    } catch (e) {
+      loggerRef.current?.error("Не удалось сохранить модуль", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [form, isActive, isStepValid, moduleId, onDone, put, selectedParameterCategories, selectedParameters]);
 
   useEffect(() => {
     if (!initialModuleId) return;
@@ -446,6 +560,30 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     []
   );
 
+  const moduleCategoryItems = useMemo(() => {
+    return (referenceData.moduleCategories || [])
+      .slice()
+      .sort((a, b) => Number(a.id) - Number(b.id));
+  }, [referenceData.moduleCategories]);
+
+  const collectionItems = useMemo(() => {
+    return (referenceData.collections || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.collections]);
+
+  const productParameterItems = useMemo(() => {
+    return (referenceData.productParameters || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.productParameters]);
+
+  const productParameterCategoryItems = useMemo(() => {
+    return (referenceData.productParameterCategories || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.productParameterCategories]);
+
   const canSelectCorpus = !!form.facade_color;
 
   
@@ -469,27 +607,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     parts.push(skuNonceRef.current);
     return parts.filter(Boolean).join("-");
   }, []);
-
-  const isStepValid = useCallback(
-    (s) => {
-      switch (s) {
-        case 1:
-          return !!form.baseSku && !!form.description_id && !!form.module_category_id;
-        case 2:
-          return !!form.name && Number(form.length_mm) > 0 && !!form.module_category_id;
-        case 3:
-          return !!form.facade_color;
-        case 4:
-          // Фото опционально, но модуль к этому моменту должен быть создан (создаем автоматом)
-          return true;
-        case 5:
-          return Number(form.final_price || 0) > 0;
-        default:
-          return false;
-      }
-    },
-    [form]
-  );
 
   const handleTypeSelect = (baseSku) => {
     const initialSku = buildSku({ baseSku: baseSku.code, length_mm: 800 });
@@ -769,6 +886,16 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
             <div className="text-xs text-night-500">ID: {moduleId || "—"}</div>
           </div>
           <div className="flex flex-wrap gap-2">
+            {initialModuleId ? (
+              <SecureButton
+                type="button"
+                onClick={saveModuleNow}
+                className="px-3 py-2 text-xs flex items-center gap-2"
+                disabled={!moduleId || loading}
+              >
+                {loading ? <FaSpinner className="animate-spin" /> : <FaSave />} Сохранить
+              </SecureButton>
+            ) : null}
             {steps.map((s) => {
               const Icon = s.icon;
               return (
@@ -926,13 +1053,18 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
                 <label className="block text-sm font-semibold text-night-700 mb-3">
                   Категория модуля <span className="text-accent">*</span>
                 </label>
-                <select
+                <PopoverSelect
+                  items={moduleCategoryItems}
                   value={form.module_category_id ?? ""}
-                  onChange={(e) => {
-                    const next = e.target.value;
+                  disabled={Boolean(fixedModuleCategoryId)}
+                  placeholder="Выберите категорию…"
+                  searchable
+                  getKey={(c) => String(c.id)}
+                  getLabel={(c) => `${c.name}${c.sku_prefix ? ` (${String(c.sku_prefix).toUpperCase()})` : ""}`}
+                  onChange={(next) => {
                     setForm((prev) => ({
                       ...prev,
-                      module_category_id: next,
+                      module_category_id: String(next || ""),
                       baseSku: "",
                       description_id: null,
                       sku: "",
@@ -940,38 +1072,29 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
                     }));
                     setStep(1);
                   }}
-                  disabled={Boolean(fixedModuleCategoryId)}
-                  className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
-                >
-                  <option value="">Выберите категорию…</option>
-                  {(referenceData.moduleCategories || [])
-                    .slice()
-                    .sort((a, b) => Number(a.id) - Number(b.id))
-                    .map((c) => (
-                      <option key={c.id} value={String(c.id)}>
-                        {c.name}{c.sku_prefix ? ` (${String(c.sku_prefix).toUpperCase()})` : ""}
-                      </option>
-                    ))}
-                </select>
+                  buttonClassName="h-14 px-4 border-2 focus:ring-0"
+                  popoverClassName="max-w-xl"
+                  maxHeightClassName="max-h-80"
+                />
               </div>
 
               <div className="mt-6">
                 <label className="block text-sm font-semibold text-night-700 mb-3">Коллекция</label>
-                <select
+                <PopoverSelect
+                  size="lg"
+                  items={collectionItems}
                   value={form.collection_id ?? ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, collection_id: e.target.value }))}
-                  className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
-                >
-                  <option value="">Не выбрана</option>
-                  {(referenceData.collections || [])
-                    .slice()
-                    .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                    .map((c) => (
-                      <option key={c.id} value={String(c.id)}>
-                        {c.name}
-                      </option>
-                    ))}
-                </select>
+                  placeholder="Не выбрана"
+                  allowClear
+                  clearLabel="Не выбрана"
+                  searchable={collectionItems.length > 8}
+                  getKey={(c) => String(c.id)}
+                  getLabel={(c) => String(c?.name || "")}
+                  onChange={(next) => setForm((prev) => ({ ...prev, collection_id: String(next || "") }))}
+                  buttonClassName="h-14 px-4 border-2 focus:ring-0"
+                  popoverClassName="max-w-xl"
+                  maxHeightClassName="max-h-80"
+                />
               </div>
             </div>
 
@@ -1025,26 +1148,23 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
             <div className="mt-6 space-y-3">
               <div className="text-xs font-semibold text-night-700">Параметры</div>
 
-              <select
+              <PopoverSelect
+                size="lg"
+                items={productParameterItems}
                 value={""}
-                onChange={(e) => {
-                  const v = e.target.value;
+                placeholder="+ Добавить параметр…"
+                searchable={productParameterItems.length > 10}
+                getKey={(p) => String(p.id)}
+                getLabel={(p) => `#${p.id} ${p.name}`}
+                onChange={(next) => {
+                  const v = String(next || "");
                   if (!v) return;
                   addParameter(v);
-                  e.currentTarget.value = "";
                 }}
-                className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
-              >
-                <option value="">+ Добавить параметр…</option>
-                {(referenceData.productParameters || [])
-                  .slice()
-                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                  .map((p) => (
-                    <option key={p.id} value={String(p.id)}>
-                      #{p.id} {p.name}
-                    </option>
-                  ))}
-              </select>
+                buttonClassName="h-14 px-4 border-2 focus:ring-0"
+                popoverClassName="max-w-xl"
+                maxHeightClassName="max-h-80"
+              />
 
               {(selectedParameters || []).length === 0 ? (
                 <div className="text-sm text-night-500">Параметры не выбраны</div>
@@ -1052,6 +1172,10 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
                 <div className="space-y-2">
                   {selectedParameters.map((p, idx) => {
                     const full = (referenceData.productParameters || []).find((x) => Number(x.id) === Number(p.parameterId));
+                    const templates = parameterTemplatesById[String(p.parameterId)] || null;
+                    if (templates === null) {
+                      void ensureParameterTemplatesLoaded(p.parameterId);
+                    }
                     return (
                       <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-2xl p-3 bg-white">
                         <div className="min-w-0">
@@ -1059,6 +1183,40 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
                           <div className="text-xs text-night-500">ID: {p.parameterId}</div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <PopoverSelect
+                            size="sm"
+                            items={Array.isArray(templates) ? templates : []}
+                            value={""}
+                            placeholder="Шаблон…"
+                            searchable={(Array.isArray(templates) ? templates : []).length > 8}
+                            getKey={(t) => String(t.id)}
+                            getLabel={(t) => {
+                              const labelValue = String(t?.value || "").trim();
+                              const labelQty = Number(t?.quantity);
+                              const qtySuffix = Number.isFinite(labelQty) && labelQty > 1 ? ` (${labelQty})` : "";
+                              return labelValue ? `${labelValue}${qtySuffix}` : `Количество${qtySuffix}`;
+                            }}
+                            onChange={(next) => {
+                              const templateId = Number(next);
+                              if (!Number.isFinite(templateId) || templateId <= 0) return;
+                              const list = parameterTemplatesById[String(p.parameterId)] || [];
+                              const t = list.find((x) => Number(x.id) === templateId);
+                              if (!t) return;
+                              setSelectedParameters((prev) => {
+                                const arr = [...prev];
+                                if (!arr[idx]) return prev;
+                                arr[idx] = {
+                                  ...arr[idx],
+                                  value: t.value ?? "",
+                                  quantity: Number(t.quantity) || 1,
+                                };
+                                return arr;
+                              });
+                            }}
+                            buttonClassName="h-10 rounded-lg border border-night-200 bg-white text-night-900 text-xs"
+                            popoverClassName="rounded-lg"
+                            maxHeightClassName="max-h-64"
+                          />
                           <SecureInput
                             value={String(p.value ?? "")}
                             onChange={(v) =>
@@ -1096,26 +1254,23 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
 
             <div className="mt-6 space-y-3">
               <div className="text-sm font-semibold text-night-900">Категории параметров изделий</div>
-              <select
+              <PopoverSelect
+                size="lg"
+                items={productParameterCategoryItems}
                 value={""}
-                onChange={(e) => {
-                  const v = e.target.value;
+                placeholder="+ Добавить категорию…"
+                searchable={productParameterCategoryItems.length > 10}
+                getKey={(c) => String(c.id)}
+                getLabel={(c) => String(c?.name || "")}
+                onChange={(next) => {
+                  const v = String(next || "");
                   if (!v) return;
                   addParameterCategory(v);
-                  e.currentTarget.value = "";
                 }}
-                className="w-full h-14 px-4 rounded-2xl border-2 border-night-200 bg-white text-night-900 focus:outline-none focus:border-accent"
-              >
-                <option value="">+ Добавить категорию…</option>
-                {(referenceData.productParameterCategories || [])
-                  .slice()
-                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                  .map((c) => (
-                    <option key={c.id} value={String(c.id)}>
-                      #{c.id} {c.name}
-                    </option>
-                  ))}
-              </select>
+                buttonClassName="h-14 px-4 border-2 focus:ring-0"
+                popoverClassName="max-w-xl"
+                maxHeightClassName="max-h-80"
+              />
 
               {(selectedParameterCategories || []).length === 0 ? (
                 <div className="text-sm text-night-500">Категории не выбраны</div>

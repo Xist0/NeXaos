@@ -4,7 +4,7 @@ const fs = require("fs");
 const multer = require("multer");
 const ApiError = require("../utils/api-error");
 const asyncHandler = require("../utils/async-handler");
-const { authGuard, optionalAuth, requireAdminOrManager } = require("../middleware/auth.middleware");
+const { authGuard, optionalAuth, requireAdminOrManager, requireAdmin, requireAnyRole } = require("../middleware/auth.middleware");
 const config = require("../config/env");
 const entities = require("../modules/entities.config");
 const createCrudController = require("../controllers/crud.controller");
@@ -14,6 +14,35 @@ const moduleController = require("../controllers/module.controller");
 const kitSolutionController = require("../controllers/kit-solution.controller");
 const catalogItemController = require("../controllers/catalog-item.controller");
 const catalogController = require("../controllers/catalog.controller");
+const userController = require("../controllers/user.controller");
+
+const SENSITIVE_KEYS = new Set([
+  "password",
+  "pass",
+  "token",
+  "refreshToken",
+  "accessToken",
+  "authorization",
+  "cookie",
+  "set-cookie",
+]);
+
+const redact = (value, depth = 0) => {
+  if (depth > 6) return "[REDACTED]";
+  if (!value) return value;
+  if (Array.isArray(value)) return value.map((v) => redact(v, depth + 1));
+  if (typeof value !== "object") return value;
+
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (SENSITIVE_KEYS.has(String(k).toLowerCase())) {
+      out[k] = "[REDACTED]";
+      continue;
+    }
+    out[k] = redact(v, depth + 1);
+  }
+  return out;
+};
 
 // Кастомные роуты для orders
 router.get("/orders", authGuard, asyncHandler(orderController.list));
@@ -27,6 +56,41 @@ router.put(
   asyncHandler(createCrudController(entities.find((e) => e.route === "orders")).update)
 );
 
+router.post(
+  "/users/:id/reset-password",
+  authGuard,
+  requireAdmin,
+  asyncHandler(userController.resetPassword)
+);
+
+const managerWritableEntities = new Set(["modules", "kit-solutions", "catalog-items"]);
+
+const adminOnlyReadEntities = new Set(["users", "roles", "sessions"]);
+const staffReadableEntities = new Set(["audit-logs"]);
+
+const getReadAuthChain = (entityRoute) => {
+  if (adminOnlyReadEntities.has(entityRoute)) {
+    return [authGuard, requireAdmin];
+  }
+  if (staffReadableEntities.has(entityRoute)) {
+    return [authGuard, requireAnyRole(["admin", "manager"])];
+  }
+  return [optionalAuth];
+};
+
+const getWriteAuthChain = (entityRoute, method) => {
+  const m = String(method || "").toUpperCase();
+  if (m === "DELETE") return [authGuard, requireAdmin];
+
+  // Создание/редактирование товаров разрешаем менеджеру
+  if (managerWritableEntities.has(entityRoute)) {
+    return [authGuard, requireAnyRole(["admin", "manager"])];
+  }
+
+  // Остальное по умолчанию — только админ
+  return [authGuard, requireAdmin];
+};
+
 entities.forEach((entity) => {
   // Пропускаем orders, так как у них кастомные роуты
   if (entity.route === "orders") return;
@@ -38,13 +102,17 @@ entities.forEach((entity) => {
 
   // Заметки к заказам: только для админа/менеджера
   const isOrderNotes = entity.route === "order-notes";
-  const auth = isOrderNotes ? [authGuard, requireAdminOrManager] : [authGuard];
+  const auth = isOrderNotes ? [authGuard, requireAdminOrManager] : getWriteAuthChain(entity.route, "POST");
+  const authUpdate = isOrderNotes ? [authGuard, requireAdminOrManager] : getWriteAuthChain(entity.route, "PUT");
+  const authDelete = isOrderNotes ? [authGuard, requireAdminOrManager] : getWriteAuthChain(entity.route, "DELETE");
 
-  router.get(basePath, optionalAuth, asyncHandler(controller.list));
-  router.get(`${basePath}/:id`, optionalAuth, asyncHandler(controller.getById));
+  const authRead = getReadAuthChain(entity.route);
+
+  router.get(basePath, ...authRead, asyncHandler(controller.list));
+  router.get(`${basePath}/:id`, ...authRead, asyncHandler(controller.getById));
   router.post(basePath, ...auth, asyncHandler(controller.create));
-  router.put(`${basePath}/:id`, ...auth, asyncHandler(controller.update));
-  router.delete(`${basePath}/:id`, ...auth, asyncHandler(controller.remove));
+  router.put(`${basePath}/:id`, ...authUpdate, asyncHandler(controller.update));
+  router.delete(`${basePath}/:id`, ...authDelete, asyncHandler(controller.remove));
 });
 
 router.get("/catalog/:id", optionalAuth, asyncHandler(catalogController.getById));
@@ -53,8 +121,9 @@ router.post("/logs", (req, res) => {
   try {
     const body = req.body || {};
     const { level = "info", message = "Лог без сообщения", meta = {} } = body;
-    const metaStr = meta && typeof meta === "object" && Object.keys(meta).length > 0 
-      ? JSON.stringify(meta) 
+    const safeMeta = redact(meta);
+    const metaStr = safeMeta && typeof safeMeta === "object" && Object.keys(safeMeta).length > 0 
+      ? JSON.stringify(safeMeta) 
       : "";
     console.log(`[ЛОГ КЛИЕНТА] [${level}] ${message}${metaStr ? " " + metaStr : ""}`);
     res.status(204).end(); // No Content

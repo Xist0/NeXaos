@@ -5,8 +5,10 @@ import SecureInput from "../ui/SecureInput";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import ImageManager from "./ImageManager";
+import { formatCurrency } from "../../utils/format";
 import ColorBadge from "../ui/ColorBadge";
 import { getThumbUrl } from "../../utils/image";
+import PopoverSelect from "../ui/PopoverSelect";
 
 const LazyImg = ({ src, alt, className, onError }) => {
   const holderRef = useRef(null);
@@ -120,6 +122,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
 
+  const [isActive, setIsActive] = useState(false);
+
   const [openPrimary, setOpenPrimary] = useState(false);
   const [openSecondary, setOpenSecondary] = useState(false);
   const colorPickerRef = useRef(null);
@@ -153,6 +157,118 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
   const [selectedParameters, setSelectedParameters] = useState([]);
   const [selectedParameterCategories, setSelectedParameterCategories] = useState([]);
+
+  const [parameterTemplatesById, setParameterTemplatesById] = useState({});
+  const templatesLoadingRef = useRef(new Set());
+
+  const [templatesOverlayOpen, setTemplatesOverlayOpen] = useState(false);
+  const [allTemplatesLoading, setAllTemplatesLoading] = useState(false);
+  const [allTemplates, setAllTemplates] = useState([]);
+  const templatesPopoverRef = useRef(null);
+
+  const ensureParameterTemplatesLoaded = useCallback(
+    async (parameterId) => {
+      const id = Number(parameterId);
+      if (!Number.isFinite(id) || id <= 0) return;
+      if (parameterTemplatesById[String(id)]) return;
+      if (templatesLoadingRef.current.has(id)) return;
+      templatesLoadingRef.current.add(id);
+      try {
+        const res = await getRef.current("/product-parameter-value-templates", { limit: 200, parameterId: id });
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setParameterTemplatesById((prev) => ({ ...prev, [String(id)]: list }));
+      } catch (_e) {
+        setParameterTemplatesById((prev) => ({ ...prev, [String(id)]: [] }));
+      } finally {
+        templatesLoadingRef.current.delete(id);
+      }
+    },
+    [parameterTemplatesById]
+  );
+
+  const collectionItems = useMemo(() => {
+    return (referenceData.collections || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.collections]);
+
+  const productParameterItems = useMemo(() => {
+    return (referenceData.productParameters || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.productParameters]);
+
+  const productParameterCategoryItems = useMemo(() => {
+    return (referenceData.productParameterCategories || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.productParameterCategories]);
+
+  const openTemplatesOverlay = useCallback(async () => {
+    setTemplatesOverlayOpen(true);
+    if (allTemplates.length > 0) return;
+
+    setAllTemplatesLoading(true);
+    try {
+      const res = await getRef.current("/product-parameter-value-templates", { limit: 500 });
+      const list = Array.isArray(res?.data) ? res.data : [];
+      setAllTemplates(list);
+
+      setParameterTemplatesById((prev) => {
+        const next = { ...prev };
+        for (const t of list) {
+          const pid = Number(t?.parameter_id);
+          if (!Number.isFinite(pid) || pid <= 0) continue;
+          const key = String(pid);
+          if (!Array.isArray(next[key])) next[key] = [];
+          if (!next[key].some((x) => Number(x?.id) === Number(t?.id))) {
+            next[key] = [...next[key], t];
+          }
+        }
+        return next;
+      });
+    } catch (_e) {
+      setAllTemplates([]);
+    } finally {
+      setAllTemplatesLoading(false);
+    }
+  }, [allTemplates.length]);
+
+  useEffect(() => {
+    if (!templatesOverlayOpen) return;
+    const onPointerDown = (e) => {
+      const root = templatesPopoverRef.current;
+      if (!root) return;
+      if (root.contains(e.target)) return;
+      setTemplatesOverlayOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [templatesOverlayOpen]);
+
+  const applyTemplateToParameter = useCallback(
+    ({ parameterId, template }) => {
+      const pid = Number(parameterId);
+      if (!Number.isFinite(pid) || pid <= 0) return;
+      if (!template) return;
+
+      const nextValue = template?.value ?? "";
+      const nextQty = Number(template?.quantity) || 1;
+
+      setSelectedParameters((prev) => {
+        const idx = prev.findIndex((x) => Number(x?.parameterId) === pid);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = { ...next[idx], value: nextValue, quantity: nextQty };
+          return next;
+        }
+        return [...prev, { parameterId: pid, quantity: nextQty, value: nextValue }];
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     getRef.current = get;
@@ -196,6 +312,15 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       if (!next[index]) return prev;
       const q = Number(qty);
       next[index] = { ...next[index], quantity: Number.isFinite(q) ? Math.max(1, Math.round(q)) : 1 };
+      return next;
+    });
+  };
+
+  const updateParameterValue = (index, value) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], value: value === null || value === undefined ? "" : String(value) };
       return next;
     });
   };
@@ -288,6 +413,95 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const canProceedBase = useCallback(() => {
+    if (!form.name || !String(form.name).trim()) return false;
+    return true;
+  }, [form.name]);
+
+  const getEffectiveSku = useCallback(() => {
+    const explicit = String(form.sku || "").trim();
+    if (explicit) return explicit;
+
+    const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
+    const colors = Array.isArray(referenceData.colors) ? referenceData.colors : [];
+    const primary = colors.find((c) => Number(c?.id) === Number(form.primary_color_id));
+    const secondary = colors.find((c) => Number(c?.id) === Number(form.secondary_color_id));
+
+    const parts = [
+      normalizeSkuPart(articleName),
+      normalizeNum(form.length_mm),
+      normalizeNum(form.depth_mm),
+      normalizeNum(form.height_mm),
+      normalizeSkuPart(primary?.sku || ""),
+      normalizeSkuPart(secondary?.sku || ""),
+    ].filter(Boolean);
+
+    return parts.length ? parts.join("-") : "";
+  }, [form.baseSku, form.depth_mm, form.height_mm, form.length_mm, form.name, form.primary_color_id, form.secondary_color_id, form.sku, referenceData.colors]);
+
+  const saveItemNow = useCallback(async () => {
+    if (!itemId) {
+      loggerRef.current?.error("Нет itemId. Сначала создайте позицию.");
+      return;
+    }
+
+    if (!canProceedBase()) {
+      loggerRef.current?.error("Заполните название");
+      return;
+    }
+
+    if (isActive) {
+      if (!form.preview_url) {
+        loggerRef.current?.error("Для активного товара нужно выбрать превью");
+        return;
+      }
+      const price = Number(form.final_price || 0);
+      if (!Number.isFinite(price) || price <= 0) {
+        loggerRef.current?.error("Для активного товара цена должна быть > 0");
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const payload = {
+        base_sku: toOptionalString(form.baseSku),
+        sku: toOptionalString(getEffectiveSku()),
+        name: String(form.name).trim(),
+        description: toOptionalString(form.description),
+
+        characteristics: normalizeCharacteristics(form.characteristics),
+
+        category_group: fixedValues?.category_group || null,
+        category: fixedValues?.category || null,
+
+        collection_id: toOptionalInt(form.collection_id),
+        primary_color_id: toOptionalInt(form.primary_color_id),
+        secondary_color_id: toOptionalInt(form.secondary_color_id),
+
+        length_mm: toOptionalInt(form.length_mm),
+        depth_mm: toOptionalInt(form.depth_mm),
+        height_mm: toOptionalInt(form.height_mm),
+
+        base_price: 0,
+        final_price: toOptionalNumber(form.final_price) ?? 0,
+        preview_url: form.preview_url || null,
+        is_active: !!isActive,
+
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
+        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
+      };
+
+      await put(`/catalog-items/${itemId}`, payload);
+      loggerRef.current?.info("Сохранено");
+      onDone?.();
+    } catch (e) {
+      loggerRef.current?.error("Не удалось сохранить позицию каталога", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [canProceedBase, fixedValues?.category, fixedValues?.category_group, form, getEffectiveSku, isActive, itemId, onDone, put, selectedParameterCategories, selectedParameters]);
+
   const applyLoadedItemToForm = useCallback((data) => {
     setForm((prev) => ({
       ...prev,
@@ -305,6 +519,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       final_price: data.final_price != null ? String(data.final_price) : "",
     }));
 
+    setIsActive(!!data.is_active);
+
     const params = Array.isArray(data.parameters) ? data.parameters : [];
     setSelectedParameters(
       params
@@ -314,13 +530,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
           value: p?.value === null || p?.value === undefined ? "" : String(p.value),
         }))
         .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
-    );
-
-    const cats = Array.isArray(data.parameterCategories) ? data.parameterCategories : [];
-    setSelectedParameterCategories(
-      cats
-        .map((c) => Number(c?.id))
-        .filter((x) => Number.isFinite(x) && x > 0)
     );
   }, []);
 
@@ -390,11 +599,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     []
   );
 
-  const canProceedBase = useCallback(() => {
-    if (!form.name || !String(form.name).trim()) return false;
-    return true;
-  }, [form.name]);
-
   const createItemIfNeeded = useCallback(async () => {
     if (itemId) return itemId;
     if (createLockRef.current) return null;
@@ -409,7 +613,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     try {
       const payload = {
         base_sku: toOptionalString(form.baseSku),
-        sku: toOptionalString(effectiveSku),
+        sku: toOptionalString(getEffectiveSku()),
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
 
@@ -485,7 +689,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     try {
       const payload = {
         base_sku: toOptionalString(form.baseSku),
-        sku: toOptionalString(effectiveSku),
+        sku: toOptionalString(getEffectiveSku()),
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
 
@@ -602,6 +806,16 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
             <div className="text-xs text-night-500">ID: {itemId || "—"}</div>
           </div>
           <div className="flex flex-wrap gap-2">
+            {initialCatalogItemId ? (
+              <SecureButton
+                type="button"
+                onClick={saveItemNow}
+                className="px-3 py-2 text-xs flex items-center gap-2"
+                disabled={!itemId || loading}
+              >
+                {loading ? <FaSpinner className="animate-spin" /> : <FaSave />} Сохранить
+              </SecureButton>
+            ) : null}
             {steps.map((s) => {
               const Icon = s.icon;
               return (
@@ -659,71 +873,183 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
             <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Коллекция</div>
-              <select
+              <PopoverSelect
+                size="md"
+                items={collectionItems}
                 value={form.collection_id}
-                onChange={(e) => setForm((p) => ({ ...p, collection_id: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Не выбрана</option>
-                {referenceData.collections
-                  .slice()
-                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </select>
+                placeholder="Не выбрана"
+                allowClear
+                clearLabel="Не выбрана"
+                searchable={collectionItems.length > 8}
+                getKey={(c) => String(c.id)}
+                getLabel={(c) => String(c?.name || "")}
+                onChange={(next) => setForm((p) => ({ ...p, collection_id: String(next || "") }))}
+                buttonClassName="rounded-lg"
+                popoverClassName="rounded-lg max-w-xl"
+                maxHeightClassName="max-h-80"
+              />
             </label>
 
             <div className="space-y-3">
               <div className="text-xs font-semibold text-night-700">Параметры</div>
-              <select
-                value=""
-                onChange={(e) => {
-                  addParameter(e.target.value);
-                  e.currentTarget.value = "";
-                }}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Добавить параметр...</option>
-                {referenceData.productParameters
-                  .slice()
-                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>
-                      #{p.id} {p.name}
-                    </option>
-                  ))}
-              </select>
+              <div className="relative flex flex-wrap items-center gap-2">
+                <div className="min-w-0 w-56">
+                  <PopoverSelect
+                    size="sm"
+                    items={productParameterItems}
+                    value={""}
+                    placeholder="Параметр…"
+                    searchable={productParameterItems.length > 10}
+                    getKey={(p) => String(p.id)}
+                    getLabel={(p) => `#${p.id} ${p.name}`}
+                    onChange={(next) => {
+                      const v = String(next || "");
+                      if (!v) return;
+                      addParameter(v);
+                    }}
+                    buttonClassName="rounded-lg"
+                    popoverClassName="rounded-lg max-w-xl"
+                    maxHeightClassName="max-h-80"
+                  />
+                </div>
+                <SecureButton
+                  type="button"
+                  variant="outline"
+                  className="px-4 py-2 text-xs whitespace-nowrap rounded-2xl"
+                  onClick={() => {
+                    if (templatesOverlayOpen) {
+                      setTemplatesOverlayOpen(false);
+                      return;
+                    }
+                    void openTemplatesOverlay();
+                  }}
+                >
+                  Шаблоны параметров
+                </SecureButton>
+
+                {templatesOverlayOpen ? (
+                  <div
+                    ref={templatesPopoverRef}
+                    className="absolute left-0 top-full mt-2 z-50 w-full max-w-xl"
+                  >
+                    <div className="border border-night-200 rounded-lg bg-white shadow-lg overflow-hidden">
+                      <div className="px-3 py-2 border-b border-night-100 flex items-center justify-between gap-3">
+                        <div className="text-xs font-semibold text-night-700">Выберите шаблон</div>
+                        <SecureButton type="button" variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setTemplatesOverlayOpen(false)}>
+                          Закрыть
+                        </SecureButton>
+                      </div>
+
+                      {allTemplatesLoading ? (
+                        <div className="px-3 py-3 text-sm text-night-600">Загрузка…</div>
+                      ) : null}
+
+                      {!allTemplatesLoading && allTemplates.length === 0 ? (
+                        <div className="px-3 py-3 text-sm text-night-600">Шаблоны не найдены</div>
+                      ) : null}
+
+                      {!allTemplatesLoading && allTemplates.length > 0 ? (
+                        <div className="max-h-64 overflow-auto">
+                          {allTemplates
+                            .slice()
+                            .sort((a, b) => {
+                              const pa = referenceData.productParameters.find((x) => Number(x?.id) === Number(a?.parameter_id));
+                              const pb = referenceData.productParameters.find((x) => Number(x?.id) === Number(b?.parameter_id));
+                              const n = String(pa?.name || "").localeCompare(String(pb?.name || ""), "ru");
+                              if (n !== 0) return n;
+                              return String(a?.value || "").localeCompare(String(b?.value || ""), "ru");
+                            })
+                            .map((t) => {
+                              const pid = Number(t?.parameter_id);
+                              const full = referenceData.productParameters.find((x) => Number(x?.id) === pid);
+                              const labelValue = String(t?.value || "").trim();
+                              const labelQty = Number(t?.quantity);
+                              const qty = Number.isFinite(labelQty) && labelQty > 0 ? labelQty : 1;
+                              return (
+                                <button
+                                  key={t.id}
+                                  type="button"
+                                  className="w-full text-left px-3 py-2 hover:bg-night-50 transition-colors border-b border-night-100 last:border-b-0"
+                                  onClick={() => {
+                                    applyTemplateToParameter({ parameterId: pid, template: t });
+                                    setTemplatesOverlayOpen(false);
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="text-xs font-semibold text-night-900 truncate">{full?.name || `#${pid}`}</div>
+                                    </div>
+                                    <div className="text-xs text-night-700 truncate max-w-[12rem]">{labelValue || "—"}</div>
+                                    <div className="text-xs text-night-500 shrink-0">×{qty}</div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
 
               {selectedParameters.length > 0 ? (
                 <div className="space-y-2">
                   {selectedParameters.map((p, idx) => {
                     const full = referenceData.productParameters.find((x) => Number(x.id) === Number(p.parameterId));
+                    const templates = parameterTemplatesById[String(p.parameterId)] || null;
+                    if (templates === null) {
+                      void ensureParameterTemplatesLoaded(p.parameterId);
+                    }
                     return (
-                      <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
+                      <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-2xl p-3 bg-white">
                         <div className="min-w-0">
                           <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${p.parameterId}`}</div>
                           <div className="text-xs text-night-500">ID: {p.parameterId}</div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <SecureInput
-                            value={String(p.value ?? "")}
-                            onChange={(v) =>
+                          <PopoverSelect
+                            size="sm"
+                            items={Array.isArray(templates) ? templates : []}
+                            value={""}
+                            placeholder="Шаблон…"
+                            searchable={(Array.isArray(templates) ? templates : []).length > 8}
+                            getKey={(t) => String(t.id)}
+                            getLabel={(t) => {
+                              const labelValue = String(t?.value || "").trim();
+                              const labelQty = Number(t?.quantity);
+                              const qtySuffix = Number.isFinite(labelQty) && labelQty > 1 ? ` (${labelQty})` : "";
+                              return labelValue ? `${labelValue}${qtySuffix}` : `Количество${qtySuffix}`;
+                            }}
+                            onChange={(next) => {
+                              const templateId = Number(next);
+                              if (!Number.isFinite(templateId) || templateId <= 0) return;
+                              const list = parameterTemplatesById[String(p.parameterId)] || [];
+                              const t = list.find((x) => Number(x.id) === templateId);
+                              if (!t) return;
                               setSelectedParameters((prev) => {
-                                const next = [...prev];
-                                if (!next[idx]) return prev;
-                                next[idx] = { ...next[idx], value: v };
-                                return next;
-                              })
-                            }
-                            className="w-48"
+                                const arr = [...prev];
+                                if (!arr[idx]) return prev;
+                                arr[idx] = {
+                                  ...arr[idx],
+                                  value: t.value ?? "",
+                                  quantity: Number(t.quantity) || 1,
+                                };
+                                return arr;
+                              });
+                            }}
+                            buttonClassName="h-10 rounded-lg border border-night-200 bg-white text-night-900 text-xs"
+                            popoverClassName="rounded-lg"
+                            maxHeightClassName="max-h-64"
+                          />
+                          <SecureInput
+                            value={String(p.value)}
+                            onChange={(v) => updateParameterValue(idx, v)}
                             placeholder="Значение"
+                            className="w-48"
                           />
                           <SecureInput
                             type="number"
-                            value={String(p.quantity ?? 1)}
+                            value={String(p.quantity)}
                             onChange={(v) => updateParameterQty(idx, v)}
                             className="w-24"
                           />
@@ -742,26 +1068,23 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
             <div className="space-y-3">
               <div className="text-xs font-semibold text-night-700">Категории параметров изделий</div>
-              <select
-                value=""
-                onChange={(e) => {
-                  const v = e.target.value;
+              <PopoverSelect
+                size="md"
+                items={productParameterCategoryItems}
+                value={""}
+                placeholder="Категория…"
+                searchable={productParameterCategoryItems.length > 10}
+                getKey={(c) => String(c.id)}
+                getLabel={(c) => String(c?.name || "")}
+                onChange={(next) => {
+                  const v = String(next || "");
                   if (!v) return;
                   addParameterCategory(v);
-                  e.currentTarget.value = "";
                 }}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Добавить категорию...</option>
-                {(referenceData.productParameterCategories || [])
-                  .slice()
-                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      #{c.id} {c.name}
-                    </option>
-                  ))}
-              </select>
+                buttonClassName="rounded-lg"
+                popoverClassName="rounded-lg max-w-xl"
+                maxHeightClassName="max-h-80"
+              />
 
               {(selectedParameterCategories || []).length > 0 ? (
                 <div className="space-y-2">

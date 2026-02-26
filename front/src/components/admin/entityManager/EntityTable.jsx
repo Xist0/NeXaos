@@ -1,5 +1,5 @@
 import SecureButton from "../../ui/SecureButton";
-import { FaEdit, FaTrash } from "react-icons/fa";
+import { LuPencil, LuTrash2 } from "react-icons/lu";
 import { getImageUrl } from "../../../utils/image";
 
 const EntityTable = ({
@@ -10,6 +10,7 @@ const EntityTable = ({
   onEdit,
   onDelete,
   dragSort,
+  allowDelete = true,
 }) => {
   const list = dragSort?.isReorderable ? dragSort.orderedItems : items;
   const colSpan = normalizedFields.length + 2 + (dragSort?.isReorderable ? 1 : 0);
@@ -17,17 +18,23 @@ const EntityTable = ({
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
+        <table className="min-w-full table-fixed text-left text-sm">
           <thead>
             <tr className="text-night-400">
               {dragSort?.isReorderable && <th className="py-3 pr-4 w-8"></th>}
-              <th className="py-3 pr-4">ID</th>
+              <th className="py-3 pr-4 w-14">ID</th>
               {normalizedFields.map((field) => (
-                <th key={field.name} className="py-3 pr-4">
+                <th
+                  key={field.name}
+                  className={
+                    "py-3 pr-4" +
+                    ((field?.type === "checkbox" || field?.inputType === "image") ? " text-center" : "")
+                  }
+                >
                   {field.label}
                 </th>
               ))}
-              <th className="py-3 pr-4">Действия</th>
+              <th className="py-3 pr-4 w-36 text-center">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -57,21 +64,30 @@ const EntityTable = ({
                     </span>
                   </td>
                 )}
-                <td className="py-3 pr-4 font-semibold">#{item.id || "—"}</td>
+                <td className="py-3 pr-4 font-semibold whitespace-nowrap text-xs">#{item.id || "—"}</td>
                 {normalizedFields.map((field) => (
-                  <td key={field.name} className="py-3 pr-4">
+                  <td
+                    key={field.name}
+                    className={
+                      "py-3 pr-4" +
+                      ((field?.type === "checkbox" || field?.inputType === "image") ? " text-center" : "")
+                    }
+                  >
                     {field.inputType === "image" && item[field.name] ? (
-                      <img
-                        src={getImageUrl(item[field.name])}
-                        alt={field.label}
-                        className="h-10 w-10 rounded object-cover border border-night-100"
-                        crossOrigin="anonymous"
-                        onError={(e) => {
-                          e.target.style.display = "none";
-                        }}
-                      />
+                      <div className="flex justify-center">
+                        <img
+                          src={getImageUrl(item[field.name])}
+                          alt={field.label}
+                          className="h-8 w-8 rounded object-cover border border-night-100"
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            e.target.style.display = "none";
+                          }}
+                        />
+                      </div>
                     ) : field.type === "checkbox" ? (
-                      (() => {
+                      <span className="inline-flex justify-center w-full">
+                        {(() => {
                         const v = item[field.name];
                         const checked =
                           v === true ||
@@ -86,7 +102,8 @@ const EntityTable = ({
 
                         if (v === undefined || v === null || v === "") return "—";
                         return checked ? "Да" : knownFalse ? "Нет" : v ? "Да" : "Нет";
-                      })()
+                        })()}
+                      </span>
                     ) : field.type === "color" && item[field.name] ? (
                       (() => {
                         const colorId = Number(item[field.name]);
@@ -120,33 +137,39 @@ const EntityTable = ({
                             ? "universal"
                             : raw;
                         const opt = field.options.find((o) => String(o?.value) === String(normalizedValue));
-                        return opt?.label ?? (normalizedValue ?? "—");
+                        return (
+                          <span className="block min-w-0 max-w-full break-words clamp-2">
+                            {opt?.label ?? (normalizedValue ?? "—")}
+                          </span>
+                        );
                       })()
                     ) : (
-                      item[field.name] ?? "—"
+                      <span className="block min-w-0 max-w-full break-words clamp-2">
+                        {item[field.name] ?? "—"}
+                      </span>
                     )}
                   </td>
                 ))}
-                <td className="py-3 pr-4">
-                  <div className="flex gap-2">
+                <td className="py-3 pr-4 text-center">
+                  <div className="flex justify-center gap-2">
                     <SecureButton
                       variant="outline"
-                      className="px-3 py-2 text-xs flex items-center gap-1.5"
+                      className="h-10 px-4 py-2 text-xs flex items-center justify-center border-accent/30 text-accent-dark hover:border-accent/50 hover:bg-accent/10"
                       onClick={() => onEdit(item)}
                       title="Редактировать"
                     >
-                      <FaEdit />
-                      Редактировать
+                      <LuPencil size={16} />
                     </SecureButton>
-                    <SecureButton
-                      variant="ghost"
-                      className="px-3 py-2 text-xs flex items-center gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
-                      onClick={() => onDelete(item.id, item)}
-                      title="Удалить"
-                    >
-                      <FaTrash />
-                      Удалить
-                    </SecureButton>
+                    {allowDelete && (
+                      <SecureButton
+                        variant="ghost"
+                        className="h-10 px-4 py-2 text-xs flex items-center justify-center border border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => onDelete(item.id, item)}
+                        title="Удалить"
+                      >
+                        <LuTrash2 size={16} />
+                      </SecureButton>
+                    )}
                   </div>
                 </td>
               </tr>

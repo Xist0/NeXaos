@@ -44,13 +44,6 @@ rawClient.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken || localStorage.getItem("nexaos_access_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
-    // Логируем проверку токена для важных действий
-    if (config.method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(config.method.toUpperCase())) {
-      logger.info("Проверка токена при выполнении действия", {
-        method: config.method,
-        url: config.url,
-      });
-    }
   }
   return config;
 });

@@ -31,6 +31,32 @@ const list = async (entity, queryParams = {}) => {
   let sql = `SELECT ${fields} FROM ${entity.table}`;
   const params = [];
   const conditions = [];
+
+  if (entity.table === "audit_logs") {
+    // В админке нужно показывать имя/роль сотрудника, а не user_id.
+    // Также сортируем по времени создания (новые сверху).
+    // Важно: при JOIN появляется неоднозначность колонок (например, id).
+    // Поэтому всегда выбираем al.* (а не * или список без алиаса).
+    sql = `SELECT al.*, u.full_name AS user_full_name, r.name AS user_role_name
+      FROM audit_logs al
+      LEFT JOIN users u ON u.id = al.user_id
+      LEFT JOIN roles r ON r.id = u.role_id`;
+
+    sql += ` ORDER BY al.created_at DESC LIMIT $1 OFFSET $2`;
+    params.push(safeLimit, safeOffset);
+    const { rows } = await query(sql, params);
+    return rows;
+  }
+
+  if (entity.table === "product_parameter_value_templates") {
+    if (queryParams.parameterId) {
+      const id = parseInt(queryParams.parameterId, 10);
+      if (!Number.isNaN(id) && id > 0) {
+        conditions.push(`parameter_id = $${params.length + 1}`);
+        params.push(id);
+      }
+    }
+  }
   
   // Фильтрация для модулей
   if (entity.table === "modules") {
@@ -192,6 +218,19 @@ const list = async (entity, queryParams = {}) => {
     if (sort === "popular_desc") orderBy = `pop.popularity_qty DESC NULLS LAST, modules.${entity.idColumn} DESC`;
 
     sql += ` ORDER BY ${orderBy} LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(safeLimit, safeOffset);
+  } else if (entity.table === "product_parameter_value_templates") {
+    if (search) {
+      const p = `$${params.length + 1}`;
+      conditions.push(`COALESCE(value, '') ILIKE ('%' || ${p} || '%')`);
+      params.push(String(search));
+    }
+
+    if (conditions.length > 0) {
+      sql += ` WHERE ${conditions.join(" AND ")}`;
+    }
+
+    sql += ` ORDER BY ${entity.idColumn} DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(safeLimit, safeOffset);
   } else if (entity.table === "catalog_items") {
     sql = `SELECT ${fields}, pop.popularity_qty

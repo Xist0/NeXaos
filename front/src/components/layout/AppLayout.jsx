@@ -64,7 +64,7 @@ const MobileMenu = ({ closeMenu, user, role, requireAuth, logout, cartCount }) =
       >
         Корзина{cartCount > 0 ? ` (${cartCount})` : ""}
       </NavLink>
-      {role === ROLES.ADMIN && (
+      {(role === ROLES.ADMIN || role === ROLES.MANAGER) && (
         <NavLink to="/admin" onClick={closeMenu} className="px-4 py-3 rounded-lg text-lg transition text-accent-dark font-semibold hover:bg-accent/10">
           Админ
         </NavLink>
@@ -113,7 +113,7 @@ const AppLayout = () => {
                 {link.label}
               </NavLink>
             ))}
-            {role === ROLES.ADMIN && <NavLink to="/admin" className="text-accent-dark font-semibold">Админ</NavLink>}
+            {(role === ROLES.ADMIN || role === ROLES.MANAGER) && <NavLink to="/admin" className="text-accent-dark font-semibold">Админ</NavLink>}
           </nav>
           
           <div className="flex items-center gap-2 sm:gap-3">

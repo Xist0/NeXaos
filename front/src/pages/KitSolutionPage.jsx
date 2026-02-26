@@ -322,15 +322,15 @@ const KitSolutionPage = () => {
         const qty = Number(p?.quantity);
         const value = p?.value === null || p?.value === undefined ? "" : String(p.value).trim();
         if (!name) return;
+
+        const hasQty = Number.isFinite(qty) && qty > 1;
         if (value) {
-          list.push({ label: name, value });
+          list.push({ label: name, value: hasQty ? `${value} (${qty})` : value });
           return;
         }
-        if (Number.isFinite(qty) && qty > 1) {
-          list.push({ label: name, value: `×${qty}` });
-          return;
+        if (hasQty) {
+          list.push({ label: name, value: String(qty) });
         }
-        list.push({ label: name, value: "" });
       });
     }
 
@@ -377,7 +377,7 @@ const KitSolutionPage = () => {
       <nav className="text-sm text-night-500 mb-6">
         <Link to="/catalog" className="hover:text-accent transition">Каталог</Link>
         <span className="text-night-900 mx-2">/</span>
-        <span className="font-medium">{kit.name}</span>
+        <span className="font-medium inline-block max-w-full align-bottom truncate">{kit.name}</span>
       </nav>
 
       <div className="grid gap-8 lg:gap-10 lg:grid-cols-[540px_minmax(0,1fr)_320px] lg:items-start mb-8 sm:mb-12">

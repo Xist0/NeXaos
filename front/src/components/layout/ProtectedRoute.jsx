@@ -6,6 +6,8 @@ const ProtectedRoute = ({ allowedRoles = [] }) => {
   const location = useLocation();
   const { accessToken: token, role, user } = useAuth();
 
+  const isProd = typeof process !== "undefined" && process.env?.NODE_ENV === "production";
+
   // Если нет токена — отправляем на логин
   if (!token) {
     return <Navigate to="/" state={{ from: location }} replace />;
@@ -13,7 +15,9 @@ const ProtectedRoute = ({ allowedRoles = [] }) => {
 
   // Если указаны allowedRoles и роль не подходит — домой
   if (allowedRoles.length > 0 && !canAccessRole(role, allowedRoles)) {
-    console.warn("[ProtectedRoute] Доступ запрещен:", { role, allowedRoles, user });
+    if (!isProd) {
+      console.warn("[ProtectedRoute] Доступ запрещен:", { role, allowedRoles, user });
+    }
     return <Navigate to="/" replace />;
   }
 

@@ -6,7 +6,11 @@ import ModulesAdmin from "../components/admin/ModulesAdmin";
 import KitSolutionsAdmin from "../components/admin/KitSolutionsAdmin";
 import ModuleDescriptionsAdmin from "../components/admin/ModuleDescriptionsAdmin";
 import CatalogItemsAdmin from "../components/admin/CatalogItemsAdmin";
-import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight } from "react-icons/fa";
+import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight, FaUser } from "react-icons/fa";
+import useAuth from "../hooks/useAuth";
+import { ROLES } from "../utils/constants";
+import StaffAuditLogs from "../components/admin/StaffAuditLogs";
+import StaffUsersAdmin from "../components/admin/StaffUsersAdmin";
 
 // Структура разделов админ панели
 const adminSections = [
@@ -92,6 +96,15 @@ const adminSections = [
       { id: "kitchenTypes", label: "Тип кухни", endpoint: "/kitchen-types" },
       { id: "sizeTemplates", label: "Шаблоны размеров", endpoint: "/size-templates" },
       { id: "colors", label: "Цвета", endpoint: "/colors" },
+    ],
+  },
+  {
+    id: "staff",
+    label: "Сотрудники",
+    icon: FaUser,
+    items: [
+      { id: "staffUsers", label: "Пользователи", component: "staffUsers", roles: [ROLES.ADMIN] },
+      { id: "staffAuditLogs", label: "Лог действий", component: "staffAuditLogs", roles: [ROLES.ADMIN, ROLES.MANAGER] },
     ],
   },
 ];
@@ -872,6 +885,7 @@ const entityConfigs = {
 };
 
 const AdminPage = () => {
+  const { role } = useAuth();
   const [activeSection, setActiveSection] = useState("orders");
   const [activeTab, setActiveTab] = useState("orders");
   const [expandedSections, setExpandedSections] = useState({
@@ -880,6 +894,7 @@ const AdminPage = () => {
     catalog: false,
     content: false,
     other: false,
+    staff: false,
   });
   const [expandedCatalogGroups, setExpandedCatalogGroups] = useState({
     hallway: false,
@@ -924,9 +939,16 @@ const AdminPage = () => {
     setActiveSection(item?.sectionId || tabId);
   };
 
-  const currentSection = adminSections.find((s) => s.id === activeSection);
-  const currentItem = currentSection?.items.find((item) => item.id === activeTab);
-  const entityConfig = entityConfigs[activeTab];
+  const allowedSections = adminSections
+    .map((s) => ({
+      ...s,
+      items: (s.items || []).filter((it) => !it.roles || it.roles.includes(role)),
+    }))
+    .filter((s) => (s.items || []).length > 0);
+
+  const currentSection = allowedSections.find((s) => s.id === activeSection) || allowedSections[0];
+  const currentItem = currentSection?.items.find((item) => item.id === activeTab) || currentSection?.items?.[0];
+  const entityConfig = entityConfigs[currentItem?.id];
   const isCatalogItemsTab = Boolean(entityConfig?.endpoint === "/catalog-items");
   const isModuleCreator = currentItem?.special === "moduleCreator";
   const isKitSolutionCreator = currentItem?.special === "kitSolutionCreator";
@@ -937,6 +959,8 @@ const AdminPage = () => {
     "kitchenModulesMezzanine",
     "kitchenModulesTall",
   ].includes(activeTab);
+
+  const allowDelete = role === ROLES.ADMIN;
 
   return (
     <div className="shop-container py-12 space-y-6">
@@ -958,7 +982,7 @@ const AdminPage = () => {
         {/* Боковая панель с разделами */}
         <div className="lg:col-span-1">
           <div className="glass-card p-4 space-y-2">
-            {adminSections.map((section) => {
+            {allowedSections.map((section) => {
               const Icon = section.icon;
               const isExpanded = expandedSections[section.id];
               const hasActiveTab = section.items.some((item) => item.id === activeTab);
@@ -990,7 +1014,9 @@ const AdminPage = () => {
                           <button
                             onClick={() => toggleCatalogGroup("hallway")}
                             className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                              expandedCatalogGroups.hallway ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                              expandedCatalogGroups.hallway
+                                ? "bg-night-50 text-night-800"
+                                : "text-night-600 hover:bg-night-50"
                             }`}
                           >
                             <span>Прихожая</span>
@@ -1003,35 +1029,40 @@ const AdminPage = () => {
                           {expandedCatalogGroups.hallway && (
                             <div className="ml-4 space-y-1">
                               {[
-                                { id: "hallwayReadySolutions", label: "Готовые прихожие" },
+                                { id: "catalogHallwayReady", label: "Готовые прихожие" },
                                 { id: "catalogHallwayWardrobes", label: "Шкафы" },
                                 { id: "catalogHallwayShoeracks", label: "Обувницы" },
                                 { id: "catalogHallwayDressers", label: "Комоды" },
                                 { id: "catalogHallwayWallCabinets", label: "Тумбы подвесные" },
                                 { id: "catalogHallwaySlats", label: "Рейки" },
                                 { id: "catalogHallwayTopCabinets", label: "Верхние шкафы" },
-                                { id: "catalogHallwayAccessories", label: "Аксессуары для прихожей" },
+                                { id: "catalogHallwayAccessories", label: "Аксессуары" },
                                 { id: "catalogHallwayFillers", label: "Доборные элементы" },
-                              ].map((item) => (
-                                <button
-                                  key={item.id}
-                                  onClick={() => handleTabClick(item.id, { sectionId: section.id })}
-                                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                                    activeTab === item.id
-                                      ? "bg-accent text-white font-semibold shadow-md"
-                                      : "text-night-600 hover:bg-night-50 hover:shadow-sm"
-                                  }`}
-                                >
-                                  {item.label}
-                                </button>
-                              ))}
+                              ].map((item) => {
+                                const isActive = activeTab === item.id;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
+                                    className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                                      isActive
+                                        ? "bg-accent text-white shadow-sm"
+                                        : "text-night-600 hover:bg-night-50"
+                                    }`}
+                                  >
+                                    <span className="text-left">{item.label}</span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
 
                           <button
                             onClick={() => toggleCatalogGroup("livingroom")}
                             className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                              expandedCatalogGroups.livingroom ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                              expandedCatalogGroups.livingroom
+                                ? "bg-night-50 text-night-800"
+                                : "text-night-600 hover:bg-night-50"
                             }`}
                           >
                             <span>Гостиная</span>
@@ -1044,33 +1075,38 @@ const AdminPage = () => {
                           {expandedCatalogGroups.livingroom && (
                             <div className="ml-4 space-y-1">
                               {[
-                                { id: "livingroomReadySolutions", label: "Стенки для гостиной" },
+                                { id: "catalogLivingroomWalls", label: "Стенки" },
                                 { id: "catalogLivingroomTvZones", label: "ТВ зоны" },
                                 { id: "catalogLivingroomWardrobes", label: "Шкафы" },
                                 { id: "catalogLivingroomShelving", label: "Стеллажи" },
                                 { id: "catalogLivingroomDressers", label: "Комоды" },
                                 { id: "catalogLivingroomWallShelves", label: "Настенные полки" },
                                 { id: "catalogLivingroomCoffeeTables", label: "Журнальные столики" },
-                              ].map((item) => (
-                                <button
-                                  key={item.id}
-                                  onClick={() => handleTabClick(item.id, { sectionId: section.id })}
-                                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                                    activeTab === item.id
-                                      ? "bg-accent text-white font-semibold shadow-md"
-                                      : "text-night-600 hover:bg-night-50 hover:shadow-sm"
-                                  }`}
-                                >
-                                  {item.label}
-                                </button>
-                              ))}
+                              ].map((item) => {
+                                const isActive = activeTab === item.id;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
+                                    className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                                      isActive
+                                        ? "bg-accent text-white shadow-sm"
+                                        : "text-night-600 hover:bg-night-50"
+                                    }`}
+                                  >
+                                    <span className="text-left">{item.label}</span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
 
                           <button
                             onClick={() => toggleCatalogGroup("kitchen")}
                             className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                              expandedCatalogGroups.kitchen ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                              expandedCatalogGroups.kitchen
+                                ? "bg-night-50 text-night-800"
+                                : "text-night-600 hover:bg-night-50"
                             }`}
                           >
                             <span>Кухня</span>
@@ -1083,23 +1119,14 @@ const AdminPage = () => {
                           {expandedCatalogGroups.kitchen && (
                             <div className="ml-4 space-y-1">
                               <button
-                                onClick={() => handleTabClick("kitchenReadySolutions", { sectionId: section.id })}
-                                className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                                  activeTab === "kitchenReadySolutions"
-                                    ? "bg-accent text-white font-semibold shadow-md"
-                                    : "text-night-600 hover:bg-night-50 hover:shadow-sm"
-                                }`}
-                              >
-                                Готовые кухни
-                              </button>
-
-                              <button
                                 onClick={() => toggleCatalogGroup("kitchenModules")}
-                                className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                                  expandedCatalogGroups.kitchenModules ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                                className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                                  expandedCatalogGroups.kitchenModules
+                                    ? "bg-night-50 text-night-800"
+                                    : "text-night-600 hover:bg-night-50"
                                 }`}
                               >
-                                <span>Модули</span>
+                                <span className="text-left">Модули</span>
                                 {expandedCatalogGroups.kitchenModules ? (
                                   <FaChevronDown className="text-[10px] transition-transform rotate-180" />
                                 ) : (
@@ -1109,50 +1136,58 @@ const AdminPage = () => {
                               {expandedCatalogGroups.kitchenModules && (
                                 <div className="ml-4 space-y-1">
                                   {[
-                                    { id: "kitchenModulesBottom", label: "Нижние модули" },
-                                    { id: "kitchenModulesTop", label: "Верхние модули" },
-                                    { id: "kitchenModulesMezzanine", label: "Антресольные модули" },
+                                    { id: "kitchenModulesBottom", label: "Нижние" },
+                                    { id: "kitchenModulesTop", label: "Верхние" },
+                                    { id: "kitchenModulesMezzanine", label: "Антресольные" },
                                     { id: "kitchenModulesTall", label: "Пеналы" },
-                                  ].map((item) => (
-                                    <button
-                                      key={item.id}
-                                      onClick={() => handleTabClick(item.id, { sectionId: section.id })}
-                                      className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                                        activeTab === item.id
-                                          ? "bg-accent text-white font-semibold shadow-md"
-                                          : "text-night-600 hover:bg-night-50 hover:shadow-sm"
-                                      }`}
-                                    >
-                                      {item.label}
-                                    </button>
-                                  ))}
+                                  ].map((item) => {
+                                    const isActive = activeTab === item.id;
+                                    return (
+                                      <button
+                                        key={item.id}
+                                        onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
+                                        className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                                          isActive
+                                            ? "bg-accent text-white shadow-sm"
+                                            : "text-night-600 hover:bg-night-50"
+                                        }`}
+                                      >
+                                        <span className="text-left">{item.label}</span>
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               )}
 
                               {[
                                 { id: "catalogKitchenCountertops", label: "Столешницы" },
                                 { id: "catalogKitchenFillers", label: "Доборные элементы" },
-                                { id: "catalogKitchenAccessories", label: "Аксессуары для кухни" },
-                              ].map((item) => (
-                                <button
-                                  key={item.id}
-                                  onClick={() => handleTabClick(item.id, { sectionId: section.id })}
-                                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                                    activeTab === item.id
-                                      ? "bg-accent text-white font-semibold shadow-md"
-                                      : "text-night-600 hover:bg-night-50 hover:shadow-sm"
-                                  }`}
-                                >
-                                  {item.label}
-                                </button>
-                              ))}
+                                { id: "catalogKitchenAccessories", label: "Аксессуары" },
+                              ].map((item) => {
+                                const isActive = activeTab === item.id;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
+                                    className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                                      isActive
+                                        ? "bg-accent text-white shadow-sm"
+                                        : "text-night-600 hover:bg-night-50"
+                                    }`}
+                                  >
+                                    <span className="text-left">{item.label}</span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
 
                           <button
                             onClick={() => toggleCatalogGroup("bedroom")}
                             className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                              expandedCatalogGroups.bedroom ? "bg-night-50 text-night-800" : "text-night-600 hover:bg-night-50"
+                              expandedCatalogGroups.bedroom
+                                ? "bg-night-50 text-night-800"
+                                : "text-night-600 hover:bg-night-50"
                             }`}
                           >
                             <span>Спальня</span>
@@ -1165,40 +1200,46 @@ const AdminPage = () => {
                           {expandedCatalogGroups.bedroom && (
                             <div className="ml-4 space-y-1">
                               {[
-                                { id: "bedroomReadySolutions", label: "Комплект мебели для спальни" },
+                                { id: "catalogBedroomSets", label: "Комплект мебели" },
                                 { id: "catalogBedroomBeds", label: "Кровати" },
                                 { id: "catalogBedroomDressingTables", label: "Туалетные столики" },
                                 { id: "catalogBedroomBedside", label: "Прикроватные тумбы" },
-                              ].map((item) => (
-                                <button
-                                  key={item.id}
-                                  onClick={() => handleTabClick(item.id, { sectionId: section.id })}
-                                  className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                                    activeTab === item.id
-                                      ? "bg-accent text-white font-semibold shadow-md"
-                                      : "text-night-600 hover:bg-night-50 hover:shadow-sm"
-                                  }`}
-                                >
-                                  {item.label}
-                                </button>
-                              ))}
+                              ].map((item) => {
+                                const isActive = activeTab === item.id;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
+                                    className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                                      isActive
+                                        ? "bg-accent text-white shadow-sm"
+                                        : "text-night-600 hover:bg-night-50"
+                                    }`}
+                                  >
+                                    <span className="text-left">{item.label}</span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
                       ) : (
-                        section.items.map((item) => (
-                          <button
-                            key={item.id}
-                            onClick={() => handleTabClick(item.id, { sectionId: section.id })}
-                            className={`w-full text-left px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                              activeTab === item.id
-                                ? "bg-accent text-white font-semibold shadow-md scale-[1.02] translate-y-[-1px]"
-                                : "text-night-600 hover:bg-night-50 hover:shadow-sm hover:translate-x-1"
-                            }`}
-                          >
-                            {item.label}
-                          </button>
-                        ))
+                        section.items.map((item) => {
+                          const isActive = activeTab === item.id;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
+                              className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                                isActive
+                                  ? "bg-accent text-white shadow-sm"
+                                  : "text-night-600 hover:bg-night-50"
+                              }`}
+                            >
+                              <span className="text-left">{item.label}</span>
+                            </button>
+                          );
+                        })
                       )}
                     </div>
                   )}
@@ -1226,36 +1267,6 @@ const AdminPage = () => {
             <ModulesAdmin key={activeTab} title="Кухня — Модули — Пеналы" fixedModuleCategoryId={3} />
           )}
 
-          {activeTab === "kitchenReadySolutions" && (
-            <KitSolutionsAdmin
-              key={activeTab}
-              title="Кухня — Готовые кухни"
-              fixedValues={{ category_group: "Кухня", category: "Готовые кухни" }}
-            />
-          )}
-          
-          {activeTab === "hallwayReadySolutions" && (
-            <KitSolutionsAdmin
-              key={activeTab}
-              title="Прихожая — Готовые прихожие"
-              fixedValues={{ category_group: "Прихожая", category: "Готовые прихожие" }}
-            />
-          )}
-          {activeTab === "livingroomReadySolutions" && (
-            <KitSolutionsAdmin
-              key={activeTab}
-              title="Гостиная — Стенки для гостиной"
-              fixedValues={{ category_group: "Гостиная", category: "Стенки для гостиной" }}
-            />
-          )}
-          {activeTab === "bedroomReadySolutions" && (
-            <KitSolutionsAdmin
-              key={activeTab}
-              title="Спальня — Комплект мебели для спальни"
-              fixedValues={{ category_group: "Спальня", category: "Комплект мебели для спальни" }}
-            />
-          )}
-
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ МОДУЛЕЙ */}
           {isModuleCreator && <ModulesAdmin key={activeTab} />}
 
@@ -1266,11 +1277,20 @@ const AdminPage = () => {
           {isModuleDescriptionCreator && <ModuleDescriptionsAdmin />}
           
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
-          {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && (
+          {currentItem?.component === "staffAuditLogs" && <StaffAuditLogs />}
+          {currentItem?.component === "staffUsers" && <StaffUsersAdmin />}
+
+          {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && (
             isCatalogItemsTab ? (
               <CatalogItemsAdmin key={activeTab} title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
             ) : (
-              <EntityManager key={`${activeTab}:${entityConfig.endpoint}`} {...entityConfig} />
+              <EntityManager
+                title={entityConfig.title}
+                endpoint={entityConfig.endpoint}
+                fields={entityConfig.fields}
+                fixedValues={entityConfig.fixedValues}
+                allowDelete={allowDelete}
+              />
             )
           )}
         </div>

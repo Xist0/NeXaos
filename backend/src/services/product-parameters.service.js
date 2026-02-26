@@ -1,5 +1,30 @@
 const { query } = require("../config/db");
 
+const upsertTemplates = async (items) => {
+  if (!Array.isArray(items) || items.length === 0) return;
+
+  for (const it of items) {
+    const parameterId = Number(it?.parameterId);
+    if (!Number.isFinite(parameterId) || parameterId <= 0) continue;
+
+    const rawValue = it?.value;
+    const value = rawValue === null || rawValue === undefined ? null : String(rawValue).trim();
+    const qty = Number(it?.quantity);
+    const quantity = Number.isFinite(qty) ? Math.max(1, Math.round(qty)) : 1;
+
+    // Do not store empty template with default quantity.
+    if (!value && quantity <= 1) continue;
+
+    await query(
+      `INSERT INTO product_parameter_value_templates(parameter_id, value, quantity)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (parameter_id, value_norm, quantity)
+       DO UPDATE SET updated_at = NOW()`,
+      [parameterId, value, quantity]
+    );
+  }
+};
+
 const normalizeLinksInput = (items) => {
   if (!Array.isArray(items)) return [];
   const map = new Map();
@@ -48,6 +73,8 @@ const setEntityParameters = async ({ entityType, entityId, items }) => {
       [String(entityType), id, it.parameterId, it.quantity, it.value]
     );
   }
+
+  await upsertTemplates(normalized);
 
   return await getEntityParameters({ entityType, entityId: id });
 };

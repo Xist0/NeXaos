@@ -275,6 +275,18 @@ const ProductPage = () => {
     if (item.__type === "catalogItem") params.set("similarCatalogItemId", String(item.id));
     else params.set("similarModuleId", String(item.id));
 
+    const normalizeColorParam = (raw) => {
+      if (!raw) return "";
+      if (typeof raw === "string") return raw;
+      if (typeof raw === "object") {
+        const code = raw?.code ?? raw?.sku;
+        if (code) return String(code);
+        const name = raw?.name ?? raw?.title ?? raw?.label;
+        if (name) return String(name);
+      }
+      return String(raw);
+    };
+
     let categoryCode = item.category_code;
     if (!categoryCode && item.module_category_id) {
       categoryCode = item.module_category_id === 1 ? "bottom" :
@@ -286,8 +298,14 @@ const ProductPage = () => {
     if (categoryCode) params.set("category", categoryCode);
 
     if (item.base_sku) params.set("subCategory", String(item.base_sku));
-    if (item.facade_color) params.set("facadeColor", item.facade_color);
-    if (item.corpus_color) params.set("corpusColor", item.corpus_color);
+    {
+      const facade = normalizeColorParam(item.facade_color);
+      if (facade) params.set("facadeColor", facade);
+    }
+    {
+      const corpus = normalizeColorParam(item.corpus_color);
+      if (corpus) params.set("corpusColor", corpus);
+    }
     if (item.length_mm) {
       params.set("lengthFrom", String(item.length_mm - 50));
       params.set("lengthTo", String(item.length_mm + 50));
@@ -351,15 +369,15 @@ const ProductPage = () => {
         const qty = Number(p?.quantity);
         const value = p?.value === null || p?.value === undefined ? "" : String(p.value).trim();
         if (!name) return;
+
+        const hasQty = Number.isFinite(qty) && qty > 1;
         if (value) {
-          list.push({ label: name, value });
+          list.push({ label: name, value: hasQty ? `${value} (${qty})` : value });
           return;
         }
-        if (Number.isFinite(qty) && qty > 1) {
-          list.push({ label: name, value: `×${qty}` });
-          return;
+        if (hasQty) {
+          list.push({ label: name, value: String(qty) });
         }
-        list.push({ label: name, value: "" });
       });
     }
 

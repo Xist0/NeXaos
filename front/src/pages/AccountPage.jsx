@@ -10,6 +10,11 @@ import PhoneInput from "../components/ui/PhoneInput";
 import { formatCurrency } from "../utils/format";
 import useLogger from "../hooks/useLogger";
 
+const isValidRuPhone = (value) => {
+  const d = String(value || "").replace(/\D/g, "");
+  return d.length === 11 && d.startsWith("7");
+};
+
 const AccountPage = () => {
   const { user, token } = useAuth();
   const { get, post, put } = useApi();
@@ -23,6 +28,7 @@ const AccountPage = () => {
   const [sendingByOrderId, setSendingByOrderId] = useState({});
   const [form, setForm] = useState({ fullName: user?.fullName || "", phone: user?.phone || "", email: user?.email || "" });
   const [saving, setSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
   const logger = useLogger();
 
   useEffect(() => {
@@ -103,6 +109,11 @@ const AccountPage = () => {
   };
 
   const handleSave = async () => {
+    setProfileError("");
+    if (!isValidRuPhone(form.phone)) {
+      setProfileError("Введите номер в формате +7 xxx xxx-xx-xx");
+      return;
+    }
     setSaving(true);
     try {
       await put(`/users/${user.id}`, { full_name: form.fullName, phone: form.phone });
@@ -296,7 +307,15 @@ const ProfileTab = ({ form, onChange, onSave, saving }) => (
       </div>
       <div>
         <label className="text-sm font-medium text-night-700">Телефон</label>
-        <PhoneInput value={form.phone} onChange={onChange("phone")} placeholder="+7 (000) - 000 - 00 -00" className="mt-1" />
+        <PhoneInput
+          value={form.phone}
+          onChange={onChange("phone")}
+          placeholder="+7 (000) - 000 - 00 -00"
+          className={`mt-1 ${form.phone && !isValidRuPhone(form.phone) ? "border border-red-300" : ""}`}
+        />
+        {form.phone && !isValidRuPhone(form.phone) ? (
+          <p className="text-xs text-red-600 mt-1">Введите номер в формате +7 xxx xxx-xx-xx</p>
+        ) : null}
       </div>
       <div className="pt-4">
         <SecureButton onClick={onSave} disabled={saving} className="w-full justify-center py-3 text-base">

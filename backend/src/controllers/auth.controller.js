@@ -61,7 +61,6 @@ const login = async (req, res) => {
 
   res.status(200).json({
     accessToken,
-    refreshToken: refreshTokenRecord.token,
     expiresAt: refreshTokenRecord.expires_at,
     user: toSafeUser(user),
   });

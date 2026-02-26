@@ -11,8 +11,21 @@
     box-sizing: border-box;
   }
 
+  :root {
+    --fs-xs: clamp(0.72rem, 0.70rem + 0.10vw, 0.78rem);
+    --fs-sm: clamp(0.84rem, 0.82rem + 0.12vw, 0.92rem);
+    --fs-base: clamp(0.98rem, 0.94rem + 0.18vw, 1.06rem);
+    --fs-lg: clamp(1.08rem, 1.02rem + 0.28vw, 1.18rem);
+    --fs-xl: clamp(1.20rem, 1.12rem + 0.38vw, 1.34rem);
+    --fs-2xl: clamp(1.44rem, 1.30rem + 0.60vw, 1.70rem);
+    --fs-3xl: clamp(1.72rem, 1.50rem + 0.95vw, 2.10rem);
+    --fs-4xl: clamp(2.00rem, 1.70rem + 1.30vw, 2.55rem);
+    --fs-5xl: clamp(2.35rem, 1.95rem + 1.80vw, 3.20rem);
+  }
+
   html {
     font-family: "Inter", system-ui, sans-serif;
+    font-size: var(--fs-base);
     line-height: 1.5;
     font-weight: 400;
     text-rendering: optimizeLegibility;
@@ -24,6 +37,7 @@
   body {
     margin: 0;
     min-height: 100vh;
+    overflow-x: hidden;
     @apply bg-white text-night-900;
   }
 

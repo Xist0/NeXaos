@@ -132,7 +132,7 @@ const useTokenCheck = () => {
         triedSilentRefreshRef.current = true;
         useAuthStore
           .getState()
-          .refreshToken()
+          .refreshAccess()
           .then((newToken) => {
             if (newToken) {
               if (!tokenCheckTimer) {

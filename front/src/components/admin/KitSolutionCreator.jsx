@@ -18,6 +18,7 @@ import ImageManager from "./ImageManager";
 import ColorBadge from "../ui/ColorBadge";
 import { formatCurrency } from "../../utils/format";
 import { getThumbUrl } from "../../utils/image";
+import PopoverSelect from "../ui/PopoverSelect";
 
 const LazyImg = ({ src, alt, className, onError }) => {
   const holderRef = useRef(null);
@@ -161,6 +162,235 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
   const [selectedCatalogItems, setSelectedCatalogItems] = useState([]);
   const [selectedParameters, setSelectedParameters] = useState([]);
   const [selectedParameterCategories, setSelectedParameterCategories] = useState([]);
+
+  const [parameterTemplatesById, setParameterTemplatesById] = useState({});
+  const templatesLoadingRef = useRef(new Set());
+
+  const ensureParameterTemplatesLoaded = useCallback(
+    async (parameterId) => {
+      const id = Number(parameterId);
+      if (!Number.isFinite(id) || id <= 0) return;
+      if (parameterTemplatesById[String(id)]) return;
+      if (templatesLoadingRef.current.has(id)) return;
+      templatesLoadingRef.current.add(id);
+      try {
+        const res = await getRef.current("/product-parameter-value-templates", { limit: 200, parameterId: id });
+        const list = Array.isArray(res?.data) ? res.data : [];
+        setParameterTemplatesById((prev) => ({ ...prev, [String(id)]: list }));
+      } catch (_e) {
+        setParameterTemplatesById((prev) => ({ ...prev, [String(id)]: [] }));
+      } finally {
+        templatesLoadingRef.current.delete(id);
+      }
+    },
+    [parameterTemplatesById]
+  );
+
+  const getEffectiveSku = useCallback(() => {
+    const explicit = String(form.sku || "").trim();
+    if (explicit) return explicit;
+
+    const normalizeSkuPart = (value) => {
+      const s = String(value ?? "").trim();
+      if (!s) return "";
+      return s
+        .replace(/\s+/g, "")
+        .replace(/[-–—]+/g, "")
+        .replace(/[\\/]+/g, "")
+        .trim();
+    };
+    const normalizeNum = (value) => {
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) return "";
+      return String(Math.round(n));
+    };
+
+    const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
+    const colors = Array.isArray(referenceData.colors) ? referenceData.colors : [];
+    const primary = colors.find((c) => Number(c?.id) === Number(form.primary_color_id));
+    const secondary = colors.find((c) => Number(c?.id) === Number(form.secondary_color_id));
+
+    const parts = [
+      normalizeSkuPart(articleName),
+      normalizeNum(form.total_length_mm),
+      normalizeNum(form.total_depth_mm),
+      normalizeNum(form.total_height_mm),
+      normalizeSkuPart(primary?.sku || ""),
+      normalizeSkuPart(secondary?.sku || ""),
+    ].filter(Boolean);
+
+    return parts.length ? parts.join("-") : "";
+  }, [form.baseSku, form.name, form.primary_color_id, form.secondary_color_id, form.secondary_color_id, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, referenceData.colors]);
+
+  const getKitPayloadParts = useCallback(() => {
+    const moduleIds = ["bottom", "top"]
+      .flatMap((type) =>
+        (selectedModulesByType[type] || []).flatMap((m) => Array(Math.max(1, Number(m.quantity) || 1)).fill(Number(m.moduleId)))
+      )
+      .filter((v) => Number.isFinite(v));
+
+    const moduleItems = [];
+    let pos = 0;
+    for (const type of ["bottom", "top"]) {
+      for (const m of selectedModulesByType[type] || []) {
+        const qty = Math.max(1, Number(m.quantity) || 1);
+        const baseUid = m.positionUid || `tmp-${type}-${pos}`;
+        for (let k = 0; k < qty; k++) {
+          moduleItems.push({
+            moduleId: Number(m.moduleId),
+            positionUid: k === 0 ? baseUid : `${baseUid}-${k}`,
+            positionType: type,
+            positionOrder: pos,
+          });
+          pos++;
+        }
+      }
+    }
+    const safeModuleItems = moduleItems.filter((x) => Number.isFinite(x.moduleId) && x.moduleId > 0);
+
+    const componentItems = isKitchen
+      ? safeModuleItems.map((x) => ({
+          componentType: "module",
+          moduleId: x.moduleId,
+          positionUid: x.positionUid,
+          positionType: x.positionType,
+          positionOrder: x.positionOrder,
+        }))
+      : (() => {
+          const items = [];
+          let p = 0;
+          for (const c of selectedCatalogItems) {
+            const qty = Math.max(1, Number(c.quantity) || 1);
+            const baseUid = c.positionUid || `tmp-ci-${p}`;
+            for (let k = 0; k < qty; k++) {
+              items.push({
+                componentType: "catalogItem",
+                catalogItemId: Number(c.catalogItemId),
+                positionUid: k === 0 ? baseUid : `${baseUid}-${k}`,
+                positionType: "component",
+                positionOrder: p,
+              });
+              p++;
+            }
+          }
+          return items.filter((x) => Number.isFinite(x.catalogItemId) && x.catalogItemId > 0);
+        })();
+
+    const computedBasePrice = (() => {
+      if (isKitchen) {
+        const byId = new Map((referenceData.modules || []).map((m) => [Number(m.id), m]));
+        const sumForType = (type) =>
+          (selectedModulesByType[type] || []).reduce((acc, { moduleId, quantity }) => {
+            const m = byId.get(Number(moduleId));
+            const price = Number(m?.final_price || m?.price || 0);
+            const qty = Math.max(1, Number(quantity) || 1);
+            return acc + price * qty;
+          }, 0);
+        return sumForType("bottom") + sumForType("top");
+      }
+      const byId = new Map((referenceData.catalogItems || []).map((m) => [Number(m.id), m]));
+      return selectedCatalogItems.reduce((acc, { catalogItemId, quantity }) => {
+        const m = byId.get(Number(catalogItemId));
+        const price = Number(m?.final_price || m?.price || 0);
+        const qty = Math.max(1, Number(quantity) || 1);
+        return acc + price * qty;
+      }, 0);
+    })();
+
+    return {
+      moduleIds,
+      moduleItems: safeModuleItems,
+      componentItems,
+      computedBasePrice,
+    };
+  }, [isKitchen, referenceData.catalogItems, referenceData.modules, selectedCatalogItems, selectedModulesByType]);
+
+  const saveKitNow = useCallback(async () => {
+    if (!kitId) {
+      loggerRef.current?.error("Нет kitId. Сначала создайте решение.");
+      return;
+    }
+
+    if (isKitchen && !form.kitchen_type_id) {
+      loggerRef.current?.error("Заполните тип кухни");
+      return;
+    }
+
+    if (!form.material_id || !form.primary_color_id) {
+      loggerRef.current?.error("Заполните материал и основной цвет");
+      return;
+    }
+
+    if (!String(form.name || "").trim() || !String(form.description || "").trim()) {
+      loggerRef.current?.error("Заполните название и описание");
+      return;
+    }
+
+    if (!String(form.baseSku || "").trim()) {
+      loggerRef.current?.error("Укажите baseSku");
+      return;
+    }
+
+    if (form.is_active) {
+      if (!form.preview_url) {
+        loggerRef.current?.error("Для активного товара нужно выбрать превью");
+        return;
+      }
+      const price = Number(form.final_price || 0);
+      if (!Number.isFinite(price) || price <= 0) {
+        loggerRef.current?.error("Для активного товара цена должна быть > 0");
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      const { moduleIds, moduleItems, componentItems, computedBasePrice } = getKitPayloadParts();
+      const price = Number(form.final_price || 0);
+      const payload = {
+        name: String(form.name).trim(),
+        base_sku: String(form.baseSku || "").trim() || null,
+        sku: String(getEffectiveSku()).trim(),
+        description: String(form.description).trim(),
+
+        characteristics: normalizeCharacteristics(form.characteristics),
+        category_group: fixedValues?.category_group || null,
+        category: fixedValues?.category || null,
+        kitchen_type_id: Number(form.kitchen_type_id) || null,
+        material_id: Number(form.material_id) || null,
+        collection_id: form.collection_id ? Number(form.collection_id) : null,
+        primary_color_id: Number(form.primary_color_id) || null,
+        secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
+
+        total_length_mm: Number(form.total_length_mm) || null,
+        total_depth_mm: Number(form.total_depth_mm) || null,
+        total_height_mm: Number(form.total_height_mm) || null,
+        countertop_length_mm: Number(form.countertop_length_mm) || null,
+        countertop_depth_mm: Number(form.countertop_depth_mm) || null,
+
+        base_price: Number(computedBasePrice) || 0,
+        final_price: Number.isFinite(price) ? price : 0,
+        preview_url: form.preview_url || null,
+        is_active: !!form.is_active,
+
+        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
+        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
+
+        moduleIds,
+        moduleItems,
+        componentItems,
+      };
+
+      await put(`/kit-solutions/${kitId}`, payload);
+      loggerRef.current?.info("Сохранено");
+      onDone?.();
+    } catch (e) {
+      loggerRef.current?.error("Не удалось сохранить готовое решение", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [fixedValues?.category, fixedValues?.category_group, form, getEffectiveSku, getKitPayloadParts, isKitchen, kitId, onDone, put, selectedParameterCategories, selectedParameters]);
+
   const [openPrimary, setOpenPrimary] = useState(false);
   const [openSecondary, setOpenSecondary] = useState(false);
   const colorPickerRef = useRef(null);
@@ -175,6 +405,32 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
       universal: list.filter((c) => !c?.type),
     };
   }, [referenceData.colors]);
+
+  const kitchenTypeItems = useMemo(() => {
+    return (referenceData.kitchenTypes || []).slice().sort((a, b) => Number(a.id) - Number(b.id));
+  }, [referenceData.kitchenTypes]);
+
+  const materialItems = useMemo(() => {
+    return (referenceData.materials || []).slice().sort((a, b) => Number(a.id) - Number(b.id));
+  }, [referenceData.materials]);
+
+  const collectionItems = useMemo(() => {
+    return (referenceData.collections || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.collections]);
+
+  const productParameterItems = useMemo(() => {
+    return (referenceData.productParameters || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.productParameters]);
+
+  const productParameterCategoryItems = useMemo(() => {
+    return (referenceData.productParameterCategories || [])
+      .slice()
+      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
+  }, [referenceData.productParameterCategories]);
 
   const addParameter = (parameterId) => {
     const id = Number(parameterId);
@@ -632,69 +888,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     });
   }, [isKitchen, referenceData.catalogItems, referenceData.modules, selectedCatalogItems, selectedModulesByType, buildSku]);
 
-  const moduleIdsPayload = useMemo(() => {
-    const order = ["bottom", "top"];
-    return order
-      .flatMap((type) =>
-        (selectedModulesByType[type] || []).flatMap((m) =>
-          Array(Math.max(1, Number(m.quantity) || 1)).fill(Number(m.moduleId))
-        )
-      )
-      .filter((v) => Number.isFinite(v));
-  }, [selectedModulesByType]);
-
-  const moduleItemsPayload = useMemo(() => {
-    const order = ["bottom", "top"];
-    const items = [];
-    let pos = 0;
-    for (const type of order) {
-      for (const m of selectedModulesByType[type] || []) {
-        const qty = Math.max(1, Number(m.quantity) || 1);
-        const baseUid = m.positionUid || `tmp-${type}-${pos}`;
-        for (let k = 0; k < qty; k++) {
-          items.push({
-            moduleId: Number(m.moduleId),
-            positionUid: k === 0 ? baseUid : `${baseUid}-${k}`,
-            positionType: type,
-            positionOrder: pos,
-          });
-          pos++;
-        }
-      }
-    }
-    return items.filter((x) => Number.isFinite(x.moduleId) && x.moduleId > 0);
-  }, [selectedModulesByType]);
-
-  const componentItemsPayload = useMemo(() => {
-    if (isKitchen) {
-      return moduleItemsPayload.map((x) => ({
-        componentType: "module",
-        moduleId: x.moduleId,
-        positionUid: x.positionUid,
-        positionType: x.positionType,
-        positionOrder: x.positionOrder,
-      }));
-    }
-
-    const items = [];
-    let pos = 0;
-    for (const c of selectedCatalogItems) {
-      const qty = Math.max(1, Number(c.quantity) || 1);
-      const baseUid = c.positionUid || `tmp-ci-${pos}`;
-      for (let k = 0; k < qty; k++) {
-        items.push({
-          componentType: "catalogItem",
-          catalogItemId: Number(c.catalogItemId),
-          positionUid: k === 0 ? baseUid : `${baseUid}-${k}`,
-          positionType: "component",
-          positionOrder: pos,
-        });
-        pos++;
-      }
-    }
-    return items.filter((x) => Number.isFinite(x.catalogItemId) && x.catalogItemId > 0);
-  }, [isKitchen, moduleItemsPayload, selectedCatalogItems]);
-
   const computedBasePrice = useMemo(() => {
     if (isKitchen) {
       const byId = new Map(referenceData.modules.map((m) => [Number(m.id), m]));
@@ -809,10 +1002,11 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     setLoading(true);
 
     try {
+      const { moduleIds, moduleItems, componentItems } = getKitPayloadParts();
       const payload = {
         name: String(form.name).trim(),
         base_sku: String(form.baseSku || "").trim() || null,
-        sku: String(effectiveSku).trim(),
+        sku: String(getEffectiveSku()).trim(),
         description: String(form.description).trim(),
 
         characteristics: normalizeCharacteristics(form.characteristics),
@@ -838,9 +1032,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
 
-        moduleIds: moduleIdsPayload,
-        moduleItems: moduleItemsPayload,
-        componentItems: componentItemsPayload,
+        moduleIds,
+        moduleItems,
+        componentItems,
       };
 
       const resp = await post("/kit-solutions", payload);
@@ -858,7 +1052,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
       setLoading(false);
       createLockRef.current = false;
     }
-  }, [componentItemsPayload, fixedValues?.category, fixedValues?.category_group, form, kitId, moduleIdsPayload, moduleItemsPayload, post]);
+  }, [fixedValues?.category, fixedValues?.category_group, form, getEffectiveSku, getKitPayloadParts, kitId, post]);
 
   const finalizeKit = async () => {
     if (!kitId) {
@@ -879,10 +1073,11 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
     setLoading(true);
     try {
+      const { moduleIds, moduleItems, componentItems, computedBasePrice } = getKitPayloadParts();
       const payload = {
         name: String(form.name).trim(),
         base_sku: String(form.baseSku || "").trim() || null,
-        sku: String(effectiveSku).trim(),
+        sku: String(getEffectiveSku()).trim(),
         description: String(form.description).trim(),
 
         characteristics: normalizeCharacteristics(form.characteristics),
@@ -908,9 +1103,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
 
-        moduleIds: moduleIdsPayload,
-        moduleItems: moduleItemsPayload,
-        componentItems: componentItemsPayload,
+        moduleIds,
+        moduleItems,
+        componentItems,
       };
 
       await put(`/kit-solutions/${kitId}`, payload);
@@ -1045,6 +1240,16 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             <div className="text-xs text-night-500">ID: {kitId || "—"}</div>
           </div>
           <div className="flex flex-wrap gap-2">
+            {initialKitSolutionId ? (
+              <SecureButton
+                type="button"
+                onClick={saveKitNow}
+                className="px-3 py-2 text-xs flex items-center gap-2"
+                disabled={!kitId || loading}
+              >
+                {loading ? <FaSpinner className="animate-spin" /> : <FaSave />} Сохранить
+              </SecureButton>
+            ) : null}
             {steps.map((s) => {
               const Icon = s.icon;
               return (
@@ -1073,54 +1278,60 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             {isKitchen ? (
               <label className="space-y-2">
                 <div className="text-xs font-semibold text-night-700">Тип кухни</div>
-                <select
+                <PopoverSelect
+                  size="md"
+                  items={kitchenTypeItems}
                   value={form.kitchen_type_id}
-                  onChange={(e) => setForm((p) => ({ ...p, kitchen_type_id: e.target.value }))}
-                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-                >
-                  <option value="">Не выбран</option>
-                  {referenceData.kitchenTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      #{t.id} {t.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Не выбран"
+                  allowClear
+                  clearLabel="Не выбран"
+                  searchable={kitchenTypeItems.length > 10}
+                  getKey={(t) => String(t.id)}
+                  getLabel={(t) => `#${t.id} ${t.name}`}
+                  onChange={(next) => setForm((p) => ({ ...p, kitchen_type_id: String(next || "") }))}
+                  buttonClassName="rounded-lg"
+                  popoverClassName="rounded-lg max-w-xl"
+                  maxHeightClassName="max-h-80"
+                />
               </label>
             ) : null}
 
             <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Материал</div>
-              <select
+              <PopoverSelect
+                size="md"
+                items={materialItems}
                 value={form.material_id}
-                onChange={(e) => setForm((p) => ({ ...p, material_id: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Не выбран</option>
-                {referenceData.materials.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    #{m.id} {m.name}
-                  </option>
-                ))}
-              </select>
+                placeholder="Не выбран"
+                allowClear
+                clearLabel="Не выбран"
+                searchable={materialItems.length > 10}
+                getKey={(m) => String(m.id)}
+                getLabel={(m) => `#${m.id} ${m.name}`}
+                onChange={(next) => setForm((p) => ({ ...p, material_id: String(next || "") }))}
+                buttonClassName="rounded-lg"
+                popoverClassName="rounded-lg max-w-xl"
+                maxHeightClassName="max-h-80"
+              />
             </label>
 
             <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Коллекция</div>
-              <select
+              <PopoverSelect
+                size="md"
+                items={collectionItems}
                 value={form.collection_id}
-                onChange={(e) => setForm((p) => ({ ...p, collection_id: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">Не выбрана</option>
-                {referenceData.collections
-                  .slice()
-                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                  .map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-              </select>
+                placeholder="Не выбрана"
+                allowClear
+                clearLabel="Не выбрана"
+                searchable={collectionItems.length > 8}
+                getKey={(c) => String(c.id)}
+                getLabel={(c) => String(c?.name || "")}
+                onChange={(next) => setForm((p) => ({ ...p, collection_id: String(next || "") }))}
+                buttonClassName="rounded-lg"
+                popoverClassName="rounded-lg max-w-xl"
+                maxHeightClassName="max-h-80"
+              />
             </label>
 
             <div className="space-y-3 md:col-span-2" ref={colorPickerRef}>
@@ -1350,26 +1561,23 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             <div className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Параметры</div>
 
-              <select
+              <PopoverSelect
+                size="md"
+                items={productParameterItems}
                 value={""}
-                onChange={(e) => {
-                  const v = e.target.value;
+                placeholder="+ Добавить..."
+                searchable={productParameterItems.length > 10}
+                getKey={(p) => String(p.id)}
+                getLabel={(p) => `#${p.id} ${p.name}`}
+                onChange={(next) => {
+                  const v = String(next || "");
                   if (!v) return;
                   addParameter(v);
-                  e.currentTarget.value = "";
                 }}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">+ Добавить...</option>
-                {(referenceData.productParameters || [])
-                  .slice()
-                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                  .map((p) => (
-                    <option key={p.id} value={String(p.id)}>
-                      #{p.id} {p.name}
-                    </option>
-                  ))}
-              </select>
+                buttonClassName="rounded-lg"
+                popoverClassName="rounded-lg max-w-xl"
+                maxHeightClassName="max-h-80"
+              />
 
               {(selectedParameters || []).length === 0 ? (
                 <div className="text-xs text-night-500">Параметры не выбраны</div>
@@ -1377,6 +1585,10 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                 <div className="space-y-2">
                   {selectedParameters.map((p, idx) => {
                     const full = (referenceData.productParameters || []).find((x) => Number(x.id) === Number(p.parameterId));
+                    const templates = parameterTemplatesById[String(p.parameterId)] || null;
+                    if (templates === null) {
+                      void ensureParameterTemplatesLoaded(p.parameterId);
+                    }
                     return (
                       <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
                         <div className="min-w-0">
@@ -1384,6 +1596,40 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                           <div className="text-xs text-night-500">ID: {p.parameterId}</div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <PopoverSelect
+                            size="sm"
+                            items={Array.isArray(templates) ? templates : []}
+                            value={""}
+                            placeholder="Шаблон…"
+                            searchable={(Array.isArray(templates) ? templates : []).length > 8}
+                            getKey={(t) => String(t.id)}
+                            getLabel={(t) => {
+                              const labelValue = String(t?.value || "").trim();
+                              const labelQty = Number(t?.quantity);
+                              const qtySuffix = Number.isFinite(labelQty) && labelQty > 1 ? ` (${labelQty})` : "";
+                              return labelValue ? `${labelValue}${qtySuffix}` : `Количество${qtySuffix}`;
+                            }}
+                            onChange={(next) => {
+                              const templateId = Number(next);
+                              if (!Number.isFinite(templateId) || templateId <= 0) return;
+                              const list = parameterTemplatesById[String(p.parameterId)] || [];
+                              const t = list.find((x) => Number(x.id) === templateId);
+                              if (!t) return;
+                              setSelectedParameters((prev) => {
+                                const nextArr = [...prev];
+                                if (!nextArr[idx]) return prev;
+                                nextArr[idx] = {
+                                  ...nextArr[idx],
+                                  value: t.value ?? "",
+                                  quantity: Number(t.quantity) || 1,
+                                };
+                                return nextArr;
+                              });
+                            }}
+                            buttonClassName="h-10 rounded-lg border border-night-200 bg-white text-night-900 text-xs"
+                            popoverClassName="rounded-lg"
+                            maxHeightClassName="max-h-64"
+                          />
                           <SecureInput
                             value={String(p.value ?? "")}
                             onChange={(v) =>
@@ -1416,26 +1662,23 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
             <div className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Категории параметров изделий</div>
-              <select
+              <PopoverSelect
+                size="md"
+                items={productParameterCategoryItems}
                 value={""}
-                onChange={(e) => {
-                  const v = e.target.value;
+                placeholder="+ Добавить..."
+                searchable={productParameterCategoryItems.length > 10}
+                getKey={(c) => String(c.id)}
+                getLabel={(c) => String(c?.name || "")}
+                onChange={(next) => {
+                  const v = String(next || "");
                   if (!v) return;
                   addParameterCategory(v);
-                  e.currentTarget.value = "";
                 }}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">+ Добавить...</option>
-                {(referenceData.productParameterCategories || [])
-                  .slice()
-                  .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"))
-                  .map((c) => (
-                    <option key={c.id} value={String(c.id)}>
-                      #{c.id} {c.name}
-                    </option>
-                  ))}
-              </select>
+                buttonClassName="rounded-lg"
+                popoverClassName="rounded-lg max-w-xl"
+                maxHeightClassName="max-h-80"
+              />
 
               {(selectedParameterCategories || []).length === 0 ? (
                 <div className="text-xs text-night-500">Категории не выбраны</div>
@@ -1497,22 +1740,23 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
               <div key={type} className="space-y-3">
                 <div className="text-xs font-semibold text-night-700 uppercase">{title}</div>
 
-                <select
+                <PopoverSelect
+                  size="md"
+                  items={list}
                   value={""}
-                  onChange={(e) => {
-                    const v = e.target.value;
+                  placeholder="+ Добавить..."
+                  searchable={list.length > 10}
+                  getKey={(m) => String(m.id)}
+                  getLabel={(m) => `#${m.id} ${m.name} (${m.length_mm}×${m.depth_mm}×${m.height_mm})`}
+                  onChange={(next) => {
+                    const v = String(next || "");
                     if (!v) return;
                     addModule(type, v);
                   }}
-                  className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-                >
-                  <option value="">+ Добавить...</option>
-                  {list.map((m) => (
-                    <option key={`${type}-${m.id}`} value={m.id}>
-                      #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
-                    </option>
-                  ))}
-                </select>
+                  buttonClassName="rounded-lg"
+                  popoverClassName="rounded-lg max-w-2xl"
+                  maxHeightClassName="max-h-80"
+                />
 
                 {(selectedModulesByType[type] || []).length === 0 ? (
                   <div className="text-xs text-night-500">Пусто</div>
@@ -1548,22 +1792,23 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             <div className="space-y-3">
               <div className="text-xs font-semibold text-night-700 uppercase">Компоненты</div>
 
-              <select
+              <PopoverSelect
+                size="md"
+                items={catalogItemsSelectable}
                 value={""}
-                onChange={(e) => {
-                  const v = e.target.value;
+                placeholder="+ Добавить..."
+                searchable={catalogItemsSelectable.length > 10}
+                getKey={(m) => String(m.id)}
+                getLabel={(m) => `#${m.id} ${m.name} (${m.length_mm}×${m.depth_mm}×${m.height_mm})`}
+                onChange={(next) => {
+                  const v = String(next || "");
                   if (!v) return;
                   addCatalogItem(v);
                 }}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900"
-              >
-                <option value="">+ Добавить...</option>
-                {catalogItemsSelectable.map((m) => (
-                  <option key={`ci-${m.id}`} value={m.id}>
-                    #{m.id} {m.name} ({m.length_mm}×{m.depth_mm}×{m.height_mm})
-                  </option>
-                ))}
-              </select>
+                buttonClassName="rounded-lg"
+                popoverClassName="rounded-lg max-w-2xl"
+                maxHeightClassName="max-h-80"
+              />
 
               {selectedCatalogItems.length === 0 ? (
                 <div className="text-xs text-night-500">Пусто</div>

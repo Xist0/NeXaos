@@ -5,6 +5,7 @@ const fs = require("fs");
 const config = require("../config/env");
 const productParametersService = require("../services/product-parameters.service");
 const productParameterCategoriesService = require("../services/product-parameter-categories.service");
+const { query } = require("../config/db");
 
 const normalizeSkuForFolder = (sku) => {
   const transliterate = (str) => {
@@ -58,6 +59,26 @@ const validatePayload = (schema, payload) => {
 };
 
 const createCrudController = (entity) => {
+  const writeAuditLog = async ({ action, rowId, changes, req }) => {
+    const role = req?.user?.roleName;
+    if (!req?.user?.id) return;
+    if (role !== "admin" && role !== "manager") return;
+
+    await query(
+      `INSERT INTO audit_logs(table_name, row_id, action, user_id, changes)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [String(entity.table), Number(rowId) || null, String(action), Number(req.user.id), changes ?? null]
+    );
+  };
+
+  const safeChanges = (payload) => {
+    if (!payload || typeof payload !== "object") return payload;
+    const next = { ...payload };
+    if (Object.prototype.hasOwnProperty.call(next, "password")) delete next.password;
+    if (Object.prototype.hasOwnProperty.call(next, "password_hash")) delete next.password_hash;
+    return next;
+  };
+
   const list = async (req, res) => {
     const data = await crudService.list(entity, req.query);
     
@@ -383,6 +404,12 @@ const createCrudController = (entity) => {
       : value;
 
     const data = await crudService.create(entity, payload);
+    await writeAuditLog({
+      action: "create",
+      rowId: data?.[entity.idColumn] ?? data?.id,
+      changes: safeChanges(payload),
+      req,
+    });
 
     if (entity.route === "modules" || entity.route === "catalog-items") {
       const entityType = entity.route;
@@ -422,6 +449,12 @@ const createCrudController = (entity) => {
       : value;
 
     const data = await crudService.update(entity, req.params.id, payload);
+    await writeAuditLog({
+      action: "update",
+      rowId: req.params.id,
+      changes: safeChanges(payload),
+      req,
+    });
 
     if (entity.route === "modules" || entity.route === "catalog-items") {
       const entityType = entity.route;
@@ -452,6 +485,12 @@ const createCrudController = (entity) => {
 
   const remove = async (req, res) => {
     await crudService.remove(entity, req.params.id);
+    await writeAuditLog({
+      action: "delete",
+      rowId: req.params.id,
+      changes: null,
+      req,
+    });
     res.status(204).send();
   };
 

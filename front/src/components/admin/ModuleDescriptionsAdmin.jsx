@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SecureButton from "../ui/SecureButton";
 import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
-import { FaArrowLeft, FaEdit, FaPlus, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaPlus } from "react-icons/fa";
+import { LuPencil, LuTrash2 } from "react-icons/lu";
 import ModuleDescriptionCreator from "./ModuleDescriptionCreator";
+import PopoverSelect from "../ui/PopoverSelect";
 
 const ModuleDescriptionsAdmin = () => {
   const { get, del } = useApi();
@@ -71,6 +73,8 @@ const ModuleDescriptionsAdmin = () => {
     () => (Array.isArray(categories) ? categories.slice().sort((a, b) => Number(a.id) - Number(b.id)) : []),
     [categories]
   );
+
+  const categoryItems = useMemo(() => categoriesSorted, [categoriesSorted]);
 
   const categoryMap = useMemo(() => {
     const map = new Map();
@@ -175,18 +179,23 @@ const ModuleDescriptionsAdmin = () => {
       <div className="glass-card p-4 space-y-4">
         <div className="flex flex-wrap gap-3 items-center">
           <label className="text-sm font-semibold text-night-700">Категория:</label>
-          <select
-            value={filterCategoryId}
-            onChange={(e) => setFilterCategoryId(e.target.value)}
-            className="px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-          >
-            <option value="">Выберите категорию...</option>
-            {categoriesSorted.map((c) => (
-              <option key={c.id} value={String(c.id)}>
-                {c.name}{c.sku_prefix ? ` (${String(c.sku_prefix).toUpperCase()})` : ""}
-              </option>
-            ))}
-          </select>
+          <div className="w-80">
+            <PopoverSelect
+              size="md"
+              items={categoryItems}
+              value={filterCategoryId}
+              placeholder="Выберите категорию..."
+              allowClear
+              clearLabel="Выберите категорию..."
+              searchable={categoryItems.length > 10}
+              getKey={(c) => String(c.id)}
+              getLabel={(c) => `${c.name}${c.sku_prefix ? ` (${String(c.sku_prefix).toUpperCase()})` : ""}`}
+              onChange={(next) => setFilterCategoryId(String(next || ""))}
+              buttonClassName="rounded-lg"
+              popoverClassName="rounded-lg max-w-xl"
+              maxHeightClassName="max-h-80"
+            />
+          </div>
         </div>
 
         {loading ? (
@@ -218,17 +227,25 @@ const ModuleDescriptionsAdmin = () => {
                       <td className="py-2 px-3 text-night-900">{category?.name || "—"}</td>
                       <td className="py-2 px-3">
                         <div className="flex justify-end gap-2">
-                          <SecureButton type="button" size="sm" variant="outline" onClick={() => openEdit(d.id)} className="h-8 px-3 flex items-center gap-2">
-                            <FaEdit /> Ред.
+                          <SecureButton
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEdit(d.id)}
+                            className="h-8 w-8 p-0 flex items-center justify-center border-accent/30 text-accent-dark hover:border-accent/50 hover:bg-accent/10"
+                            title="Редактировать"
+                          >
+                            <LuPencil size={16} />
                           </SecureButton>
                           <SecureButton
                             type="button"
                             size="sm"
                             variant="ghost"
                             onClick={() => handleDelete(d.id)}
-                            className="h-8 px-3 flex items-center gap-2 text-red-600 hover:bg-red-50"
+                            className="h-8 w-8 p-0 flex items-center justify-center text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Удалить"
                           >
-                            <FaTrash /> Удал.
+                            <LuTrash2 size={16} />
                           </SecureButton>
                         </div>
                       </td>

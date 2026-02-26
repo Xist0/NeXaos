@@ -3,6 +3,7 @@ import useApi from "../../hooks/useApi";
 import SecureButton from "../ui/SecureButton";
 import OrderDetailsModal from "./OrderDetailsModal";
 import { formatCurrency } from "../../utils/format";
+import PopoverSelect from "../ui/PopoverSelect";
 
 const statusOptions = [
   { value: "pending", label: "Новый" },
@@ -57,18 +58,23 @@ const OrdersTable = () => {
           </p>
         </div>
         <div className="flex gap-3">
-          <select
-            className="secure-input max-w-xs"
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-          >
-            <option value="">Все статусы</option>
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <div className="w-56">
+            <PopoverSelect
+              size="md"
+              items={statusOptions}
+              value={filterStatus}
+              placeholder="Все статусы"
+              allowClear
+              clearLabel="Все статусы"
+              searchable={statusOptions.length > 10}
+              getKey={(option) => String(option.value)}
+              getLabel={(option) => String(option.label)}
+              onChange={(next) => setFilterStatus(String(next || ""))}
+              buttonClassName="secure-input rounded-lg"
+              popoverClassName="rounded-lg max-w-md"
+              maxHeightClassName="max-h-72"
+            />
+          </div>
           <SecureButton variant="outline" onClick={fetchOrders}>
             Обновить
           </SecureButton>
@@ -113,21 +119,23 @@ const OrdersTable = () => {
                   {formatCurrency(order.total || 0)}
                 </td>
                 <td className="py-3 pr-4" onClick={(e) => e.stopPropagation()}>
-                  <select
-                    className="secure-input"
-                    value={order.status || "pending"}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      handleStatusChange(order.id, e.target.value);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {statusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div onClick={(e) => e.stopPropagation()} className="min-w-[180px]">
+                    <PopoverSelect
+                      size="sm"
+                      items={statusOptions}
+                      value={order.status || "pending"}
+                      placeholder="Статус"
+                      searchable={false}
+                      getKey={(option) => String(option.value)}
+                      getLabel={(option) => String(option.label)}
+                      onChange={(next) => {
+                        handleStatusChange(order.id, String(next || "pending"));
+                      }}
+                      buttonClassName="secure-input rounded-lg"
+                      popoverClassName="rounded-lg max-w-md"
+                      maxHeightClassName="max-h-72"
+                    />
+                  </div>
                 </td>
                 <td className="py-3 pr-4" onClick={(e) => e.stopPropagation()}>
                   <SecureButton
