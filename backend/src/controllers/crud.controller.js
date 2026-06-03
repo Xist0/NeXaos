@@ -5,6 +5,7 @@ const fs = require("fs");
 const config = require("../config/env");
 const productParametersService = require("../services/product-parameters.service");
 const productParameterCategoriesService = require("../services/product-parameter-categories.service");
+const characteristicTemplatesService = require("../services/characteristic-templates.service");
 const { query } = require("../config/db");
 
 const normalizeSkuForFolder = (sku) => {
@@ -411,6 +412,10 @@ const createCrudController = (entity) => {
       req,
     });
 
+    if (payload?.characteristics) {
+      await characteristicTemplatesService.upsertFromCharacteristics(payload.characteristics);
+    }
+
     if (entity.route === "modules" || entity.route === "catalog-items") {
       const entityType = entity.route;
       const params = req.body?.parameters;
@@ -455,6 +460,10 @@ const createCrudController = (entity) => {
       changes: safeChanges(payload),
       req,
     });
+
+    if (payload?.characteristics) {
+      await characteristicTemplatesService.upsertFromCharacteristics(payload.characteristics);
+    }
 
     if (entity.route === "modules" || entity.route === "catalog-items") {
       const entityType = entity.route;

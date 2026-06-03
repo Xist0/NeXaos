@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import useAuth from "../hooks/useAuth";
+import { ROLES } from "../utils/constants";
+import AdminStaffNav from "../components/admin/AdminStaffNav";
 import useApi from "../hooks/useApi";
 import useAuthStore from "../store/authStore";
 import { fetchProfile } from "../services/auth.service";
@@ -16,7 +18,8 @@ const isValidRuPhone = (value) => {
 };
 
 const AccountPage = () => {
-  const { user, token } = useAuth();
+  const { user, accessToken, role } = useAuth();
+  const isStaff = role === ROLES.ADMIN || role === ROLES.MANAGER;
   const { get, post, put } = useApi();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("orders");
@@ -32,20 +35,20 @@ const AccountPage = () => {
   const logger = useLogger();
 
   useEffect(() => {
-    if (!token) {
+    if (!accessToken) {
       navigate("/");
       return;
     }
     if (user) {
       setForm({ fullName: user.fullName || "", phone: user.phone || "", email: user.email || "" });
     }
-  }, [user, token, navigate]);
+  }, [user, accessToken, navigate]);
 
   useEffect(() => {
-    if (activeTab === "orders" && token) {
+    if (activeTab === "orders" && accessToken) {
       fetchOrders();
     }
-  }, [activeTab, token]);
+  }, [activeTab, accessToken]);
 
   const fetchOrders = async () => {
     setOrdersLoading(true);
@@ -131,15 +134,26 @@ const AccountPage = () => {
   const getStatusLabel = (status) => ({ pending: "Новый", processing: "В работе", shipped: "Отправлен", completed: "Завершён", cancelled: "Отменён" }[status] || status);
   const getStatusColor = (status) => ({ pending: "bg-yellow-100 text-yellow-800", processing: "bg-blue-100 text-blue-800", shipped: "bg-purple-100 text-purple-800", completed: "bg-green-100 text-green-800", cancelled: "bg-red-100 text-red-800" }[status] || "bg-gray-100 text-gray-800");
 
-  if (!token) return null;
+  if (!accessToken) return null;
 
   return (
     <div className="shop-container py-8 md:py-12">
       <div className="mb-6 md:mb-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-night-400">Личный кабинет</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-night-400">
+          {isStaff ? "Личный кабинет администратора" : "Личный кабинет"}
+        </p>
         <h1 className="text-2xl sm:text-3xl font-semibold text-night-900">Мой профиль</h1>
+        {isStaff && (
+          <p className="text-sm text-night-500 mt-2">
+            Управление магазином и визуалом сайта — в меню слева или по кнопке «Админ» в шапке.
+          </p>
+        )}
       </div>
 
+      <div className={`flex flex-col gap-6 ${isStaff ? "lg:flex-row lg:items-start" : ""}`}>
+        {isStaff && <AdminStaffNav />}
+
+        <div className="flex-1 min-w-0">
       <div className="flex flex-wrap gap-2 sm:gap-3 mb-6 md:mb-8 border-b border-night-100">
         <TabButton id="orders" activeTab={activeTab} setActiveTab={setActiveTab}>Мои заказы</TabButton>
         <TabButton id="profile" activeTab={activeTab} setActiveTab={setActiveTab}>Личные данные</TabButton>
@@ -162,6 +176,8 @@ const AccountPage = () => {
           />
         )}
         {activeTab === "profile" && <ProfileTab form={form} onChange={handleChange} onSave={handleSave} saving={saving} />}
+      </div>
+        </div>
       </div>
     </div>
   );

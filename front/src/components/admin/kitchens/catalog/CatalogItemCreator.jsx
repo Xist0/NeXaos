@@ -1,59 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FaArrowLeft, FaCamera, FaCog, FaDollarSign, FaImage, FaRulerCombined, FaSave, FaSpinner } from "react-icons/fa";
-import SecureButton from "../ui/SecureButton";
-import SecureInput from "../ui/SecureInput";
-import useApi from "../../hooks/useApi";
-import useLogger from "../../hooks/useLogger";
-import ImageManager from "./ImageManager";
-import { formatCurrency } from "../../utils/format";
-import ColorBadge from "../ui/ColorBadge";
-import { getThumbUrl } from "../../utils/image";
-import PopoverSelect from "../ui/PopoverSelect";
-
-const LazyImg = ({ src, alt, className, onError }) => {
-  const holderRef = useRef(null);
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (isVisible) return;
-    const el = holderRef.current;
-    if (!el) return;
-
-    if (typeof IntersectionObserver === "undefined") {
-      queueMicrotask(() => setIsVisible(true));
-      return;
-    }
-
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setIsVisible(true);
-          obs.disconnect();
-        }
-      },
-      { root: null, rootMargin: "50px", threshold: 0.01 }
-    );
-
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [isVisible]);
-
-  return (
-    <span ref={holderRef} className={className}>
-      {isVisible && (
-        <img
-          src={src}
-          alt={alt}
-          className={className}
-          loading="lazy"
-          decoding="async"
-          fetchPriority="low"
-          onError={onError}
-        />
-      )}
-    </span>
-  );
-};
+import { FaArrowLeft, FaCamera, FaCheckCircle, FaClipboardList, FaCog, FaDollarSign, FaRulerCombined, FaSave, FaSpinner } from "react-icons/fa";
+import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
+import ProductTypeField from "../../ProductTypeField";
+import ProductParametersBlock from "../../ProductParametersBlock";
+import useCharacteristicValueTemplates from "../../../../hooks/useCharacteristicValueTemplates";
+import {
+  characteristicsFromApi,
+  createEmptyCharacteristicsForm,
+  normalizeCharacteristicsForSave,
+} from "../../../../utils/characteristics";
+import SecureButton from "../../../ui/SecureButton";
+import SecureInput from "../../../ui/SecureInput";
+import useApi from "../../../../hooks/useApi";
+import useLogger from "../../../../hooks/useLogger";
+import ImageManager from "../../ImageManager";
+import { formatCurrency } from "../../../../utils/format";
+import PopoverSelect from "../../../ui/PopoverSelect";
 
 let colorsCache = null;
 let colorsCachePromise = null;
@@ -84,18 +46,6 @@ const toOptionalString = (value) => {
   return str ? str : undefined;
 };
 
-const normalizeCharacteristics = (value) => {
-  const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const next = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v === null || v === undefined) continue;
-    const str = typeof v === "string" ? v.trim() : v;
-    if (str === "") continue;
-    next[k] = str;
-  }
-  return next;
-};
-
 const normalizeSkuPart = (value) => {
   const s = String(value ?? "").trim();
   if (!s) return "";
@@ -124,9 +74,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
   const [isActive, setIsActive] = useState(false);
 
-  const [openPrimary, setOpenPrimary] = useState(false);
-  const [openSecondary, setOpenSecondary] = useState(false);
   const colorPickerRef = useRef(null);
+  const { templatesByField } = useCharacteristicValueTemplates(get);
 
   const [itemId, setItemId] = useState(initialCatalogItemId);
   const createLockRef = useRef(false);
@@ -153,6 +102,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     height_mm: "",
     preview_url: null,
     final_price: "",
+    characteristics: createEmptyCharacteristicsForm(),
   });
 
   const [selectedParameters, setSelectedParameters] = useState([]);
@@ -274,23 +224,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     getRef.current = get;
     loggerRef.current = logger;
   }, [get, logger]);
-
-  useEffect(() => {
-    if (!openPrimary && !openSecondary) return;
-
-    const onPointerDown = (e) => {
-      const root = colorPickerRef.current;
-      if (!root) return;
-      if (root.contains(e.target)) return;
-      setOpenPrimary(false);
-      setOpenSecondary(false);
-    };
-
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [openPrimary, openSecondary]);
 
   const addParameter = (parameterId) => {
     const id = Number(parameterId);
@@ -470,7 +403,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
 
-        characteristics: normalizeCharacteristics(form.characteristics),
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
 
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
@@ -517,6 +450,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       height_mm: data.height_mm != null ? String(data.height_mm) : "",
       preview_url: data.preview_url || null,
       final_price: data.final_price != null ? String(data.final_price) : "",
+      characteristics: characteristicsFromApi(data.characteristics),
     }));
 
     setIsActive(!!data.is_active);
@@ -590,11 +524,12 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
   const steps = useMemo(
     () => [
-      { number: 1, title: "Описание", icon: FaCog },
-      { number: 2, title: "Размеры", icon: FaRulerCombined },
-      { number: 3, title: "Цвета", icon: FaImage },
-      { number: 4, title: "Фото", icon: FaCamera },
-      { number: 5, title: "Цена", icon: FaDollarSign },
+      { number: 1, title: "Тип", icon: FaCog },
+      { number: 2, title: "Описание", icon: FaCheckCircle },
+      { number: 3, title: "Характеристики", icon: FaClipboardList },
+      { number: 4, title: "Размеры", icon: FaRulerCombined },
+      { number: 5, title: "Фото", icon: FaCamera },
+      { number: 6, title: "Цена", icon: FaDollarSign },
     ],
     []
   );
@@ -617,7 +552,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
 
-        characteristics: normalizeCharacteristics(form.characteristics),
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
 
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
@@ -659,13 +594,13 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
   const goToPhotos = async () => {
     const id = await createItemIfNeeded();
     if (!id) return;
-    setStep(4);
+    setStep(5);
   };
 
   const goToPrice = async () => {
     const id = await createItemIfNeeded();
     if (!id) return;
-    setStep(5);
+    setStep(6);
   };
 
   const finalizeItem = async () => {
@@ -692,6 +627,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         sku: toOptionalString(getEffectiveSku()),
         name: String(form.name).trim(),
         description: toOptionalString(form.description),
+
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
 
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
@@ -732,7 +669,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         preview_url: null,
         final_price: "",
 
-        characteristics: {},
+        characteristics: createEmptyCharacteristicsForm(),
       });
       setSelectedParameterCategories([]);
     } catch (e) {
@@ -825,8 +762,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
                   variant={step === s.number ? "primary" : "outline"}
                   className="px-3 py-2 text-xs flex items-center gap-2"
                   onClick={() => {
-                    if (s.number === 4) return;
                     if (s.number === 5) return;
+                    if (s.number === 6) return;
                     setStep(s.number);
                   }}
                 >
@@ -841,36 +778,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       {step === 1 && (
         <div className="glass-card p-6 space-y-4">
           <div className="grid gap-4">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Название</div>
-              <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
-            </label>
-
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
-              <SecureInput value={form.baseSku} onChange={(v) => setForm((p) => ({ ...p, baseSku: v }))} />
-            </label>
-
-            <label className="space-y-2">
-              <div
-                className="text-xs font-semibold text-night-700"
-                title="SKU формируется автоматически из baseSku/названия + размеров (Д/Г/В) + выбранных цветов. Поле доступно только для просмотра."
-              >
-                SKU
-              </div>
-              <SecureInput value={effectiveSku} onChange={() => {}} disabled />
-            </label>
-
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Описание</div>
-              <textarea
-                value={form.description}
-                onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-                rows={5}
-              />
-            </label>
-
             <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Коллекция</div>
               <PopoverSelect
@@ -890,223 +797,32 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
               />
             </label>
 
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-night-700">Параметры</div>
-              <div className="relative flex flex-wrap items-center gap-2">
-                <div className="min-w-0 w-56">
-                  <PopoverSelect
-                    size="sm"
-                    items={productParameterItems}
-                    value={""}
-                    placeholder="Параметр…"
-                    searchable={productParameterItems.length > 10}
-                    getKey={(p) => String(p.id)}
-                    getLabel={(p) => `#${p.id} ${p.name}`}
-                    onChange={(next) => {
-                      const v = String(next || "");
-                      if (!v) return;
-                      addParameter(v);
-                    }}
-                    buttonClassName="rounded-lg"
-                    popoverClassName="rounded-lg max-w-xl"
-                    maxHeightClassName="max-h-80"
-                  />
-                </div>
-                <SecureButton
-                  type="button"
-                  variant="outline"
-                  className="px-4 py-2 text-xs whitespace-nowrap rounded-2xl"
-                  onClick={() => {
-                    if (templatesOverlayOpen) {
-                      setTemplatesOverlayOpen(false);
-                      return;
-                    }
-                    void openTemplatesOverlay();
-                  }}
-                >
-                  Шаблоны параметров
-                </SecureButton>
+            <label className="space-y-2">
+              <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
+              <SecureInput value={form.baseSku} onChange={(v) => setForm((p) => ({ ...p, baseSku: v }))} />
+            </label>
 
-                {templatesOverlayOpen ? (
-                  <div
-                    ref={templatesPopoverRef}
-                    className="absolute left-0 top-full mt-2 z-50 w-full max-w-xl"
-                  >
-                    <div className="border border-night-200 rounded-lg bg-white shadow-lg overflow-hidden">
-                      <div className="px-3 py-2 border-b border-night-100 flex items-center justify-between gap-3">
-                        <div className="text-xs font-semibold text-night-700">Выберите шаблон</div>
-                        <SecureButton type="button" variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setTemplatesOverlayOpen(false)}>
-                          Закрыть
-                        </SecureButton>
-                      </div>
-
-                      {allTemplatesLoading ? (
-                        <div className="px-3 py-3 text-sm text-night-600">Загрузка…</div>
-                      ) : null}
-
-                      {!allTemplatesLoading && allTemplates.length === 0 ? (
-                        <div className="px-3 py-3 text-sm text-night-600">Шаблоны не найдены</div>
-                      ) : null}
-
-                      {!allTemplatesLoading && allTemplates.length > 0 ? (
-                        <div className="max-h-64 overflow-auto">
-                          {allTemplates
-                            .slice()
-                            .sort((a, b) => {
-                              const pa = referenceData.productParameters.find((x) => Number(x?.id) === Number(a?.parameter_id));
-                              const pb = referenceData.productParameters.find((x) => Number(x?.id) === Number(b?.parameter_id));
-                              const n = String(pa?.name || "").localeCompare(String(pb?.name || ""), "ru");
-                              if (n !== 0) return n;
-                              return String(a?.value || "").localeCompare(String(b?.value || ""), "ru");
-                            })
-                            .map((t) => {
-                              const pid = Number(t?.parameter_id);
-                              const full = referenceData.productParameters.find((x) => Number(x?.id) === pid);
-                              const labelValue = String(t?.value || "").trim();
-                              const labelQty = Number(t?.quantity);
-                              const qty = Number.isFinite(labelQty) && labelQty > 0 ? labelQty : 1;
-                              return (
-                                <button
-                                  key={t.id}
-                                  type="button"
-                                  className="w-full text-left px-3 py-2 hover:bg-night-50 transition-colors border-b border-night-100 last:border-b-0"
-                                  onClick={() => {
-                                    applyTemplateToParameter({ parameterId: pid, template: t });
-                                    setTemplatesOverlayOpen(false);
-                                  }}
-                                >
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <div className="min-w-0 flex-1">
-                                      <div className="text-xs font-semibold text-night-900 truncate">{full?.name || `#${pid}`}</div>
-                                    </div>
-                                    <div className="text-xs text-night-700 truncate max-w-[12rem]">{labelValue || "—"}</div>
-                                    <div className="text-xs text-night-500 shrink-0">×{qty}</div>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
+            <label className="space-y-2">
+              <div
+                className="text-xs font-semibold text-night-700"
+                title="SKU формируется автоматически из baseSku/названия + размеров (Д/Г/В) + выбранных цветов."
+              >
+                Артикул (SKU)
               </div>
+              <SecureInput value={effectiveSku} onChange={() => {}} disabled />
+            </label>
 
-              {selectedParameters.length > 0 ? (
-                <div className="space-y-2">
-                  {selectedParameters.map((p, idx) => {
-                    const full = referenceData.productParameters.find((x) => Number(x.id) === Number(p.parameterId));
-                    const templates = parameterTemplatesById[String(p.parameterId)] || null;
-                    if (templates === null) {
-                      void ensureParameterTemplatesLoaded(p.parameterId);
-                    }
-                    return (
-                      <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-2xl p-3 bg-white">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${p.parameterId}`}</div>
-                          <div className="text-xs text-night-500">ID: {p.parameterId}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <PopoverSelect
-                            size="sm"
-                            items={Array.isArray(templates) ? templates : []}
-                            value={""}
-                            placeholder="Шаблон…"
-                            searchable={(Array.isArray(templates) ? templates : []).length > 8}
-                            getKey={(t) => String(t.id)}
-                            getLabel={(t) => {
-                              const labelValue = String(t?.value || "").trim();
-                              const labelQty = Number(t?.quantity);
-                              const qtySuffix = Number.isFinite(labelQty) && labelQty > 1 ? ` (${labelQty})` : "";
-                              return labelValue ? `${labelValue}${qtySuffix}` : `Количество${qtySuffix}`;
-                            }}
-                            onChange={(next) => {
-                              const templateId = Number(next);
-                              if (!Number.isFinite(templateId) || templateId <= 0) return;
-                              const list = parameterTemplatesById[String(p.parameterId)] || [];
-                              const t = list.find((x) => Number(x.id) === templateId);
-                              if (!t) return;
-                              setSelectedParameters((prev) => {
-                                const arr = [...prev];
-                                if (!arr[idx]) return prev;
-                                arr[idx] = {
-                                  ...arr[idx],
-                                  value: t.value ?? "",
-                                  quantity: Number(t.quantity) || 1,
-                                };
-                                return arr;
-                              });
-                            }}
-                            buttonClassName="h-10 rounded-lg border border-night-200 bg-white text-night-900 text-xs"
-                            popoverClassName="rounded-lg"
-                            maxHeightClassName="max-h-64"
-                          />
-                          <SecureInput
-                            value={String(p.value)}
-                            onChange={(v) => updateParameterValue(idx, v)}
-                            placeholder="Значение"
-                            className="w-48"
-                          />
-                          <SecureInput
-                            type="number"
-                            value={String(p.quantity)}
-                            onChange={(v) => updateParameterQty(idx, v)}
-                            className="w-24"
-                          />
-                          <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => removeParameter(idx)}>
-                            Удалить
-                          </SecureButton>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-sm text-night-500">Параметры не выбраны</div>
-              )}
-            </div>
+            <label className="space-y-2">
+              <div className="text-xs font-semibold text-night-700">Название</div>
+              <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
+            </label>
 
-            <div className="space-y-3">
-              <div className="text-xs font-semibold text-night-700">Категории параметров изделий</div>
-              <PopoverSelect
-                size="md"
-                items={productParameterCategoryItems}
-                value={""}
-                placeholder="Категория…"
-                searchable={productParameterCategoryItems.length > 10}
-                getKey={(c) => String(c.id)}
-                getLabel={(c) => String(c?.name || "")}
-                onChange={(next) => {
-                  const v = String(next || "");
-                  if (!v) return;
-                  addParameterCategory(v);
-                }}
-                buttonClassName="rounded-lg"
-                popoverClassName="rounded-lg max-w-xl"
-                maxHeightClassName="max-h-80"
-              />
+            <ProductTypeField
+              characteristics={form.characteristics}
+              onCharacteristicsChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
+              suggestions={templatesByField.product_type || []}
+            />
 
-              {(selectedParameterCategories || []).length > 0 ? (
-                <div className="space-y-2">
-                  {selectedParameterCategories.map((id, idx) => {
-                    const full = (referenceData.productParameterCategories || []).find((x) => Number(x.id) === Number(id));
-                    return (
-                      <div key={`${id}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-lg p-3 bg-white">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${id}`}</div>
-                          <div className="text-xs text-night-500">ID: {id}</div>
-                        </div>
-                        <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => removeParameterCategory(idx)}>
-                          Удалить
-                        </SecureButton>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-sm text-night-500">Категории не выбраны</div>
-              )}
-            </div>
           </div>
 
           <div className="flex justify-end">
@@ -1118,6 +834,75 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       )}
 
       {step === 2 && (
+        <div className="glass-card p-6 space-y-4">
+          <label className="space-y-2 block">
+            <div className="text-xs font-semibold text-night-700">Описание</div>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+              className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              rows={8}
+            />
+          </label>
+          <div className="flex justify-between pt-4">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-4 py-2 flex items-center gap-2">
+              <FaArrowLeft /> Назад
+            </SecureButton>
+            <SecureButton type="button" onClick={() => setStep(3)} className="px-4 py-2">
+              Далее
+            </SecureButton>
+          </div>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="glass-card p-6 space-y-6">
+          <ProductCharacteristicsEditor
+            value={form.characteristics}
+            onChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
+            templatesByField={templatesByField}
+            colors={referenceData.colors}
+            primaryColorId={form.primary_color_id}
+            secondaryColorId={form.secondary_color_id}
+            onPrimaryColorChange={(id) => setForm((p) => ({ ...p, primary_color_id: id }))}
+            onSecondaryColorChange={(id) => setForm((p) => ({ ...p, secondary_color_id: id }))}
+            colorPickerRef={colorPickerRef}
+          />
+          <ProductParametersBlock
+            productParameterItems={productParameterItems}
+            productParameterCategoryItems={productParameterCategoryItems}
+            referenceData={referenceData}
+            selectedParameters={selectedParameters}
+            selectedParameterCategories={selectedParameterCategories}
+            parameterTemplatesById={parameterTemplatesById}
+            ensureParameterTemplatesLoaded={ensureParameterTemplatesLoaded}
+            addParameter={addParameter}
+            updateParameterValue={updateParameterValue}
+            updateParameterQty={updateParameterQty}
+            removeParameter={removeParameter}
+            addParameterCategory={addParameterCategory}
+            removeParameterCategory={removeParameterCategory}
+            templatesOverlayOpen={templatesOverlayOpen}
+            setTemplatesOverlayOpen={setTemplatesOverlayOpen}
+            allTemplatesLoading={allTemplatesLoading}
+            allTemplates={allTemplates}
+            openTemplatesOverlay={openTemplatesOverlay}
+            applyTemplateToParameter={applyTemplateToParameter}
+            templatesPopoverRef={templatesPopoverRef}
+            showGlobalTemplates
+          />
+          <div className="flex justify-between pt-4 border-t border-night-200">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
+              <FaArrowLeft /> Назад
+            </SecureButton>
+            <SecureButton type="button" onClick={() => setStep(4)} className="px-4 py-2">
+              Далее
+            </SecureButton>
+          </div>
+        </div>
+      )}
+
+      {step === 4 && (
         <div className="glass-card p-6 space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
             <label className="space-y-2">
@@ -1135,185 +920,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
           </div>
 
           <div className="flex justify-between">
-            <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-4 py-2 flex items-center gap-2">
-              <FaArrowLeft /> Назад
-            </SecureButton>
-            <SecureButton type="button" onClick={() => setStep(3)} className="px-4 py-2">
-              Далее
-            </SecureButton>
-          </div>
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="glass-card p-6 space-y-4">
-          <div className="space-y-3" ref={colorPickerRef}>
-            <div className="relative py-2">
-              <div className="border-t border-night-200" />
-              <span className="absolute -top-2 left-3 px-2 text-xs text-night-500 bg-white/70">Выбор цвета</span>
-            </div>
-
-            <div className="grid gap-6 md:grid-cols-2">
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Основной цвет</div>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenPrimary((v) => !v);
-                  setOpenSecondary(false);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
-              >
-                <span className="flex items-center gap-2">
-                  {selectedPrimaryColor ? <ColorBadge colorData={selectedPrimaryColor} /> : <span className="text-xs text-night-500">Выберите цвет</span>}
-                </span>
-                <span className="text-night-400">▾</span>
-              </button>
-              {openPrimary && (
-                <div className="relative">
-                  <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
-                    <div className="p-2 space-y-2">
-                      <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Основные цвета</div>
-                      <div className="space-y-1">
-                        {colorsByType.facade.map((c) => {
-                          const isSelected = Number(form.primary_color_id) === Number(c.id);
-                          return (
-                            <button
-                              key={`primary-opt-${c.id}`}
-                              type="button"
-                              onClick={() => {
-                                setForm((p) => ({ ...p, primary_color_id: String(c.id) }));
-                                setOpenPrimary(false);
-                              }}
-                              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
-                              }`}
-                            >
-                              <LazyImg
-                                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                alt={c.name}
-                                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                              />
-                              <span className="text-xs text-night-700 truncate">{c.name}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="my-2 border-t border-night-200" />
-                      <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
-                      <div className="space-y-1">
-                        {colorsByType.universal.map((c) => {
-                          const isSelected = Number(form.primary_color_id) === Number(c.id);
-                          return (
-                            <button
-                              key={`primary-univ-${c.id}`}
-                              type="button"
-                              onClick={() => {
-                                setForm((p) => ({ ...p, primary_color_id: String(c.id) }));
-                                setOpenPrimary(false);
-                              }}
-                              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
-                              }`}
-                            >
-                              <LazyImg
-                                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                alt={c.name}
-                                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                              />
-                              <span className="text-xs text-night-700 truncate">{c.name}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Доп. цвет</div>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpenSecondary((v) => !v);
-                  setOpenPrimary(false);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
-              >
-                <span className="flex items-center gap-2">
-                  {selectedSecondaryColor ? <ColorBadge colorData={selectedSecondaryColor} /> : <span className="text-xs text-night-500">Выберите цвет</span>}
-                </span>
-                <span className="text-night-400">▾</span>
-              </button>
-              {openSecondary && (
-                <div className="relative">
-                  <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
-                    <div className="p-2 space-y-2">
-                      <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Доп. цвета</div>
-                      <div className="space-y-1">
-                        {colorsByType.corpus.map((c) => {
-                          const isSelected = Number(form.secondary_color_id) === Number(c.id);
-                          return (
-                            <button
-                              key={`secondary-opt-${c.id}`}
-                              type="button"
-                              onClick={() => {
-                                setForm((p) => ({ ...p, secondary_color_id: String(c.id) }));
-                                setOpenSecondary(false);
-                              }}
-                              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
-                              }`}
-                            >
-                              <LazyImg
-                                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                alt={c.name}
-                                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                              />
-                              <span className="text-xs text-night-700 truncate">{c.name}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="my-2 border-t border-night-200" />
-                      <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
-                      <div className="space-y-1">
-                        {colorsByType.universal.map((c) => {
-                          const isSelected = Number(form.secondary_color_id) === Number(c.id);
-                          return (
-                            <button
-                              key={`secondary-univ-${c.id}`}
-                              type="button"
-                              onClick={() => {
-                                setForm((p) => ({ ...p, secondary_color_id: String(c.id) }));
-                                setOpenSecondary(false);
-                              }}
-                              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
-                              }`}
-                            >
-                              <LazyImg
-                                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                alt={c.name}
-                                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                              />
-                              <span className="text-xs text-night-700 truncate">{c.name}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            </div>
-          </div>
-
-          <div className="flex justify-between">
-            <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
             </SecureButton>
             <SecureButton type="button" onClick={goToPhotos} className="px-4 py-2">
@@ -1323,14 +930,15 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         </div>
       )}
 
-      {step === 4 && (
+
+      {step === 5 && (
         <div className="glass-card p-6 space-y-6">
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="text-sm font-semibold text-night-900">Фото</div>
               <div className="text-xs text-night-500">Загрузите медиа и выберите превью.</div>
             </div>
-            <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
             </SecureButton>
           </div>
@@ -1350,7 +958,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         </div>
       )}
 
-      {step === 5 && (
+      {step === 6 && (
         <div className="glass-card p-6 space-y-4">
           <label className="space-y-2">
             <div className="text-xs font-semibold text-night-700">Итоговая цена</div>
@@ -1358,7 +966,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
           </label>
 
           <div className="flex justify-between">
-            <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 flex items-center gap-2">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(5)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
             </SecureButton>
 

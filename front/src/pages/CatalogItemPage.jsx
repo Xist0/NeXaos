@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import useApi from "../hooks/useApi";
 import useCart from "../hooks/useCart";
+import { characteristicsToDisplayRows } from "../utils/characteristics";
 import SecureButton from "../components/ui/SecureButton";
 import FavoriteButton from "../components/ui/FavoriteButton";
 import ColorBadge from "../components/ui/ColorBadge";
@@ -94,22 +95,9 @@ const CatalogItemPage = () => {
       });
     }
 
-    if (ch.product_type) rows.push({ label: "Тип изделия", value: String(ch.product_type) });
-    if (ch.purpose) rows.push({ label: "Назначение", value: String(ch.purpose) });
-    if (ch.material_corpus) rows.push({ label: "Материал корпуса", value: String(ch.material_corpus) });
-    if (ch.material_facade) rows.push({ label: "Материал фасада", value: String(ch.material_facade) });
-    if (ch.opening_type) rows.push({ label: "Тип открывания", value: String(ch.opening_type) });
-    if (ch.guides_type) rows.push({ label: "Тип направляющих", value: String(ch.guides_type) });
-    if (ch.hinges_type) rows.push({ label: "Тип петель", value: String(ch.hinges_type) });
-    if (ch.supports_type) rows.push({ label: "Тип опор", value: String(ch.supports_type) });
-    if (ch.features) rows.push({ label: "Особенности", value: String(ch.features) });
-    if (typeof ch.mirror === "boolean" && ch.mirror) rows.push({ label: "Зеркало", value: "Да" });
-    if (ch.shelf_count) rows.push({ label: "Кол-во полок", value: String(ch.shelf_count) });
-    if (ch.drawer_count) rows.push({ label: "Кол-во ящиков", value: String(ch.drawer_count) });
-    if (ch.front_count) rows.push({ label: "Кол-во фасадов", value: String(ch.front_count) });
-    if (ch.design_style) rows.push({ label: "Стиль дизайна", value: String(ch.design_style) });
-    if (ch.weight_kg) rows.push({ label: "Вес, кг", value: String(ch.weight_kg) });
-    if (ch.country) rows.push({ label: "Страна-производитель", value: String(ch.country) });
+    characteristicsToDisplayRows(ch).forEach((row) => {
+      rows.push({ label: row.label, value: row.value });
+    });
     return rows;
   }, [item?.characteristics]);
 

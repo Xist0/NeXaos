@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import SecureButton from "../components/ui/SecureButton";
 import OrdersTable from "../components/admin/OrdersTable";
 import EntityManager from "../components/admin/EntityManager";
-import ModulesAdmin from "../components/admin/ModulesAdmin";
-import KitSolutionsAdmin from "../components/admin/KitSolutionsAdmin";
-import ModuleDescriptionsAdmin from "../components/admin/ModuleDescriptionsAdmin";
-import CatalogItemsAdmin from "../components/admin/CatalogItemsAdmin";
+import ModulesAdmin from "../components/admin/kitchens/modules/ModulesAdmin";
+import KitSolutionsAdmin from "../components/admin/kitchens/ready-solutions/KitSolutionsAdmin";
+import ModuleDescriptionsAdmin from "../components/admin/kitchens/modules/ModuleDescriptionsAdmin";
+import CatalogItemsAdmin from "../components/admin/kitchens/catalog/CatalogItemsAdmin";
 import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight, FaUser } from "react-icons/fa";
 import useAuth from "../hooks/useAuth";
 import { ROLES } from "../utils/constants";
 import StaffAuditLogs from "../components/admin/StaffAuditLogs";
 import StaffUsersAdmin from "../components/admin/StaffUsersAdmin";
+import SiteVisualAdmin from "../components/admin/SiteVisualAdmin";
 
 // Структура разделов админ панели
 const adminSections = [
@@ -38,26 +40,9 @@ const adminSections = [
     label: "Каталог",
     icon: FaBook,
     items: [
+      // ——— Кухня (активно) ———
       { id: "kitSolutions", label: "Готовые решения", endpoint: "/kit-solutions", special: "kitSolutionCreator" },
       { id: "modules", label: "Модули", endpoint: "/modules", special: "moduleCreator" },
-      { id: "catalogHallwayReady", label: "Прихожая — Готовые прихожие", endpoint: "/catalog-items" },
-      { id: "catalogHallwayWardrobes", label: "Прихожая — Шкафы", endpoint: "/catalog-items" },
-      { id: "catalogHallwayShoeracks", label: "Прихожая — Обувницы", endpoint: "/catalog-items" },
-      { id: "catalogHallwayDressers", label: "Прихожая — Комоды", endpoint: "/catalog-items" },
-      { id: "catalogHallwayWallCabinets", label: "Прихожая — Тумбы подвесные", endpoint: "/catalog-items" },
-      { id: "catalogHallwaySlats", label: "Прихожая — Рейки", endpoint: "/catalog-items" },
-      { id: "catalogHallwayTopCabinets", label: "Прихожая — Верхние шкафы", endpoint: "/catalog-items" },
-      { id: "catalogHallwayAccessories", label: "Прихожая — Аксессуары", endpoint: "/catalog-items" },
-      { id: "catalogHallwayFillers", label: "Прихожая — Доборные элементы", endpoint: "/catalog-items" },
-
-      { id: "catalogLivingroomWalls", label: "Гостиная — Стенки", endpoint: "/catalog-items" },
-      { id: "catalogLivingroomTvZones", label: "Гостиная — ТВ зоны", endpoint: "/catalog-items" },
-      { id: "catalogLivingroomWardrobes", label: "Гостиная — Шкафы", endpoint: "/catalog-items" },
-      { id: "catalogLivingroomShelving", label: "Гостиная — Стеллажи", endpoint: "/catalog-items" },
-      { id: "catalogLivingroomDressers", label: "Гостиная — Комоды", endpoint: "/catalog-items" },
-      { id: "catalogLivingroomWallShelves", label: "Гостиная — Настенные полки", endpoint: "/catalog-items" },
-      { id: "catalogLivingroomCoffeeTables", label: "Гостиная — Журнальные столики", endpoint: "/catalog-items" },
-
       { id: "kitchenModulesBottom", label: "Кухня — Модули — Нижние", component: "kitchenModulesBottom" },
       { id: "kitchenModulesTop", label: "Кухня — Модули — Верхние", component: "kitchenModulesTop" },
       { id: "kitchenModulesMezzanine", label: "Кухня — Модули — Антресольные", component: "kitchenModulesMezzanine" },
@@ -66,10 +51,27 @@ const adminSections = [
       { id: "catalogKitchenFillers", label: "Кухня — Доборные элементы", endpoint: "/catalog-items" },
       { id: "catalogKitchenAccessories", label: "Кухня — Аксессуары", endpoint: "/catalog-items" },
 
-      { id: "catalogBedroomSets", label: "Спальня — Комплект мебели", endpoint: "/catalog-items" },
-      { id: "catalogBedroomBeds", label: "Спальня — Кровати", endpoint: "/catalog-items" },
-      { id: "catalogBedroomDressingTables", label: "Спальня — Туалетные столики", endpoint: "/catalog-items" },
-      { id: "catalogBedroomBedside", label: "Спальня — Прикроватные тумбы", endpoint: "/catalog-items" },
+      // ——— Не кухня (скрыто, на будущее) ———
+      // { id: "catalogHallwayReady", label: "Прихожая — Готовые прихожие", endpoint: "/catalog-items" },
+      // { id: "catalogHallwayWardrobes", label: "Прихожая — Шкафы", endpoint: "/catalog-items" },
+      // { id: "catalogHallwayShoeracks", label: "Прихожая — Обувницы", endpoint: "/catalog-items" },
+      // { id: "catalogHallwayDressers", label: "Прихожая — Комоды", endpoint: "/catalog-items" },
+      // { id: "catalogHallwayWallCabinets", label: "Прихожая — Тумбы подвесные", endpoint: "/catalog-items" },
+      // { id: "catalogHallwaySlats", label: "Прихожая — Рейки", endpoint: "/catalog-items" },
+      // { id: "catalogHallwayTopCabinets", label: "Прихожая — Верхние шкафы", endpoint: "/catalog-items" },
+      // { id: "catalogHallwayAccessories", label: "Прихожая — Аксессуары", endpoint: "/catalog-items" },
+      // { id: "catalogHallwayFillers", label: "Прихожая — Доборные элементы", endpoint: "/catalog-items" },
+      // { id: "catalogLivingroomWalls", label: "Гостиная — Стенки", endpoint: "/catalog-items" },
+      // { id: "catalogLivingroomTvZones", label: "Гостиная — ТВ зоны", endpoint: "/catalog-items" },
+      // { id: "catalogLivingroomWardrobes", label: "Гостиная — Шкафы", endpoint: "/catalog-items" },
+      // { id: "catalogLivingroomShelving", label: "Гостиная — Стеллажи", endpoint: "/catalog-items" },
+      // { id: "catalogLivingroomDressers", label: "Гостиная — Комоды", endpoint: "/catalog-items" },
+      // { id: "catalogLivingroomWallShelves", label: "Гостиная — Настенные полки", endpoint: "/catalog-items" },
+      // { id: "catalogLivingroomCoffeeTables", label: "Гостиная — Журнальные столики", endpoint: "/catalog-items" },
+      // { id: "catalogBedroomSets", label: "Спальня — Комплект мебели", endpoint: "/catalog-items" },
+      // { id: "catalogBedroomBeds", label: "Спальня — Кровати", endpoint: "/catalog-items" },
+      // { id: "catalogBedroomDressingTables", label: "Спальня — Туалетные столики", endpoint: "/catalog-items" },
+      // { id: "catalogBedroomBedside", label: "Спальня — Прикроватные тумбы", endpoint: "/catalog-items" },
     ],
   },
   {
@@ -77,6 +79,7 @@ const adminSections = [
     label: "Контент",
     icon: FaEdit,
     items: [
+      { id: "siteVisual", label: "Визуал сайта", component: "siteVisual" },
       { id: "heroSlides", label: "Hero-слайды", endpoint: "/hero-slides" },
       { id: "works", label: "Наши работы", endpoint: "/works" },
     ],
@@ -886,6 +889,7 @@ const entityConfigs = {
 
 const AdminPage = () => {
   const { role } = useAuth();
+  const location = useLocation();
   const [activeSection, setActiveSection] = useState("orders");
   const [activeTab, setActiveTab] = useState("orders");
   const [expandedSections, setExpandedSections] = useState({
@@ -897,12 +901,32 @@ const AdminPage = () => {
     staff: false,
   });
   const [expandedCatalogGroups, setExpandedCatalogGroups] = useState({
-    hallway: false,
-    livingroom: false,
-    kitchen: false,
+    // hallway: false,
+    // livingroom: false,
+    kitchen: true,
     kitchenModules: false,
-    bedroom: false,
+    // bedroom: false,
   });
+
+  useEffect(() => {
+    const nav = location.state;
+    if (!nav?.activeTab) return;
+
+    setActiveTab(nav.activeTab);
+    if (nav.activeSection) {
+      setActiveSection(nav.activeSection);
+      setExpandedSections((prev) => ({
+        ...Object.fromEntries(Object.keys(prev).map((k) => [k, false])),
+        [nav.activeSection]: true,
+      }));
+    }
+    if (nav.activeSection === "catalog" && nav.catalogGroup) {
+      setExpandedCatalogGroups((prev) => ({
+        ...Object.fromEntries(Object.keys(prev).map((k) => [k, false])),
+        [nav.catalogGroup]: true,
+      }));
+    }
+  }, [location.state]);
 
   const toggleSection = (sectionId) => {
     setExpandedSections((prev) => {
@@ -978,10 +1002,10 @@ const AdminPage = () => {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* Боковая панель с разделами */}
-        <div className="lg:col-span-1">
-          <div className="glass-card p-4 space-y-2">
+        <aside className="w-full lg:w-[280px] shrink-0 lg:sticky lg:top-24 lg:z-30 self-start">
+          <div className="glass-card border border-night-200 shadow-md p-4 space-y-2 max-h-[calc(100vh-7rem)] overflow-y-auto bg-white">
             {allowedSections.map((section) => {
               const Icon = section.icon;
               const isExpanded = expandedSections[section.id];
@@ -1011,6 +1035,9 @@ const AdminPage = () => {
                     <div className="ml-8 space-y-1 animate-in slide-in-from-left duration-300">
                       {section.id === "catalog" ? (
                         <div className="space-y-1">
+                          {/* ——— Не кухня: скрыто на будущее ——— */}
+                          {false && (
+                          <>
                           <button
                             onClick={() => toggleCatalogGroup("hallway")}
                             className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
@@ -1056,7 +1083,11 @@ const AdminPage = () => {
                               })}
                             </div>
                           )}
+                          </>
+                          )}
 
+                          {false && (
+                          <>
                           <button
                             onClick={() => toggleCatalogGroup("livingroom")}
                             className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
@@ -1100,8 +1131,11 @@ const AdminPage = () => {
                               })}
                             </div>
                           )}
+                          </>
+                          )}
 
                           <button
+                            type="button"
                             onClick={() => toggleCatalogGroup("kitchen")}
                             className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
                               expandedCatalogGroups.kitchen
@@ -1118,7 +1152,28 @@ const AdminPage = () => {
                           </button>
                           {expandedCatalogGroups.kitchen && (
                             <div className="ml-4 space-y-1">
+                              {[
+                                { id: "kitSolutions", label: "Готовые решения" },
+                                { id: "modules", label: "Модули" },
+                              ].map((item) => {
+                                const isActive = activeTab === item.id;
+                                return (
+                                  <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
+                                    className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                                      isActive
+                                        ? "bg-accent text-white shadow-sm"
+                                        : "text-night-600 hover:bg-night-50"
+                                    }`}
+                                  >
+                                    <span className="text-left">{item.label}</span>
+                                  </button>
+                                );
+                              })}
                               <button
+                                type="button"
                                 onClick={() => toggleCatalogGroup("kitchenModules")}
                                 className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
                                   expandedCatalogGroups.kitchenModules
@@ -1182,7 +1237,10 @@ const AdminPage = () => {
                             </div>
                           )}
 
+                          {false && (
+                          <>
                           <button
+                            type="button"
                             onClick={() => toggleCatalogGroup("bedroom")}
                             className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 ${
                               expandedCatalogGroups.bedroom
@@ -1222,6 +1280,8 @@ const AdminPage = () => {
                               })}
                             </div>
                           )}
+                          </>
+                          )}
                         </div>
                       ) : (
                         section.items.map((item) => {
@@ -1247,10 +1307,10 @@ const AdminPage = () => {
               );
             })}
           </div>
-        </div>
+        </aside>
 
         {/* Основной контент */}
-        <div className="lg:col-span-3">
+        <div className="flex-1 min-w-0 w-full">
           {/* Заказы */}
           {activeTab === "orders" && <OrdersTable />}
 
@@ -1279,8 +1339,9 @@ const AdminPage = () => {
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
           {currentItem?.component === "staffAuditLogs" && <StaffAuditLogs />}
           {currentItem?.component === "staffUsers" && <StaffUsersAdmin />}
+          {activeTab === "siteVisual" && <SiteVisualAdmin />}
 
-          {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && (
+          {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && activeTab !== "siteVisual" && (
             isCatalogItemsTab ? (
               <CatalogItemsAdmin key={activeTab} title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
             ) : (

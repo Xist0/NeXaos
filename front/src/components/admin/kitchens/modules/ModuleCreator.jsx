@@ -9,17 +9,26 @@ import {
   FaCamera,
   FaCog,
   FaRulerCombined,
-  FaDollarSign
+  FaDollarSign,
+  FaClipboardList,
 } from "react-icons/fa";
-import SecureButton from "../ui/SecureButton";
-import SecureInput from "../ui/SecureInput";
-import useApi from "../../hooks/useApi";
-import useLogger from "../../hooks/useLogger";
-import ImageManager from "./ImageManager";
-import { formatCurrency } from "../../utils/format";
-import ColorBadge from "../ui/ColorBadge";
-import { getThumbUrl } from "../../utils/image";
-import PopoverSelect from "../ui/PopoverSelect";
+import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
+import ProductParametersBlock from "../../ProductParametersBlock";
+import useCharacteristicValueTemplates from "../../../../hooks/useCharacteristicValueTemplates";
+import {
+  characteristicsFromApi,
+  createEmptyCharacteristicsForm,
+  normalizeCharacteristicsForSave,
+} from "../../../../utils/characteristics";
+import SecureButton from "../../../ui/SecureButton";
+import SecureInput from "../../../ui/SecureInput";
+import useApi from "../../../../hooks/useApi";
+import useLogger from "../../../../hooks/useLogger";
+import ImageManager from "../../ImageManager";
+import { formatCurrency } from "../../../../utils/format";
+import ColorBadge from "../../../ui/ColorBadge";
+import { getThumbUrl } from "../../../../utils/image";
+import PopoverSelect from "../../../ui/PopoverSelect";
 
 const LazyImg = ({ src, alt, className, onError }) => {
   const holderRef = useRef(null);
@@ -86,30 +95,6 @@ const toOptionalString = (value) => {
   return str ? str : undefined;
 };
 
-const normalizeCharacteristics = (value) => {
-  const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const next = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v === null || v === undefined) continue;
-    if (typeof v === "string") {
-      const s = v.trim();
-      if (!s) continue;
-      next[k] = s;
-      continue;
-    }
-    if (typeof v === "number") {
-      if (!Number.isFinite(v)) continue;
-      next[k] = v;
-      continue;
-    }
-    if (typeof v === "boolean") {
-      next[k] = v;
-      continue;
-    }
-  }
-  return Object.keys(next).length ? next : null;
-};
-
 const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedModuleCategoryId = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
@@ -153,7 +138,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     preview_url: null, // ставим из ImageManager
     final_price: "",
 
-    characteristics: {},
+    characteristics: createEmptyCharacteristicsForm(),
   });
 
   const [selectedParameters, setSelectedParameters] = useState([]);
@@ -289,6 +274,31 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     });
   };
 
+  const updateParameterValue = (index, value) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], value: value === null || value === undefined ? "" : String(value) };
+      return next;
+    });
+  };
+
+  const applyTemplateToParameter = useCallback(({ parameterId, template }) => {
+    const pid = Number(parameterId);
+    if (!Number.isFinite(pid) || pid <= 0 || !template) return;
+    const nextValue = template?.value ?? "";
+    const nextQty = Number(template?.quantity) || 1;
+    setSelectedParameters((prev) => {
+      const idx = prev.findIndex((x) => Number(x?.parameterId) === pid);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], value: nextValue, quantity: nextQty };
+        return next;
+      }
+      return [...prev, { parameterId: pid, quantity: nextQty, value: nextValue }];
+    });
+  }, []);
+
   const addParameterCategory = (categoryId) => {
     const id = Number(categoryId);
     if (!Number.isFinite(id) || id <= 0) return;
@@ -332,7 +342,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
       secondary_color_id: data.secondary_color_id != null ? String(data.secondary_color_id) : "",
       preview_url: data.preview_url || null,
       final_price: data.final_price != null ? String(data.final_price) : "",
-      characteristics: normalizeCharacteristics(data.characteristics) || {},
+      characteristics: characteristicsFromApi(data.characteristics),
     }));
 
     setIsActive(!!data.is_active);
@@ -366,9 +376,10 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         case 3:
           return !!form.facade_color;
         case 4:
-          // Фото опционально, но модуль к этому моменту должен быть создан (создаем автоматом)
           return true;
         case 5:
+          return Number(form.final_price || 0) > 0;
+        case 6:
           return Number(form.final_price || 0) > 0;
         default:
           return false;
@@ -407,7 +418,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url || null,
 
-        characteristics: normalizeCharacteristics(form.characteristics),
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
 
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
@@ -549,13 +560,20 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const { templatesByField } = useCharacteristicValueTemplates(get);
+
+  const moduleColors = useMemo(
+    () => [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])],
+    [referenceData.colorsFacade, referenceData.colorsCorpus]
+  );
+
   const steps = useMemo(
     () => [
       { number: 1, title: "Тип", icon: FaCog },
       { number: 2, title: "Размеры", icon: FaRulerCombined },
-      { number: 3, title: "Цвета", icon: FaImage },
+      { number: 3, title: "Характеристики", icon: FaClipboardList },
       { number: 4, title: "Фото", icon: FaCamera },
-      { number: 5, title: "Цена", icon: FaDollarSign }
+      { number: 5, title: "Цена", icon: FaDollarSign },
     ],
     []
   );
@@ -695,7 +713,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url || null,
 
-        characteristics: normalizeCharacteristics(form.characteristics),
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
 
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
@@ -778,7 +796,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url,
 
-        characteristics: normalizeCharacteristics(form.characteristics),
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
 
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
@@ -860,7 +878,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
       preview_url: null,
       final_price: "",
 
-      characteristics: {},
+      characteristics: createEmptyCharacteristicsForm(),
     });
     setModuleId(null);
     setStep(1);
@@ -907,7 +925,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
                   onClick={() => {
                     if (s.number === 4) return;
                     if (s.number === 5) return;
-                    if (s.number === 6) return;
                     setStep(s.number);
                   }}
                 >
@@ -1098,7 +1115,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div>
                 <label className="block text-sm font-semibold text-night-700">
                   Длина <span className="text-accent">*</span>
@@ -1145,160 +1162,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
               rows={4}
             />
 
-            <div className="mt-6 space-y-3">
-              <div className="text-xs font-semibold text-night-700">Параметры</div>
-
-              <PopoverSelect
-                size="lg"
-                items={productParameterItems}
-                value={""}
-                placeholder="+ Добавить параметр…"
-                searchable={productParameterItems.length > 10}
-                getKey={(p) => String(p.id)}
-                getLabel={(p) => `#${p.id} ${p.name}`}
-                onChange={(next) => {
-                  const v = String(next || "");
-                  if (!v) return;
-                  addParameter(v);
-                }}
-                buttonClassName="h-14 px-4 border-2 focus:ring-0"
-                popoverClassName="max-w-xl"
-                maxHeightClassName="max-h-80"
-              />
-
-              {(selectedParameters || []).length === 0 ? (
-                <div className="text-sm text-night-500">Параметры не выбраны</div>
-              ) : (
-                <div className="space-y-2">
-                  {selectedParameters.map((p, idx) => {
-                    const full = (referenceData.productParameters || []).find((x) => Number(x.id) === Number(p.parameterId));
-                    const templates = parameterTemplatesById[String(p.parameterId)] || null;
-                    if (templates === null) {
-                      void ensureParameterTemplatesLoaded(p.parameterId);
-                    }
-                    return (
-                      <div key={`${p.parameterId}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-2xl p-3 bg-white">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${p.parameterId}`}</div>
-                          <div className="text-xs text-night-500">ID: {p.parameterId}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <PopoverSelect
-                            size="sm"
-                            items={Array.isArray(templates) ? templates : []}
-                            value={""}
-                            placeholder="Шаблон…"
-                            searchable={(Array.isArray(templates) ? templates : []).length > 8}
-                            getKey={(t) => String(t.id)}
-                            getLabel={(t) => {
-                              const labelValue = String(t?.value || "").trim();
-                              const labelQty = Number(t?.quantity);
-                              const qtySuffix = Number.isFinite(labelQty) && labelQty > 1 ? ` (${labelQty})` : "";
-                              return labelValue ? `${labelValue}${qtySuffix}` : `Количество${qtySuffix}`;
-                            }}
-                            onChange={(next) => {
-                              const templateId = Number(next);
-                              if (!Number.isFinite(templateId) || templateId <= 0) return;
-                              const list = parameterTemplatesById[String(p.parameterId)] || [];
-                              const t = list.find((x) => Number(x.id) === templateId);
-                              if (!t) return;
-                              setSelectedParameters((prev) => {
-                                const arr = [...prev];
-                                if (!arr[idx]) return prev;
-                                arr[idx] = {
-                                  ...arr[idx],
-                                  value: t.value ?? "",
-                                  quantity: Number(t.quantity) || 1,
-                                };
-                                return arr;
-                              });
-                            }}
-                            buttonClassName="h-10 rounded-lg border border-night-200 bg-white text-night-900 text-xs"
-                            popoverClassName="rounded-lg"
-                            maxHeightClassName="max-h-64"
-                          />
-                          <SecureInput
-                            value={String(p.value ?? "")}
-                            onChange={(v) =>
-                              setSelectedParameters((prev) => {
-                                const next = [...prev];
-                                if (!next[idx]) return prev;
-                                next[idx] = { ...next[idx], value: v };
-                                return next;
-                              })
-                            }
-                            className="w-48"
-                            placeholder="Значение"
-                          />
-                          <SecureInput
-                            type="number"
-                            value={String(p.quantity ?? 1)}
-                            onChange={(v) => updateParameterQty(idx, v)}
-                            className="w-24"
-                          />
-                          <SecureButton
-                            type="button"
-                            variant="outline"
-                            className="px-3 py-2 text-xs"
-                            onClick={() => removeParameter(idx)}
-                          >
-                            Удалить
-                          </SecureButton>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 space-y-3">
-              <div className="text-sm font-semibold text-night-900">Категории параметров изделий</div>
-              <PopoverSelect
-                size="lg"
-                items={productParameterCategoryItems}
-                value={""}
-                placeholder="+ Добавить категорию…"
-                searchable={productParameterCategoryItems.length > 10}
-                getKey={(c) => String(c.id)}
-                getLabel={(c) => String(c?.name || "")}
-                onChange={(next) => {
-                  const v = String(next || "");
-                  if (!v) return;
-                  addParameterCategory(v);
-                }}
-                buttonClassName="h-14 px-4 border-2 focus:ring-0"
-                popoverClassName="max-w-xl"
-                maxHeightClassName="max-h-80"
-              />
-
-              {(selectedParameterCategories || []).length === 0 ? (
-                <div className="text-sm text-night-500">Категории не выбраны</div>
-              ) : (
-                <div className="space-y-2">
-                  {selectedParameterCategories.map((id, idx) => {
-                    const full = (referenceData.productParameterCategories || []).find((x) => Number(x.id) === Number(id));
-                    return (
-                      <div key={`${id}-${idx}`} className="flex flex-wrap items-center justify-between gap-3 border border-night-200 rounded-2xl p-3 bg-white">
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${id}`}</div>
-                          <div className="text-xs text-night-500">ID: {id}</div>
-                        </div>
-                        <SecureButton
-                          type="button"
-                          variant="outline"
-                          className="px-3 py-2 text-xs"
-                          onClick={() => removeParameterCategory(idx)}
-                        >
-                          Удалить
-                        </SecureButton>
-                      </div>
-                    );
-                  })}
-
-                </div>
-              )}
-            </div>
 
             <div className="flex justify-between pt-8 border-t">
               <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-4 py-2 flex items-center gap-2">
@@ -1311,206 +1174,52 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
           </div>
         )}
 
-        {/* Step 3 */}
         {step === 3 && (
-          <div className="glass-card p-6 space-y-4">
-            <div className="space-y-3" ref={colorPickerRef}>
-              <div className="relative py-2">
-                <div className="border-t border-night-200" />
-                <span className="absolute -top-2 left-3 px-2 text-xs text-night-500 bg-white/70">Выбор цвета</span>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-night-700">Основной цвет</div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenPrimary((v) => !v);
-                      setOpenSecondary(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
-                  >
-                    <span className="flex items-center gap-2">
-                      {selectedPrimaryColor ? (
-                        <ColorBadge colorData={selectedPrimaryColor} />
-                      ) : (
-                        <span className="text-xs text-night-500">Выберите цвет</span>
-                      )}
-                    </span>
-                    <span className="text-night-400">▾</span>
-                  </button>
-
-                  {openPrimary && (
-                    <div className="relative">
-                      <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
-                        <div className="p-2 space-y-2">
-                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Основные цвета</div>
-                          <div className="space-y-1">
-                            {colorsByType.facade.map((c) => {
-                              const isSelected = Number(form.primary_color_id) === Number(c.id);
-                              return (
-                                <button
-                                  key={`primary-opt-${c.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    const code = c.code || c.sku;
-                                    handleFacadeColorSelect(code);
-                                    setOpenPrimary(false);
-                                  }}
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                    isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
-                                  }`}
-                                >
-                                  <LazyImg
-                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                    alt={c.name}
-                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                                  />
-                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          <div className="my-2 border-t border-night-200" />
-                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
-                          <div className="space-y-1">
-                            {colorsByType.universal.map((c) => {
-                              const isSelected = Number(form.primary_color_id) === Number(c.id);
-                              return (
-                                <button
-                                  key={`primary-univ-${c.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    const code = c.code || c.sku;
-                                    handleFacadeColorSelect(code);
-                                    setOpenPrimary(false);
-                                  }}
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                    isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
-                                  }`}
-                                >
-                                  <LazyImg
-                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                    alt={c.name}
-                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                                  />
-                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-night-700">Доп. цвет</div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!canSelectCorpus) return;
-                      setOpenSecondary((v) => !v);
-                      setOpenPrimary(false);
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border bg-white transition ${
-                      canSelectCorpus ? "border-night-200 hover:border-accent" : "border-night-200 opacity-50 cursor-not-allowed"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      {selectedSecondaryColor ? (
-                        <ColorBadge colorData={selectedSecondaryColor} />
-                      ) : (
-                        <span className="text-xs text-night-500">Выберите цвет</span>
-                      )}
-                    </span>
-                    <span className="text-night-400">▾</span>
-                  </button>
-
-                  {openSecondary && canSelectCorpus && (
-                    <div className="relative">
-                      <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
-                        <div className="p-2 space-y-2">
-                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Доп. цвета</div>
-                          <div className="space-y-1">
-                            {colorsByType.corpus.map((c) => {
-                              const isSelected = Number(form.secondary_color_id) === Number(c.id);
-                              return (
-                                <button
-                                  key={`secondary-opt-${c.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    const code = c.code || c.sku;
-                                    handleCorpusColorSelect(code);
-                                    setOpenSecondary(false);
-                                  }}
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                    isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
-                                  }`}
-                                >
-                                  <LazyImg
-                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                    alt={c.name}
-                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                                  />
-                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          <div className="my-2 border-t border-night-200" />
-                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
-                          <div className="space-y-1">
-                            {colorsByType.universal.map((c) => {
-                              const isSelected = Number(form.secondary_color_id) === Number(c.id);
-                              return (
-                                <button
-                                  key={`secondary-univ-${c.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    const code = c.code || c.sku;
-                                    handleCorpusColorSelect(code);
-                                    setOpenSecondary(false);
-                                  }}
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                    isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
-                                  }`}
-                                >
-                                  <LazyImg
-                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                    alt={c.name}
-                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                                  />
-                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-between pt-8 border-t">
+          <div className="space-y-6">
+            <ProductCharacteristicsEditor
+              value={form.characteristics}
+              onChange={(next) => setForm((prev) => ({ ...prev, characteristics: next }))}
+              templatesByField={templatesByField}
+              colors={moduleColors}
+              primaryColorId={form.primary_color_id}
+              secondaryColorId={form.secondary_color_id}
+              onPrimaryColorChange={(id) => {
+                const c = moduleColors.find((x) => Number(x.id) === Number(id));
+                if (c) handleFacadeColorSelect(c.code || c.sku);
+              }}
+              onSecondaryColorChange={(id) => {
+                const c = moduleColors.find((x) => Number(x.id) === Number(id));
+                if (c) handleCorpusColorSelect(c.code || c.sku);
+              }}
+              colorPickerRef={colorPickerRef}
+            />
+            <ProductParametersBlock
+              productParameterItems={productParameterItems}
+              productParameterCategoryItems={productParameterCategoryItems}
+              referenceData={referenceData}
+              selectedParameters={selectedParameters}
+              selectedParameterCategories={selectedParameterCategories}
+              parameterTemplatesById={parameterTemplatesById}
+              ensureParameterTemplatesLoaded={ensureParameterTemplatesLoaded}
+              addParameter={addParameter}
+              updateParameterValue={updateParameterValue}
+              updateParameterQty={updateParameterQty}
+              removeParameter={removeParameter}
+              addParameterCategory={addParameterCategory}
+              removeParameterCategory={removeParameterCategory}
+              applyTemplateToParameter={applyTemplateToParameter}
+            />
+            <div className="flex justify-between pt-4 border-t">
               <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
                 <FaArrowLeft /> Назад
               </SecureButton>
-              <SecureButton type="button" onClick={goToPhotos} className="px-4 py-2" disabled={!isStepValid(3) || loading}>
-                {loading ? <FaSpinner className="animate-spin mr-2" /> : null}
+              <SecureButton type="button" onClick={() => setStep(4)} className="px-4 py-2">
                 Далее
               </SecureButton>
             </div>
           </div>
         )}
 
-        {/* Step 4 Photos */}
         {step === 4 && (
           <div className="space-y-8">
 
@@ -1547,7 +1256,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
             )}
 
             <div className="flex justify-between pt-8 border-t">
-              <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">
+              <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 flex items-center gap-2">
                 <FaArrowLeft /> Назад
               </SecureButton>
               <SecureButton type="button" onClick={goToPrice} className="px-4 py-2" disabled={!moduleId || loading}>
@@ -1557,7 +1266,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
           </div>
         )}
 
-        {/* Step 5 Price */}
         {step === 5 && (
           <div className="space-y-12">
 

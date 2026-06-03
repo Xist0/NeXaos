@@ -26,10 +26,10 @@ const CatalogPage = () => {
   const [loading, setLoading] = useState(true);
   const [isFiltersOpen, setFiltersOpen] = useState(false);
 
-  const [expandedRoom, setExpandedRoom] = useState(() => searchParams.get("category") || "all");
+  const [expandedRoom, setExpandedRoom] = useState(() => searchParams.get("category") || "kitchen");
   const [isKitchenModulesOpen, setKitchenModulesOpen] = useState(false);
 
-  const [activeCategory, setActiveCategory] = useState(() => searchParams.get("category") || "all");
+  const [activeCategory, setActiveCategory] = useState(() => searchParams.get("category") || "kitchen");
   const [activeSubCategory, setActiveSubCategory] = useState(() => searchParams.get("subCategory") || null);
 
   const [similarModuleId, setSimilarModuleId] = useState(() => searchParams.get("similarModuleId") || null);
@@ -64,67 +64,43 @@ const CatalogPage = () => {
   const [productParameterCategories, setProductParameterCategories] = useState([]);
 
   const roomCatalog = useMemo(
-    () => (
-      [
-        {
-          code: "hallway",
-          label: "Прихожая",
-          group: "Прихожая",
-          subs: [
-            { code: "Готовые прихожие", label: "Готовые прихожие", isKits: true },
-            { code: "Шкафы", label: "Шкафы" },
-            { code: "Обувницы", label: "Обувницы" },
-            { code: "Комоды", label: "Комоды" },
-            { code: "Тумбы подвесные", label: "Тумбы подвесные" },
-            { code: "Рейки", label: "Рейки" },
-            { code: "Верхние шкафы", label: "Верхние шкафы" },
-            { code: "Аксессуары для прихожей", label: "Аксессуары для прихожей" },
-            { code: "Доборные элементы", label: "Доборные элементы" },
-          ],
-        },
-        {
-          code: "livingroom",
-          label: "Гостиная",
-          group: "Гостиная",
-          subs: [
-            { code: "Стенки для гостиной", label: "Стенки для гостиной", isKits: true },
-            { code: "ТВ зоны", label: "ТВ зоны" },
-            { code: "Шкафы", label: "Шкафы" },
-            { code: "Стеллажи", label: "Стеллажи" },
-            { code: "Комоды", label: "Комоды" },
-            { code: "Настенные полки", label: "Настенные полки" },
-            { code: "Журнальные столики", label: "Журнальные столики" },
-          ],
-        },
-        {
-          code: "kitchen",
-          label: "Кухня",
-          group: "Кухня",
-          subs: [
-            { code: "__kitchen_kits", label: "Готовые решения", isKits: true },
-            { code: "__modules", label: "Модули", isModulesToggle: true },
-            { code: "Нижние модули", label: "Нижние модули", targetCategory: "bottom", isModuleItem: true },
-            { code: "Верхние модули", label: "Верхние модули", targetCategory: "top", isModuleItem: true },
-            { code: "Антресольные модули", label: "Антресольные модули", targetCategory: "top", isModuleItem: true },
-            { code: "Пеналы", label: "Пеналы", targetCategory: "tall", isModuleItem: true },
-            { code: "Столешницы", label: "Столешницы" },
-            { code: "Доборные элементы", label: "Доборные элементы" },
-            { code: "Аксессуары для кухни", label: "Аксессуары для кухни" },
-          ],
-        },
-        {
-          code: "bedroom",
-          label: "Спальня",
-          group: "Спальня",
-          subs: [
-            { code: "Комплект мебели для спальни", label: "Комплект мебели для спальни", isKits: true },
-            { code: "Кровати", label: "Кровати" },
-            { code: "Туалетные столики", label: "Туалетные столики" },
-            { code: "Прикроватные тумбы", label: "Прикроватные тумбы" },
-          ],
-        },
-      ]
-    ),
+    () => [
+      // ——— Только кухня (остальные комнаты — на будущее) ———
+      {
+        code: "kitchen",
+        label: "Кухня",
+        group: "Кухня",
+        subs: [
+          { code: "__kitchen_kits", label: "Готовые решения", isKits: true },
+          { code: "__modules", label: "Модули", isModulesToggle: true },
+          { code: "Нижние модули", label: "Нижние модули", targetCategory: "bottom", isModuleItem: true },
+          { code: "Верхние модули", label: "Верхние модули", targetCategory: "top", isModuleItem: true },
+          { code: "Антресольные модули", label: "Антресольные модули", targetCategory: "top", isModuleItem: true },
+          { code: "Пеналы", label: "Пеналы", targetCategory: "tall", isModuleItem: true },
+          { code: "Столешницы", label: "Столешницы" },
+          { code: "Доборные элементы", label: "Доборные элементы" },
+          { code: "Аксессуары для кухни", label: "Аксессуары для кухни" },
+        ],
+      },
+      // {
+      //   code: "hallway",
+      //   label: "Прихожая",
+      //   group: "Прихожая",
+      //   subs: [...],
+      // },
+      // {
+      //   code: "livingroom",
+      //   label: "Гостиная",
+      //   group: "Гостиная",
+      //   subs: [...],
+      // },
+      // {
+      //   code: "bedroom",
+      //   label: "Спальня",
+      //   group: "Спальня",
+      //   subs: [...],
+      // },
+    ],
     []
   );
   const roomCategoryCodes = useMemo(() => new Set(roomCatalog.map((x) => x.code)), [roomCatalog]);
@@ -163,11 +139,13 @@ const CatalogPage = () => {
     setSimilarKitId(searchParams.get("similarKitId") || null);
     setSimilarCatalogItemId(searchParams.get("similarCatalogItemId") || null);
 
-    const urlCategory = searchParams.get("category") || "all";
+    const urlCategory = searchParams.get("category") || "kitchen";
     const urlSubCategory = searchParams.get("subCategory") || null;
     // Legacy: раньше готовые решения были отдельной категорией.
     // Теперь это подкатегория внутри "Кухня".
-    const normalizedCategory = urlCategory === "kitSolutions" ? "kitchen" : urlCategory;
+    const nonKitchenRooms = new Set(["hallway", "livingroom", "bedroom", "all"]);
+    const normalizedCategory =
+      urlCategory === "kitSolutions" || nonKitchenRooms.has(urlCategory) ? "kitchen" : urlCategory;
     const normalizedSub = urlCategory === "kitSolutions" ? "__kitchen_kits" : urlSubCategory;
     if (normalizedCategory !== activeCategory) setActiveCategory(normalizedCategory);
     if (normalizedSub !== activeSubCategory) setActiveSubCategory(normalizedSub);
@@ -624,6 +602,7 @@ const CatalogPage = () => {
 
   const SidebarContent = () => (
     <aside className="space-y-4 md:space-y-6">
+      {/* Блок «Категории» скрыт — каталог только по кухне (на будущее: раскомментировать)
       <FilterGroup title="Категории">
         <CategoryLink
           code="all"
@@ -662,6 +641,7 @@ const CatalogPage = () => {
           />
         ))}
       </FilterGroup>
+      */}
       <FilterGroup title="Фильтры" onReset={() => setFilters({ facadeColor: "", corpusColor: "", priceFrom: "", priceTo: "", lengthFrom: "", lengthTo: "", depthFrom: "", depthTo: "", heightFrom: "", heightTo: "", parameterCategoryIds: "", sort: "" })}>
         <FilterSection title="Сортировка">
           <PopoverSelect

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import SecureButton from "../ui/SecureButton";
-import useApi from "../../hooks/useApi";
-import useLogger from "../../hooks/useLogger";
+import SecureButton from "../../../ui/SecureButton";
+import useApi from "../../../../hooks/useApi";
+import useLogger from "../../../../hooks/useLogger";
 import { FaArrowLeft, FaPlus } from "react-icons/fa";
 import { LuPencil, LuTrash2 } from "react-icons/lu";
 import ModuleDescriptionCreator from "./ModuleDescriptionCreator";
-import PopoverSelect from "../ui/PopoverSelect";
+import PopoverSelect from "../../../ui/PopoverSelect";
 
 const ModuleDescriptionsAdmin = () => {
   const { get, del } = useApi();
@@ -207,13 +207,13 @@ const ModuleDescriptionsAdmin = () => {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="text-night-500">
-                  <th className="text-left py-2 px-3">ID</th>
-                  <th className="text-left py-2 px-3">Основа артикула</th>
-                  <th className="text-left py-2 px-3">Название</th>
-                  <th className="text-left py-2 px-3">Категория</th>
-                  <th className="text-right py-2 px-3">Действия</th>
+              <thead className="bg-night-50/70 text-night-600">
+                <tr>
+                  <th className="text-left px-4 py-3">ID</th>
+                  <th className="text-left px-4 py-3">Основа артикула</th>
+                  <th className="text-left px-4 py-3">Название</th>
+                  <th className="text-left px-4 py-3">Категория</th>
+                  <th className="text-center px-4 py-3">Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -221,28 +221,26 @@ const ModuleDescriptionsAdmin = () => {
                   const category = d.module_category_id ? categoryMap.get(Number(d.module_category_id)) : null;
                   return (
                     <tr key={d.id} className="border-t border-night-100">
-                      <td className="py-2 px-3 text-night-900">{d.id}</td>
-                      <td className="py-2 px-3 font-mono text-xs text-night-700">{d.base_sku || "—"}</td>
-                      <td className="py-2 px-3 text-night-900">{d.name || "—"}</td>
-                      <td className="py-2 px-3 text-night-900">{category?.name || "—"}</td>
-                      <td className="py-2 px-3">
-                        <div className="flex justify-end gap-2">
+                      <td className="px-4 py-3 text-night-900">{d.id}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-night-700">{d.base_sku || "—"}</td>
+                      <td className="px-4 py-3 text-night-900 font-medium">{d.name || "—"}</td>
+                      <td className="px-4 py-3 text-night-900">{category?.name || "—"}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex justify-center gap-2">
                           <SecureButton
                             type="button"
-                            size="sm"
                             variant="outline"
+                            className="h-10 px-4 py-2 text-xs flex items-center justify-center border-accent/30 text-accent-dark hover:border-accent/50 hover:bg-accent/10"
                             onClick={() => openEdit(d.id)}
-                            className="h-8 w-8 p-0 flex items-center justify-center border-accent/30 text-accent-dark hover:border-accent/50 hover:bg-accent/10"
                             title="Редактировать"
                           >
                             <LuPencil size={16} />
                           </SecureButton>
                           <SecureButton
                             type="button"
-                            size="sm"
-                            variant="ghost"
+                            variant="outline"
+                            className="h-10 px-4 py-2 text-xs flex items-center justify-center border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
                             onClick={() => handleDelete(d.id)}
-                            className="h-8 w-8 p-0 flex items-center justify-center text-red-600 hover:text-red-700 hover:bg-red-50"
                             title="Удалить"
                           >
                             <LuTrash2 size={16} />

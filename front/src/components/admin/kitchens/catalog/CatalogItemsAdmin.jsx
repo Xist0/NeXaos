@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FaArrowLeft, FaPlus } from "react-icons/fa";
 import { LuCopy, LuPencil, LuTrash2 } from "react-icons/lu";
-import useApi from "../../hooks/useApi";
-import useLogger from "../../hooks/useLogger";
-import SecureButton from "../ui/SecureButton";
-import { getImageUrl } from "../../utils/image";
+import useApi from "../../../../hooks/useApi";
+import useLogger from "../../../../hooks/useLogger";
+import SecureButton from "../../../ui/SecureButton";
+import { getImageUrl } from "../../../../utils/image";
 import CatalogItemCreator from "./CatalogItemCreator";
 
 const CatalogItemsAdmin = ({ title = "Каталог", fixedValues = null }) => {

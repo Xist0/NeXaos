@@ -11,6 +11,7 @@ import useLogger from "../hooks/useLogger";
 import { getImageUrl, placeholderImage } from "../utils/image";
 import ProductGallery from "../components/ui/ProductGallery";
 import { resolveColor } from "../utils/colors";
+import { characteristicsToDisplayRows } from "../utils/characteristics";
 
 const KitSolutionPage = () => {
   const { id } = useParams();
@@ -344,22 +345,9 @@ const KitSolutionPage = () => {
       }
     }
 
-    if (ch.product_type) list.push({ label: "Тип изделия", value: String(ch.product_type) });
-    if (ch.purpose) list.push({ label: "Назначение", value: String(ch.purpose) });
-    if (ch.material_corpus) list.push({ label: "Материал корпуса", value: String(ch.material_corpus) });
-    if (ch.material_facade) list.push({ label: "Материал фасада", value: String(ch.material_facade) });
-    if (ch.opening_type) list.push({ label: "Тип открывания", value: String(ch.opening_type) });
-    if (ch.guides_type) list.push({ label: "Тип направляющих", value: String(ch.guides_type) });
-    if (ch.hinges_type) list.push({ label: "Тип петель", value: String(ch.hinges_type) });
-    if (ch.supports_type) list.push({ label: "Тип опор", value: String(ch.supports_type) });
-    if (ch.features) list.push({ label: "Особенности", value: String(ch.features) });
-    if (typeof ch.mirror === "boolean" && ch.mirror) list.push({ label: "Зеркало", value: "Да" });
-    if (ch.shelf_count) list.push({ label: "Кол-во полок", value: String(ch.shelf_count) });
-    if (ch.drawer_count) list.push({ label: "Кол-во ящиков", value: String(ch.drawer_count) });
-    if (ch.front_count) list.push({ label: "Кол-во фасадов", value: String(ch.front_count) });
-    if (ch.design_style) list.push({ label: "Стиль дизайна", value: String(ch.design_style) });
-    if (ch.weight_kg) list.push({ label: "Вес, кг", value: String(ch.weight_kg) });
-    if (ch.country) list.push({ label: "Страна-производитель", value: String(ch.country) });
+    characteristicsToDisplayRows(ch).forEach((row) => {
+      list.push({ label: row.label, value: row.value });
+    });
 
     return list;
   }, [kit]);

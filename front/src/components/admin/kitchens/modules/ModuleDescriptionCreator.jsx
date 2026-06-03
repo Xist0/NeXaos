@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaArrowLeft, FaCheckCircle, FaCog, FaEdit, FaSave, FaSpinner, FaTag } from "react-icons/fa";
-import SecureButton from "../ui/SecureButton";
-import SecureInput from "../ui/SecureInput";
-import useApi from "../../hooks/useApi";
-import useLogger from "../../hooks/useLogger";
+import SecureButton from "../../../ui/SecureButton";
+import SecureInput from "../../../ui/SecureInput";
+import useApi from "../../../../hooks/useApi";
+import useLogger from "../../../../hooks/useLogger";
 
 const ModuleDescriptionCreator = ({ descriptionId = null, initialCategoryId = "", onDone }) => {
   const { get, post, put } = useApi();

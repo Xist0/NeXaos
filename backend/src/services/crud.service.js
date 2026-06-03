@@ -57,6 +57,16 @@ const list = async (entity, queryParams = {}) => {
       }
     }
   }
+
+  if (entity.table === "characteristic_value_templates") {
+    if (queryParams.fieldKey) {
+      const fk = String(queryParams.fieldKey).trim();
+      if (fk) {
+        conditions.push(`field_key = $${params.length + 1}`);
+        params.push(fk);
+      }
+    }
+  }
   
   // Фильтрация для модулей
   if (entity.table === "modules") {

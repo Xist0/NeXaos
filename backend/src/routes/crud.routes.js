@@ -15,6 +15,7 @@ const kitSolutionController = require("../controllers/kit-solution.controller");
 const catalogItemController = require("../controllers/catalog-item.controller");
 const catalogController = require("../controllers/catalog.controller");
 const userController = require("../controllers/user.controller");
+const siteSettingsController = require("../controllers/site-settings.controller");
 
 const SENSITIVE_KEYS = new Set([
   "password",
@@ -73,6 +74,9 @@ const getReadAuthChain = (entityRoute) => {
     return [authGuard, requireAdmin];
   }
   if (staffReadableEntities.has(entityRoute)) {
+    return [authGuard, requireAnyRole(["admin", "manager"])];
+  }
+  if (entityRoute === "characteristic-value-templates" || entityRoute === "product-parameter-value-templates") {
     return [authGuard, requireAnyRole(["admin", "manager"])];
   }
   return [optionalAuth];
@@ -291,6 +295,10 @@ router.post("/images/reorder", authGuard, requireAdminOrManager, asyncHandler(im
 
 // POST /api/images/:id/set-preview - назначить изображение превью
 router.post("/images/:id/set-preview", authGuard, requireAdminOrManager, asyncHandler(imageController.setPreview));
+
+router.get("/site-settings", authGuard, requireAdminOrManager, asyncHandler(siteSettingsController.getAdmin));
+router.put("/site-settings", authGuard, requireAdminOrManager, asyncHandler(siteSettingsController.updateAdmin));
+router.get("/public/site-settings", optionalAuth, asyncHandler(siteSettingsController.getPublic));
 
 router.get("/public/hero-slides", optionalAuth, asyncHandler(async (req, res) => {
   res.setHeader("Cache-Control", "no-store");

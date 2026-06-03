@@ -126,7 +126,7 @@ const EntityFormFields = ({
   }, [open]);
 
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} className="space-y-4">
       {(() => {
         const rendered = [];
         for (let i = 0; i < fieldsToRender.length; i += 1) {
@@ -150,17 +150,19 @@ const EntityFormFields = ({
             ((isPrimary && nextIsSecondary) || (isSecondary && nextIsPrimary) || (isPrimary && nextIsPrimary) || (isSecondary && nextIsSecondary));
 
           const renderSingleField = (fieldToRender) => (
-            <label
+            <div
               key={fieldToRender.name}
               className={
                 fieldToRender.type === "checkbox"
-                  ? "text-sm text-night-700 flex items-center justify-between gap-4"
-                  : "text-sm text-night-700 space-y-1"
+                  ? "flex items-center gap-2"
+                  : "space-y-1"
               }
             >
-              <span className={fieldToRender.type === "checkbox" ? "font-medium text-night-700" : ""}>
-                {fieldToRender.label}
-              </span>
+              {fieldToRender.type !== "checkbox" && (
+                <label className="text-sm text-night-700 font-medium">
+                  {fieldToRender.label}
+                </label>
+              )}
               {fieldToRender.inputType === "image" ? (
             <div className="space-y-2">
               <input
@@ -198,16 +200,16 @@ const EntityFormFields = ({
                 }))
               }
               className={
-                "relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent" +
+                "relative inline-flex h-4 w-8 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent" +
                 (isCheckboxChecked(form[fieldToRender.name]) ? " bg-accent" : " bg-night-300")
               }
               aria-pressed={isCheckboxChecked(form[fieldToRender.name])}
-              aria-label={fieldToRender.label}
+              title={fieldToRender.label}
             >
               <span
                 className={
-                  "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform" +
-                  (isCheckboxChecked(form[fieldToRender.name]) ? " translate-x-5" : " translate-x-0.5")
+                  "inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform" +
+                  (isCheckboxChecked(form[fieldToRender.name]) ? " translate-x-4" : " translate-x-0.5")
                 }
               />
             </button>
@@ -430,6 +432,18 @@ const EntityFormFields = ({
               }
 
               if (!isMmNumberField) {
+                const isDescriptionField = fieldToRender.name === "description";
+                if (isDescriptionField) {
+                  return (
+                    <textarea
+                      className="secure-input w-full min-h-[80px] p-3 rounded-lg border border-night-200 focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none resize-y"
+                      value={form[fieldToRender.name] ?? ""}
+                      onChange={(e) => setForm((prev) => ({ ...prev, [fieldToRender.name]: e.target.value }))}
+                      placeholder={fieldToRender.placeholder}
+                      required={fieldToRender.required}
+                    />
+                  );
+                }
                 return (
                   <SecureInput
                     type={fieldToRender.type}
@@ -470,49 +484,75 @@ const EntityFormFields = ({
 
               return (
                 <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <SecureButton
-                      type="button"
-                      variant={activeTab === "input" ? "primary" : "outline"}
-                      className="px-3 py-2 text-xs"
-                      onClick={() =>
-                        setSizePresetTabByField((prev) => ({ ...prev, [fieldToRender.name]: "input" }))
-                      }
-                    >
-                      Ввод
-                    </SecureButton>
-                    <SecureButton
-                      type="button"
-                      variant={activeTab === "presets" ? "primary" : "outline"}
-                      className="px-3 py-2 text-xs"
-                      onClick={() =>
-                        setSizePresetTabByField((prev) => ({ ...prev, [fieldToRender.name]: "presets" }))
-                      }
-                    >
-                      Шаблоны
-                    </SecureButton>
-                  </div>
-
-                  {activeTab === "input" ? (
-                    <div className="space-y-2">
-                      <SecureInput
-                        type={fieldToRender.type}
-                        value={currentValue}
-                        onChange={(value) => setForm((prev) => ({ ...prev, [fieldToRender.name]: value }))}
-                        placeholder={fieldToRender.placeholder}
-                        required={fieldToRender.required}
-                      />
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1">
+                      {activeTab === "input" ? (
+                        <SecureInput
+                          type={fieldToRender.type}
+                          value={currentValue}
+                          onChange={(value) => setForm((prev) => ({ ...prev, [fieldToRender.name]: value }))}
+                          placeholder={fieldToRender.placeholder}
+                          required={fieldToRender.required}
+                        />
+                      ) : (
+                        <PopoverSelect
+                          size="md"
+                          items={presets.map((v) => ({ v }))}
+                          value={""}
+                          placeholder="Выберите размер..."
+                          searchable={presets.length > 10}
+                          getKey={(it) => String(it.v)}
+                          getLabel={(it) => `${it.v} мм`}
+                          onChange={(next) => {
+                            const v = Number(next);
+                            if (!Number.isFinite(v)) return;
+                            setForm((prev) => ({ ...prev, [fieldToRender.name]: v }));
+                          }}
+                          buttonClassName="rounded-lg"
+                          popoverClassName="rounded-lg max-w-md"
+                          maxHeightClassName="max-h-72"
+                        />
+                      )}
+                    </div>
+                    <div className="flex gap-1">
                       <SecureButton
                         type="button"
-                        variant="outline"
-                        disabled={!canSave}
-                        className="px-3 py-2 text-xs"
-                        onClick={savePreset}
+                        variant={activeTab === "input" ? "primary" : "outline"}
+                        className="px-3 py-2 text-xs h-10"
+                        onClick={() =>
+                          setSizePresetTabByField((prev) => ({ ...prev, [fieldToRender.name]: "input" }))
+                        }
+                        title="Ручной ввод"
                       >
-                        Сохранить как шаблон
+                        Ввод
                       </SecureButton>
+                      <SecureButton
+                        type="button"
+                        variant={activeTab === "presets" ? "primary" : "outline"}
+                        className="px-3 py-2 text-xs h-10"
+                        onClick={() =>
+                          setSizePresetTabByField((prev) => ({ ...prev, [fieldToRender.name]: "presets" }))
+                        }
+                        title="Выбрать из шаблонов"
+                      >
+                        Шаблоны
+                      </SecureButton>
+                      {activeTab === "input" && (
+                        <SecureButton
+                          type="button"
+                          variant="outline"
+                          disabled={!canSave}
+                          className="px-3 py-2 text-xs h-10"
+                          onClick={savePreset}
+                          title="Сохранить текущее значение как шаблон"
+                        >
+                          +
+                        </SecureButton>
+                      )}
                     </div>
-                  ) : (
+                  </div>
+
+                  {activeTab === "presets" && presets.length > 0 && (
                     <div className="space-y-2">
                       <PopoverSelect
                         size="md"
@@ -532,39 +572,37 @@ const EntityFormFields = ({
                         maxHeightClassName="max-h-72"
                       />
 
-                      {presets.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {presets.map((v) => (
-                            <div
-                              key={`preset-${fieldToRender.name}-${v}`}
-                              className="flex items-center gap-1 border border-night-200 rounded-lg px-2 py-1 bg-white"
-                            >
-                              <button
-                                type="button"
-                                className="text-xs text-night-900"
-                                onClick={() => setForm((prev) => ({ ...prev, [fieldToRender.name]: Number(v) }))}
-                              >
-                                {v} мм
-                              </button>
-                              <button
-                                type="button"
-                                className="text-xs text-red-600"
-                                onClick={() => removePreset(v)}
-                                aria-label="Удалить шаблон"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
+                    <div className="flex flex-wrap gap-2">
+                      {presets.map((v) => (
+                        <div
+                          key={`preset-${fieldToRender.name}-${v}`}
+                          className="flex items-center gap-1 border border-night-200 rounded-lg px-2 py-1 bg-white"
+                        >
+                          <button
+                            type="button"
+                            className="text-xs text-night-900"
+                            onClick={() => setForm((prev) => ({ ...prev, [fieldToRender.name]: Number(v) }))}
+                          >
+                            {v} мм
+                          </button>
+                          <button
+                            type="button"
+                            className="text-xs text-red-600"
+                            onClick={() => removePreset(v)}
+                            aria-label="Удалить шаблон"
+                          >
+                            ×
+                          </button>
                         </div>
-                      )}
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
                 </div>
               );
             })()
           )}
-            </label>
+            </div>
           );
 
           if (canGroupColors) {
@@ -572,11 +610,8 @@ const EntityFormFields = ({
             const right = isPrimary && nextIsSecondary ? nextField : field;
 
             rendered.push(
-              <div key={`color-group-${left.name}-${right.name}`} className="space-y-3">
-                <div className="relative py-2">
-                  <div className="border-t border-night-200" />
-                  <span className="absolute -top-2 left-3 px-2 text-xs text-night-500 bg-white/70">Выбор цвета</span>
-                </div>
+              <div key={`color-group-${left.name}-${right.name}`} className="border-t border-night-200 pt-4">
+                <div className="text-xs text-night-500 font-medium mb-3">Выбор цвета</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {renderSingleField(left)}
                   {renderSingleField(right)}

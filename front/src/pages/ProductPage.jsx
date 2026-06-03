@@ -12,6 +12,8 @@ import { getThumbUrl } from "../utils/image";
 import ProductGallery from "../components/ui/ProductGallery";
 import apiClient from "../services/apiClient";
 import { resolveColor } from "../utils/colors";
+import { characteristicsToDisplayRows, groupCharacteristicRows } from "../utils/characteristics";
+import { PRODUCT_CHARACTERISTIC_SECTIONS } from "../constants/productCharacteristics";
 
 const ProductPage = () => {
   const { id } = useParams();
@@ -391,25 +393,22 @@ const ProductPage = () => {
       }
     }
 
-    if (ch.product_type) list.push({ label: "Тип изделия", value: String(ch.product_type) });
-    if (ch.purpose) list.push({ label: "Назначение", value: String(ch.purpose) });
-    if (ch.material_corpus) list.push({ label: "Материал корпуса", value: String(ch.material_corpus) });
-    if (ch.material_facade) list.push({ label: "Материал фасада", value: String(ch.material_facade) });
-    if (ch.opening_type) list.push({ label: "Тип открывания", value: String(ch.opening_type) });
-    if (ch.guides_type) list.push({ label: "Тип направляющих", value: String(ch.guides_type) });
-    if (ch.hinges_type) list.push({ label: "Тип петель", value: String(ch.hinges_type) });
-    if (ch.supports_type) list.push({ label: "Тип опор", value: String(ch.supports_type) });
-    if (ch.features) list.push({ label: "Особенности", value: String(ch.features) });
-    if (typeof ch.mirror === "boolean" && ch.mirror) list.push({ label: "Зеркало", value: "Да" });
-    if (ch.shelf_count) list.push({ label: "Кол-во полок", value: String(ch.shelf_count) });
-    if (ch.drawer_count) list.push({ label: "Кол-во ящиков", value: String(ch.drawer_count) });
-    if (ch.front_count) list.push({ label: "Кол-во фасадов", value: String(ch.front_count) });
-    if (ch.design_style) list.push({ label: "Стиль дизайна", value: String(ch.design_style) });
-    if (ch.weight_kg) list.push({ label: "Вес, кг", value: String(ch.weight_kg) });
-    if (ch.country) list.push({ label: "Страна-производитель", value: String(ch.country) });
-
     return list;
   }, [item]);
+
+  const specCharacteristicSections = useMemo(() => {
+    if (!item) return [];
+    const ch =
+      item.characteristics && typeof item.characteristics === "object" && !Array.isArray(item.characteristics)
+        ? item.characteristics
+        : {};
+    const specRows = characteristicsToDisplayRows(ch);
+    const grouped = groupCharacteristicRows(specRows);
+    const byId = Object.fromEntries(grouped.map((g) => [g.id, g]));
+    return PRODUCT_CHARACTERISTIC_SECTIONS.map((section) => byId[section.id]).filter(Boolean);
+  }, [item]);
+
+  const hasSpecCharacteristics = specCharacteristicSections.length > 0;
 
   const renderColorCircle = useCallback(
     (primary, secondary) => {
@@ -867,47 +866,65 @@ const ProductPage = () => {
         </div>
       </div>
 
-      {fullCharacteristics.length > 0 && (
-        <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12">
-          <h3 className="font-bold text-night-900 mb-3 sm:mb-6 text-lg sm:text-2xl">Характеристики</h3>
-          {(() => {
-            const leftRows = fullCharacteristics.filter((r) => r?.type !== "parameterCategories");
-            const rightRows = fullCharacteristics.filter((r) => r?.type === "parameterCategories");
+      {(fullCharacteristics.length > 0 || hasSpecCharacteristics) && (
+        <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12 space-y-8">
+          <h3 className="font-bold text-night-900 text-lg sm:text-2xl">Характеристики</h3>
 
-            const renderRow = (row) => (
-              <div key={row.label} className="grid grid-cols-[160px_1fr] gap-3 min-w-0">
-                <div className="text-night-500 font-medium truncate">{row.label}</div>
-                {row.type === "parameterCategories" ? (
-                  <span className="font-semibold text-night-900 min-w-0">
-                    <span className="flex flex-wrap gap-x-2 gap-y-1">
-                      {(Array.isArray(row.categories) ? row.categories : []).map((c) => (
-                        <Link
-                          key={c.id}
-                          to={`/catalog?parameterCategoryIds=${encodeURIComponent(String(c.id))}`}
-                          className="text-accent underline underline-offset-2 hover:opacity-90"
-                        >
-                          {c.name}
-                        </Link>
-                      ))}
-                    </span>
-                  </span>
-                ) : (
-                  <span className="font-semibold text-night-900 break-words min-w-0">{row.value || "—"}</span>
-                )}
-              </div>
-            );
+          {fullCharacteristics.length > 0 && (
+            <div className="space-y-4">
+              {(() => {
+                const leftRows = fullCharacteristics.filter((r) => r?.type !== "parameterCategories");
+                const rightRows = fullCharacteristics.filter((r) => r?.type === "parameterCategories");
 
-            return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-4 text-sm text-night-800 leading-relaxed">
-                <div className="space-y-2">
-                  {leftRows.map(renderRow)}
-                </div>
-                <div className="space-y-2">
-                  {rightRows.map(renderRow)}
+                const renderRow = (row) => (
+                  <div key={row.label} className="grid grid-cols-[minmax(140px,200px)_1fr] gap-3 min-w-0">
+                    <div className="text-night-500 font-medium">{row.label}</div>
+                    {row.type === "parameterCategories" ? (
+                      <span className="font-semibold text-night-900 min-w-0">
+                        <span className="flex flex-wrap gap-x-2 gap-y-1">
+                          {(Array.isArray(row.categories) ? row.categories : []).map((c) => (
+                            <Link
+                              key={c.id}
+                              to={`/catalog?parameterCategoryIds=${encodeURIComponent(String(c.id))}`}
+                              className="text-accent underline underline-offset-2 hover:opacity-90"
+                            >
+                              {c.name}
+                            </Link>
+                          ))}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-night-900 break-words min-w-0">{row.value || "—"}</span>
+                    )}
+                  </div>
+                );
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3 text-sm text-night-800">
+                    <div className="space-y-2">{leftRows.map(renderRow)}</div>
+                    <div className="space-y-2">{rightRows.map(renderRow)}</div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {hasSpecCharacteristics &&
+            specCharacteristicSections.map((section) => (
+              <div key={section.id} className="space-y-3">
+                <h4 className="text-sm font-bold text-night-800 uppercase tracking-wide border-b border-night-100 pb-2">
+                  {section.title}
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
+                  {section.rows.map((row) => (
+                    <div key={row.key} className="min-w-0">
+                      <div className="text-night-500 text-xs mb-0.5">{row.label}</div>
+                      <div className="font-semibold text-night-900 break-words">{row.value}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            );
-          })()}
+            ))}
         </div>
       )}
 

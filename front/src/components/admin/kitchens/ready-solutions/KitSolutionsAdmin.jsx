@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import SecureButton from "../ui/SecureButton";
-import useApi from "../../hooks/useApi";
-import useLogger from "../../hooks/useLogger";
+import SecureButton from "../../../ui/SecureButton";
+import useApi from "../../../../hooks/useApi";
+import useLogger from "../../../../hooks/useLogger";
 import { FaArrowLeft, FaPlus } from "react-icons/fa";
 import { LuCopy, LuPencil, LuTrash2 } from "react-icons/lu";
 import KitSolutionCreator from "./KitSolutionCreator";
-import { getImageUrl } from "../../utils/image";
+import { getImageUrl } from "../../../../utils/image";
 
 const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValues = null }) => {
   const { get, del } = useApi();
@@ -206,83 +206,93 @@ const KitSolutionsAdmin = ({ title = "Готовые решения", fixedValue
         </SecureButton>
       </div>
 
-      <div className="glass-card p-4">
-        {loading ? (
-          <div className="text-night-600">Загрузка...</div>
-        ) : items.length === 0 ? (
-          <div className="text-night-600">Готовые решения не найдены</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-night-500">
-                  <th className="text-center py-2 px-3">Превью</th>
-                  <th className="text-left py-2 px-3">SKU</th>
-                  <th className="text-left py-2 px-3">Название</th>
-                  <th className="text-left py-2 px-3">Цена</th>
-                  <th className="text-center py-2 px-3">Активен</th>
-                  <th className="text-center py-2 px-3">Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((k) => {
-                  const img = getImageUrl(k.preview_url);
-                  return (
-                    <tr key={k.id} className="border-t border-night-100">
-                      <td className="py-2 px-3">
-                        <div className="flex justify-center">
-                          <div className="w-16 h-12 bg-night-50 rounded overflow-hidden">
-                          {img ? (
-                            <img src={img} alt={k.name} className="w-full h-full object-cover" />
-                          ) : null}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-2 px-3 font-mono text-xs text-night-700">{k.sku || "—"}</td>
-                      <td className="py-2 px-3 text-night-900">{k.name || "—"}</td>
-                      <td className="py-2 px-3 text-night-900">{k.final_price ?? "—"}</td>
-                      <td className="py-2 px-3 text-night-900 text-center">{k.is_active ? "Да" : "Нет"}</td>
-                      <td className="py-2 px-3">
-                        <div className="flex justify-center gap-2">
-                          <SecureButton
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openEdit(k.id)}
-                            className="h-10 px-4 py-2 flex items-center justify-center border-accent/30 text-accent-dark hover:border-accent/50 hover:bg-accent/10"
-                            title="Редактировать"
-                          >
-                            <LuPencil size={16} />
-                          </SecureButton>
-                          <SecureButton
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openDuplicate(k.id)}
-                            className="h-10 px-4 py-2 flex items-center justify-center"
-                            title="Копия"
-                          >
-                            <LuCopy size={16} />
-                          </SecureButton>
-                          <SecureButton
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDelete(k.id)}
-                            className="h-10 px-4 py-2 flex items-center justify-center border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            title="Удалить"
-                          >
-                            <LuTrash2 size={16} />
-                          </SecureButton>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <div className="glass-card overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-night-50/70 text-night-600">
+            <tr>
+              <th className="text-center px-4 py-3">Превью</th>
+              <th className="text-left px-4 py-3">SKU</th>
+              <th className="text-left px-4 py-3">Название</th>
+              <th className="text-left px-4 py-3">Цена</th>
+              <th className="text-center px-4 py-3">Активен</th>
+              <th className="text-center px-4 py-3">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td className="px-4 py-6 text-night-500" colSpan={6}>
+                  Загрузка...
+                </td>
+              </tr>
+            ) : items.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-night-500" colSpan={6}>
+                  Нет записей
+                </td>
+              </tr>
+            ) : (
+              items.map((k) => {
+                const img = getImageUrl(k.preview_url);
+                return (
+                  <tr key={k.id} className="border-t border-night-100">
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center">
+                        <img
+                          src={img}
+                          alt="preview"
+                          className="w-12 h-12 rounded-lg object-cover bg-night-100"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-night-700">{k.sku || "—"}</td>
+                    <td className="px-4 py-3 text-night-900 font-medium">{k.name}</td>
+                    <td className="px-4 py-3 text-night-700">{k.final_price != null ? `${k.final_price} ₽` : "—"}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-flex justify-center px-2 py-1 rounded-full text-xs font-semibold ${k.is_active ? "bg-green-100 text-green-700" : "bg-night-100 text-night-600"}`}>
+                        {k.is_active ? "Да" : "Нет"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-center gap-2">
+                        <SecureButton
+                          type="button"
+                          variant="outline"
+                          className="h-10 px-4 py-2 text-xs flex items-center justify-center border-accent/30 text-accent-dark hover:border-accent/50 hover:bg-accent/10"
+                          onClick={() => openEdit(k.id)}
+                          title="Редактировать"
+                        >
+                          <LuPencil size={16} />
+                        </SecureButton>
+                        <SecureButton
+                          type="button"
+                          variant="outline"
+                          className="h-10 px-4 py-2 text-xs flex items-center justify-center"
+                          onClick={() => openDuplicate(k.id)}
+                          title="Копия"
+                        >
+                          <LuCopy size={16} />
+                        </SecureButton>
+                        <SecureButton
+                          type="button"
+                          variant="outline"
+                          className="h-10 px-4 py-2 text-xs flex items-center justify-center border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDelete(k.id)}
+                          title="Удалить"
+                        >
+                          <LuTrash2 size={16} />
+                        </SecureButton>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
       </div>
     </div>
   );

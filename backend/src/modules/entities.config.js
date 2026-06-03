@@ -721,6 +721,16 @@
       },
     },
     {
+      route: "characteristic-value-templates",
+      table: "characteristic_value_templates",
+      idColumn: "id",
+      selectFields: ["id", "field_key", "value"],
+      columns: {
+        field_key: { type: "string", required: true, max: 128 },
+        value: { type: "string", required: true },
+      },
+    },
+    {
       route: "kit-solutions",
       table: "kit_solutions",
       idColumn: "id",

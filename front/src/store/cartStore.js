@@ -95,7 +95,7 @@ const useCartStore = create((set, get) => ({
   clearCart: async () => {
     set({ items: [] });
     persistCart([]);
-    const token = useAuthStore.getState().token;
+    const token = useAuthStore.getState().accessToken;
     if (token) {
       try {
         await clearRemoteCart();
@@ -106,7 +106,7 @@ const useCartStore = create((set, get) => ({
   },
 
   syncWithAccount: async () => {
-    const token = useAuthStore.getState().token;
+    const token = useAuthStore.getState().accessToken;
     if (!token) return;
     const items = get().items;
     set({ syncing: true });
@@ -127,7 +127,7 @@ const useCartStore = create((set, get) => ({
 }));
 
 useAuthStore.subscribe(
-  (state) => state.token,
+  (state) => state.accessToken,
   (token, previousToken) => {
     if (token && !previousToken) {
       useCartStore.getState().syncWithAccount();

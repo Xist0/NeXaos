@@ -9,16 +9,26 @@ import {
   FaRulerCombined,
   FaSave,
   FaSpinner,
+  FaClipboardList,
 } from "react-icons/fa";
-import SecureButton from "../ui/SecureButton";
-import SecureInput from "../ui/SecureInput";
-import useApi from "../../hooks/useApi";
-import useLogger from "../../hooks/useLogger";
-import ImageManager from "./ImageManager";
-import ColorBadge from "../ui/ColorBadge";
-import { formatCurrency } from "../../utils/format";
-import { getThumbUrl } from "../../utils/image";
-import PopoverSelect from "../ui/PopoverSelect";
+import SecureButton from "../../../ui/SecureButton";
+import SecureInput from "../../../ui/SecureInput";
+import useApi from "../../../../hooks/useApi";
+import useLogger from "../../../../hooks/useLogger";
+import ImageManager from "../../ImageManager";
+import ColorBadge from "../../../ui/ColorBadge";
+import { formatCurrency } from "../../../../utils/format";
+import { getThumbUrl } from "../../../../utils/image";
+import PopoverSelect from "../../../ui/PopoverSelect";
+import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
+import ProductTypeField from "../../ProductTypeField";
+import ProductParametersBlock from "../../ProductParametersBlock";
+import useCharacteristicValueTemplates from "../../../../hooks/useCharacteristicValueTemplates";
+import {
+  characteristicsFromApi,
+  createEmptyCharacteristicsForm,
+  normalizeCharacteristicsForSave,
+} from "../../../../utils/characteristics";
 
 const LazyImg = ({ src, alt, className, onError }) => {
   const holderRef = useRef(null);
@@ -74,30 +84,6 @@ let productParametersCachePromise = null;
 let productParameterCategoriesCache = null;
 let productParameterCategoriesCachePromise = null;
 
-const normalizeCharacteristics = (value) => {
-  const obj = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const next = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v === null || v === undefined) continue;
-    if (typeof v === "string") {
-      const s = v.trim();
-      if (!s) continue;
-      next[k] = s;
-      continue;
-    }
-    if (typeof v === "number") {
-      if (!Number.isFinite(v)) continue;
-      next[k] = v;
-      continue;
-    }
-    if (typeof v === "boolean") {
-      next[k] = v;
-      continue;
-    }
-  }
-  return Object.keys(next).length ? next : null;
-};
-
 const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedValues = null, onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
@@ -151,7 +137,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     final_price: "",
     is_active: false,
 
-    characteristics: {},
+    characteristics: createEmptyCharacteristicsForm(),
   });
 
   const [selectedModulesByType, setSelectedModulesByType] = useState({
@@ -353,7 +339,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         sku: String(getEffectiveSku()).trim(),
         description: String(form.description).trim(),
 
-        characteristics: normalizeCharacteristics(form.characteristics),
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
         kitchen_type_id: Number(form.kitchen_type_id) || null,
@@ -391,9 +377,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     }
   }, [fixedValues?.category, fixedValues?.category_group, form, getEffectiveSku, getKitPayloadParts, isKitchen, kitId, onDone, put, selectedParameterCategories, selectedParameters]);
 
-  const [openPrimary, setOpenPrimary] = useState(false);
-  const [openSecondary, setOpenSecondary] = useState(false);
   const colorPickerRef = useRef(null);
+  const { templatesByField } = useCharacteristicValueTemplates(get);
 
   const [lengthWarning, setLengthWarning] = useState(null);
 
@@ -464,6 +449,31 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     });
   };
 
+  const updateParameterValue = (index, value) => {
+    setSelectedParameters((prev) => {
+      const next = [...prev];
+      if (!next[index]) return prev;
+      next[index] = { ...next[index], value: value === null || value === undefined ? "" : String(value) };
+      return next;
+    });
+  };
+
+  const applyTemplateToParameter = useCallback(({ parameterId, template }) => {
+    const pid = Number(parameterId);
+    if (!Number.isFinite(pid) || pid <= 0 || !template) return;
+    const nextValue = template?.value ?? "";
+    const nextQty = Number(template?.quantity) || 1;
+    setSelectedParameters((prev) => {
+      const idx = prev.findIndex((x) => Number(x?.parameterId) === pid);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], value: nextValue, quantity: nextQty };
+        return next;
+      }
+      return [...prev, { parameterId: pid, quantity: nextQty, value: nextValue }];
+    });
+  }, []);
+
   const addParameterCategory = (categoryId) => {
     const id = Number(categoryId);
     if (!Number.isFinite(id) || id <= 0) return;
@@ -510,9 +520,10 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     () => [
       { number: 1, title: isKitchen ? "Тип кухни" : "Тип", icon: FaCog },
       { number: 2, title: "Описание", icon: FaCheckCircle },
-      { number: 3, title: isKitchen ? "Состав/Размеры" : "Состав/Габариты", icon: FaRulerCombined },
-      { number: 4, title: "Фото", icon: FaCamera },
-      { number: 5, title: "Цена", icon: FaDollarSign },
+      { number: 3, title: "Характеристики", icon: FaClipboardList },
+      { number: 4, title: isKitchen ? "Состав/Размеры" : "Состав/Габариты", icon: FaRulerCombined },
+      { number: 5, title: "Фото", icon: FaCamera },
+      { number: 6, title: "Цена", icon: FaDollarSign },
     ],
     [isKitchen]
   );
@@ -521,23 +532,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     getRef.current = get;
     loggerRef.current = logger;
   }, [get, logger]);
-
-  useEffect(() => {
-    if (!openPrimary && !openSecondary) return;
-
-    const onPointerDown = (e) => {
-      const root = colorPickerRef.current;
-      if (!root) return;
-      if (root.contains(e.target)) return;
-      setOpenPrimary(false);
-      setOpenSecondary(false);
-    };
-
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [openPrimary, openSecondary]);
 
   useEffect(() => {
     const loadReferences = async () => {
@@ -695,7 +689,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           final_price: data.final_price != null ? String(data.final_price) : "",
           is_active: !!data.is_active,
 
-          characteristics: normalizeCharacteristics(data.characteristics) || {},
+          characteristics: characteristicsFromApi(data.characteristics),
         }));
 
         const params = Array.isArray(data.parameters) ? data.parameters : [];
@@ -779,7 +773,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           final_price: data.final_price != null ? String(data.final_price) : "",
           is_active: false,
 
-          characteristics: normalizeCharacteristics(data.characteristics) || {},
+          characteristics: characteristicsFromApi(data.characteristics),
         }));
 
         const params = Array.isArray(data.parameters) ? data.parameters : [];
@@ -1009,7 +1003,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         sku: String(getEffectiveSku()).trim(),
         description: String(form.description).trim(),
 
-        characteristics: normalizeCharacteristics(form.characteristics),
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
         kitchen_type_id: Number(form.kitchen_type_id) || null,
@@ -1080,7 +1074,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         sku: String(getEffectiveSku()).trim(),
         description: String(form.description).trim(),
 
-        characteristics: normalizeCharacteristics(form.characteristics),
+        characteristics: normalizeCharacteristicsForSave(form.characteristics),
         category_group: fixedValues?.category_group || null,
         category: fixedValues?.category || null,
         kitchen_type_id: Number(form.kitchen_type_id) || null,
@@ -1133,7 +1127,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         final_price: "",
         is_active: false,
 
-        characteristics: {},
+        characteristics: createEmptyCharacteristicsForm(),
       });
       setSelectedModulesByType({ bottom: [], top: [] });
       setSelectedCatalogItems([]);
@@ -1175,13 +1169,13 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
   const goToPhotos = async () => {
     const id = await createKitIfNeeded();
     if (!id) return;
-    setStep(4);
+    setStep(5);
   };
 
   const goToPrice = async () => {
     const id = await createKitIfNeeded();
     if (!id) return;
-    setStep(5);
+    setStep(6);
   };
 
   const normalizeSkuPart = (value) => {
@@ -1259,8 +1253,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                   variant={step === s.number ? "primary" : "outline"}
                   className="px-3 py-2 text-xs flex items-center gap-2"
                   onClick={() => {
-                    if (s.number === 4) return;
                     if (s.number === 5) return;
+                    if (s.number === 6) return;
                     setStep(s.number);
                   }}
                 >
@@ -1295,24 +1289,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                 />
               </label>
             ) : null}
-
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Материал</div>
-              <PopoverSelect
-                size="md"
-                items={materialItems}
-                value={form.material_id}
-                placeholder="Не выбран"
-                allowClear
-                clearLabel="Не выбран"
-                searchable={materialItems.length > 10}
-                getKey={(m) => String(m.id)}
-                getLabel={(m) => `#${m.id} ${m.name}`}
-                onChange={(next) => setForm((p) => ({ ...p, material_id: String(next || "") }))}
-                buttonClassName="rounded-lg"
-                popoverClassName="rounded-lg max-w-xl"
-                maxHeightClassName="max-h-80"
-              />
+            <label className="space-y-2 md:col-span-2">
+              <div className="text-xs font-semibold text-night-700">Название</div>
+              <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
             </label>
 
             <label className="space-y-2">
@@ -1334,184 +1313,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
               />
             </label>
 
-            <div className="space-y-3 md:col-span-2" ref={colorPickerRef}>
-              <div className="relative py-2">
-                <div className="border-t border-night-200" />
-                <span className="absolute -top-2 left-3 px-2 text-xs text-night-500 bg-white/70">Выбор цвета</span>
-              </div>
-
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-night-700">Основной цвет</div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenPrimary((v) => !v);
-                      setOpenSecondary(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
-                  >
-                    <span className="flex items-center gap-2">
-                      {form.primary_color_id ? (
-                        <ColorBadge colorData={referenceData.colors.find((c) => c.id === Number(form.primary_color_id))} />
-                      ) : (
-                        <span className="text-xs text-night-500">Выберите цвет</span>
-                      )}
-                    </span>
-                    <span className="text-night-400">▾</span>
-                  </button>
-                  {openPrimary && (
-                    <div className="relative">
-                      <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
-                        <div className="p-2 space-y-2">
-                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Основные цвета</div>
-                          <div className="space-y-1">
-                            {colorsByType.facade.map((c) => {
-                              const isSelected = Number(form.primary_color_id) === Number(c.id);
-                              return (
-                                <button
-                                  key={`kit-primary-opt-${c.id}`}
-                                  type="button"
-                                  onClick={() =>
-                                    setForm((p) => {
-                                      const next = { ...p, primary_color_id: String(c.id) };
-                                      setOpenPrimary(false);
-                                      return next;
-                                    })
-                                  }
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                    isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
-                                  }`}
-                                >
-                                  <LazyImg
-                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                    alt={c.name}
-                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                                  />
-                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="my-2 border-t border-night-200" />
-                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
-                          <div className="space-y-1">
-                            {colorsByType.universal.map((c) => {
-                              const isSelected = Number(form.primary_color_id) === Number(c.id);
-                              return (
-                                <button
-                                  key={`kit-primary-univ-${c.id}`}
-                                  type="button"
-                                  onClick={() =>
-                                    setForm((p) => {
-                                      const next = { ...p, primary_color_id: String(c.id) };
-                                      setOpenPrimary(false);
-                                      return next;
-                                    })
-                                  }
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                    isSelected ? "border-accent bg-accent/5" : "border-night-200 hover:border-accent"
-                                  }`}
-                                >
-                                  <LazyImg
-                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                    alt={c.name}
-                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                                  />
-                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-night-700">Доп. цвет (опционально)</div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpenSecondary((v) => !v);
-                      setOpenPrimary(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
-                  >
-                    <span className="flex items-center gap-2">
-                      {form.secondary_color_id ? (
-                        <ColorBadge colorData={referenceData.colors.find((c) => c.id === Number(form.secondary_color_id))} />
-                      ) : (
-                        <span className="text-xs text-night-500">Выберите цвет</span>
-                      )}
-                    </span>
-                    <span className="text-night-400">▾</span>
-                  </button>
-                  {openSecondary && (
-                    <div className="relative">
-                      <div className="absolute z-[1000] top-full mt-1 w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
-                        <div className="p-2 space-y-2">
-                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Доп. цвета</div>
-                          <div className="space-y-1">
-                            {colorsByType.corpus.map((c) => {
-                              const isSelected = Number(form.secondary_color_id) === Number(c.id);
-                              return (
-                                <button
-                                  key={`kit-secondary-opt-${c.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setForm((p) => ({ ...p, secondary_color_id: String(c.id) }));
-                                    setOpenSecondary(false);
-                                  }}
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                    isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
-                                  }`}
-                                >
-                                  <LazyImg
-                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                    alt={c.name}
-                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                                  />
-                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                          <div className="my-2 border-t border-night-200" />
-                          <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">Универсальные цвета</div>
-                          <div className="space-y-1">
-                            {colorsByType.universal.map((c) => {
-                              const isSelected = Number(form.secondary_color_id) === Number(c.id);
-                              return (
-                                <button
-                                  key={`kit-secondary-univ-${c.id}`}
-                                  type="button"
-                                  onClick={() => {
-                                    setForm((p) => ({ ...p, secondary_color_id: String(c.id) }));
-                                    setOpenSecondary(false);
-                                  }}
-                                  className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                                    isSelected ? "border-green-500 bg-green-50" : "border-night-200 hover:border-green-500"
-                                  }`}
-                                >
-                                  <LazyImg
-                                    src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                                    alt={c.name}
-                                    className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-                                  />
-                                  <span className="text-xs text-night-700 truncate">{c.name}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
 
             <label className="space-y-2 md:col-span-2">
               <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
@@ -1531,6 +1332,15 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
               </div>
               <SecureInput value={effectiveSku} onChange={() => {}} disabled placeholder="Сформируется автоматически" />
             </label>
+
+
+            <div className="md:col-span-2">
+              <ProductTypeField
+                characteristics={form.characteristics}
+                onCharacteristicsChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
+                suggestions={templatesByField.product_type || []}
+              />
+            </div>
           </div>
 
           <div className="flex justify-end">
@@ -1544,10 +1354,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
       {step === 2 && (
         <div className="glass-card p-6 space-y-4">
           <div className="grid gap-4">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Название</div>
-              <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
-            </label>
             <label className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Описание</div>
               <textarea
@@ -1630,28 +1436,32 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                             popoverClassName="rounded-lg"
                             maxHeightClassName="max-h-64"
                           />
-                          <SecureInput
-                            value={String(p.value ?? "")}
-                            onChange={(v) =>
-                              setSelectedParameters((prev) => {
-                                const next = [...prev];
-                                if (!next[idx]) return prev;
-                                next[idx] = { ...next[idx], value: v };
-                                return next;
-                              })
-                            }
-                            className="w-48"
-                            placeholder="Значение"
-                          />
-                          <SecureInput
-                            type="number"
-                            value={String(p.quantity ?? 1)}
-                            onChange={(v) => updateParameterQty(idx, v)}
-                            className="w-24"
-                          />
-                          <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => removeParameter(idx)}>
-                            Удалить
-                          </SecureButton>
+                          <div className="flex-1 flex gap-2 items-center">
+                            <SecureInput
+                              value={String(p.value ?? "")}
+                              onChange={(v) =>
+                                setSelectedParameters((prev) => {
+                                  const next = [...prev];
+                                  if (!next[idx]) return prev;
+                                  next[idx] = { ...next[idx], value: v };
+                                  return next;
+                                })
+                              }
+                              className="flex-1"
+                              placeholder="Значение"
+                            />
+                            <SecureInput
+                              type="number"
+                              value={String(p.quantity ?? 1)}
+                              onChange={(v) => updateParameterQty(idx, v)}
+                              className="w-20"
+                            />
+                          </div>
+                          <div className="flex gap-1">
+                            <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs h-10" onClick={() => removeParameter(idx)} title="Удалить параметр">
+                              ×
+                            </SecureButton>
+                          </div>
                         </div>
                       </div>
                     );
@@ -1716,6 +1526,46 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
       {step === 3 && (
         <div className="glass-card p-6 space-y-6">
+          <ProductCharacteristicsEditor
+            value={form.characteristics}
+            onChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
+            templatesByField={templatesByField}
+            colors={referenceData.colors}
+            primaryColorId={form.primary_color_id}
+            secondaryColorId={form.secondary_color_id}
+            onPrimaryColorChange={(id) => setForm((p) => ({ ...p, primary_color_id: id }))}
+            onSecondaryColorChange={(id) => setForm((p) => ({ ...p, secondary_color_id: id }))}
+            colorPickerRef={colorPickerRef}
+          />
+          <ProductParametersBlock
+            productParameterItems={productParameterItems}
+            productParameterCategoryItems={productParameterCategoryItems}
+            referenceData={referenceData}
+            selectedParameters={selectedParameters}
+            selectedParameterCategories={selectedParameterCategories}
+            parameterTemplatesById={parameterTemplatesById}
+            ensureParameterTemplatesLoaded={ensureParameterTemplatesLoaded}
+            addParameter={addParameter}
+            updateParameterValue={updateParameterValue}
+            updateParameterQty={updateParameterQty}
+            removeParameter={removeParameter}
+            addParameterCategory={addParameterCategory}
+            removeParameterCategory={removeParameterCategory}
+            applyTemplateToParameter={applyTemplateToParameter}
+          />
+          <div className="flex justify-between pt-4 border-t border-night-200">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
+              <FaArrowLeft /> Назад
+            </SecureButton>
+            <SecureButton type="button" onClick={() => setStep(4)} className="px-4 py-2">
+              Далее
+            </SecureButton>
+          </div>
+        </div>
+      )}
+
+      {step === 4 && (
+        <div className="glass-card p-6 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
               <div className="text-sm font-semibold text-night-900">{isKitchen ? "Состав кухни" : "Состав"}</div>
@@ -1777,8 +1627,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                               onChange={(v) => updateQuantity(type, idx, v)}
                               className="w-20"
                             />
-                            <SecureButton type="button" variant="ghost" onClick={() => removeModule(type, idx)} className="text-red-600 hover:bg-red-50">
-                              Удалить
+                            <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs h-10" onClick={() => removeModule(type, idx)} title="Удалить модуль">
+                              ×
                             </SecureButton>
                           </div>
                         </div>
@@ -1829,8 +1679,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                             onChange={(v) => updateCatalogItemQuantity(idx, v)}
                             className="w-20"
                           />
-                          <SecureButton type="button" variant="ghost" onClick={() => removeCatalogItem(idx)} className="text-red-600 hover:bg-red-50">
-                            Удалить
+                          <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs h-10" onClick={() => removeCatalogItem(idx)} title="Удалить компонент">
+                            ×
                           </SecureButton>
                         </div>
                       </div>
@@ -1865,7 +1715,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           </div>
 
           <div className="flex justify-between">
-            <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
             </SecureButton>
             <SecureButton type="button" onClick={goToPhotos} className="px-4 py-2 flex items-center gap-2">
@@ -1875,7 +1725,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         </div>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <div className="space-y-6">
           <div className="glass-card p-6 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1883,7 +1733,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                 <div className="text-sm font-semibold text-night-900">Фото</div>
                 <div className="text-xs text-night-500">Загрузите фото и выберите превью.</div>
               </div>
-              <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 text-xs flex items-center gap-2">
+              <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 text-xs flex items-center gap-2">
                 <FaArrowLeft /> Назад
               </SecureButton>
             </div>
@@ -1903,7 +1753,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         </div>
       )}
 
-      {step === 5 && (
+      {step === 6 && (
         <div className="glass-card p-6 space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2">
@@ -1918,7 +1768,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           </div>
 
           <div className="flex justify-between">
-            <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 flex items-center gap-2">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(5)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
             </SecureButton>
 

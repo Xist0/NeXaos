@@ -1,6 +1,7 @@
 const ApiError = require("../utils/api-error");
 const asyncHandler = require("../utils/async-handler");
 const kitSolutionService = require("../services/kit-solution.service");
+const characteristicTemplatesService = require("../services/characteristic-templates.service");
 const logger = require("../utils/logger");
 
 /**
@@ -80,6 +81,10 @@ const create = asyncHandler(async (req, res) => {
 
   const kitSolution = await kitSolutionService.saveKitSolutionWithModules(kitData, moduleIds, moduleItems, componentItems);
 
+  if (kitData?.characteristics) {
+    await characteristicTemplatesService.upsertFromCharacteristics(kitData.characteristics);
+  }
+
   logger.info("Создано готовое решение", {
     kitSolutionId: kitSolution.id,
     name: kitData.name,
@@ -105,6 +110,10 @@ const update = asyncHandler(async (req, res) => {
 
   kitData.id = kitSolutionId;
   const kitSolution = await kitSolutionService.saveKitSolutionWithModules(kitData, moduleIds, moduleItems, componentItems);
+
+  if (kitData?.characteristics) {
+    await characteristicTemplatesService.upsertFromCharacteristics(kitData.characteristics);
+  }
 
   logger.info("Обновлено готовое решение", {
     kitSolutionId,

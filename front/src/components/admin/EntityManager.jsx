@@ -991,7 +991,7 @@ const EntityManager = ({ title, endpoint, fields, fixedValues, allowDelete = tru
         </div>
       )}
 
-      <form className="grid gap-4 md:grid-cols-2 items-start" onSubmit={handleSubmit}>
+      <form className="grid gap-6 md:grid-cols-2 items-start" onSubmit={handleSubmit}>
         {endpoint === "/kit-solutions" && (
           <div className="md:col-span-2 space-y-3 border border-night-200 rounded-lg p-4 bg-white">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1384,4 +1384,5 @@ const EntityManager = ({ title, endpoint, fields, fixedValues, allowDelete = tru
 };
 
 export default EntityManager;
+
 
