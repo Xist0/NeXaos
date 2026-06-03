@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
-import PopoverSelect from "../ui/PopoverSelect";
+import FormSelect from "../ui/FormSelect";
 import EditableSelect from "../ui/EditableSelect";
 import SmallButton from "./ui/SmallButton";
 
@@ -33,12 +33,11 @@ const ProductParametersBlock = ({
       <div className="text-sm font-semibold text-night-900">Параметры</div>
       <div className="relative flex flex-wrap items-center gap-2">
         <div className="min-w-0 w-56">
-          <PopoverSelect
+          <FormSelect
             size="sm"
             items={productParameterItems}
             value={""}
             placeholder="Параметр…"
-            searchable={productParameterItems.length > 10}
             getKey={(p) => String(p.id)}
             getLabel={(p) => `#${p.id} ${p.name}`}
             onChange={(next) => {
@@ -46,9 +45,6 @@ const ProductParametersBlock = ({
               if (!v) return;
               addParameter(v);
             }}
-            buttonClassName="rounded-lg"
-            popoverClassName="rounded-lg max-w-xl"
-            maxHeightClassName="max-h-80"
           />
         </div>
         {showGlobalTemplates ? (
@@ -155,12 +151,11 @@ const ProductParametersBlock = ({
                     onChange={(v) => updateParameterQty(idx, v)}
                     className="w-20 h-10"
                   />
-                  <PopoverSelect
+                  <FormSelect
                     size="sm"
                     items={Array.isArray(templates) ? templates : []}
                     value={""}
                     placeholder="Шаблон…"
-                    searchable={(Array.isArray(templates) ? templates : []).length > 8}
                     getKey={(t) => String(t.id)}
                     getLabel={(t) => {
                       const labelValue = String(t?.value || "").trim();
@@ -176,8 +171,7 @@ const ProductParametersBlock = ({
                       if (!t) return;
                       applyTemplateToParameter({ parameterId: p.parameterId, template: t });
                     }}
-                    buttonClassName="h-10 rounded-lg border border-night-200 bg-white text-night-900 text-xs"
-                    popoverClassName="rounded-lg"
+                    buttonClassName="h-10 border border-night-200 bg-white text-night-900 text-xs"
                     maxHeightClassName="max-h-64"
                   />
                   <SmallButton onClick={() => removeParameter(idx)} title="Удалить параметр">
@@ -195,12 +189,10 @@ const ProductParametersBlock = ({
 
     <div className="space-y-3">
       <div className="text-xs font-semibold text-night-700">Категории параметров изделий</div>
-      <PopoverSelect
-        size="md"
+      <FormSelect
         items={productParameterCategoryItems}
         value={""}
         placeholder="Категория…"
-        searchable={productParameterCategoryItems.length > 10}
         getKey={(c) => String(c.id)}
         getLabel={(c) => String(c?.name || "")}
         onChange={(next) => {
@@ -208,9 +200,6 @@ const ProductParametersBlock = ({
           if (!v) return;
           addParameterCategory(v);
         }}
-        buttonClassName="rounded-lg"
-        popoverClassName="rounded-lg max-w-xl"
-        maxHeightClassName="max-h-80"
       />
       {(selectedParameterCategories || []).length > 0 ? (
         <div className="space-y-2">

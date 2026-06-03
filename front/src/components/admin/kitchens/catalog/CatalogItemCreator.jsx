@@ -16,7 +16,8 @@ import useApi from "../../../../hooks/useApi";
 import useLogger from "../../../../hooks/useLogger";
 import ImageManager from "../../ImageManager";
 import { formatCurrency } from "../../../../utils/format";
-import PopoverSelect from "../../../ui/PopoverSelect";
+import FormField from "../../../ui/FormField";
+import FormSelect from "../../../ui/FormSelect";
 
 let colorsCache = null;
 let colorsCachePromise = null;
@@ -778,52 +779,39 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
       {step === 1 && (
         <div className="glass-card p-6 space-y-4">
-          <div className="grid gap-4">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Коллекция</div>
-              <PopoverSelect
-                size="md"
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <FormField label="Коллекция">
+              <FormSelect
                 items={collectionItems}
                 value={form.collection_id}
                 placeholder="Не выбрана"
                 allowClear
                 clearLabel="Не выбрана"
-                searchable={collectionItems.length > 8}
                 getKey={(c) => String(c.id)}
                 getLabel={(c) => String(c?.name || "")}
                 onChange={(next) => setForm((p) => ({ ...p, collection_id: String(next || "") }))}
-                buttonClassName="rounded-lg"
-                popoverClassName="rounded-lg max-w-xl"
-                maxHeightClassName="max-h-80"
               />
-            </label>
+            </FormField>
 
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
+            <FormField label="baseSku (для артикула)">
               <SecureInput value={form.baseSku} onChange={(v) => setForm((p) => ({ ...p, baseSku: v }))} />
-            </label>
+            </FormField>
 
-            <label className="space-y-2">
-              <div
-                className="text-xs font-semibold text-night-700"
-                title="SKU формируется автоматически из baseSku/названия + размеров (Д/Г/В) + выбранных цветов."
-              >
-                Артикул (SKU)
-              </div>
+            <FormField label="Артикул (SKU)" labelClassName="cursor-help" title="SKU формируется автоматически из baseSku/названия + размеров (Д/Г/В) + выбранных цветов.">
               <SecureInput value={effectiveSku} onChange={() => {}} disabled />
-            </label>
+            </FormField>
 
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Название</div>
+            <FormField label="Название">
               <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
-            </label>
+            </FormField>
 
-            <ProductTypeField
-              characteristics={form.characteristics}
-              onCharacteristicsChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
-              suggestions={templatesByField.product_type || []}
-            />
-
+            <div className="sm:col-span-2 lg:col-span-3">
+              <ProductTypeField
+                characteristics={form.characteristics}
+                onCharacteristicsChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
+                suggestions={templatesByField.product_type || []}
+              />
+            </div>
           </div>
 
           <div className="flex justify-end">
@@ -836,15 +824,14 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
       {step === 2 && (
         <div className="glass-card p-6 space-y-4">
-          <label className="space-y-2 block">
-            <div className="text-xs font-semibold text-night-700">Описание</div>
+          <FormField label="Описание">
             <textarea
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-              className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              className="w-full px-4 py-2 border border-night-200 rounded-xl bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent min-h-[120px] resize-y"
               rows={8}
             />
-          </label>
+          </FormField>
           <div className="flex justify-between pt-4">
             <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
@@ -905,19 +892,16 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
       {step === 4 && (
         <div className="glass-card p-6 space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Длина (мм)</div>
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
+            <FormField label="Длина (мм)">
               <SecureInput type="number" value={form.length_mm} onChange={(v) => setForm((p) => ({ ...p, length_mm: v }))} />
-            </label>
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Глубина (мм)</div>
+            </FormField>
+            <FormField label="Глубина (мм)">
               <SecureInput type="number" value={form.depth_mm} onChange={(v) => setForm((p) => ({ ...p, depth_mm: v }))} />
-            </label>
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Высота (мм)</div>
+            </FormField>
+            <FormField label="Высота (мм)">
               <SecureInput type="number" value={form.height_mm} onChange={(v) => setForm((p) => ({ ...p, height_mm: v }))} />
-            </label>
+            </FormField>
           </div>
 
           <div className="flex justify-between">
@@ -961,10 +945,9 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
       {step === 6 && (
         <div className="glass-card p-6 space-y-4">
-          <label className="space-y-2">
-            <div className="text-xs font-semibold text-night-700">Итоговая цена</div>
+          <FormField label="Итоговая цена">
             <SecureInput type="number" value={form.final_price} onChange={(v) => setForm((p) => ({ ...p, final_price: v }))} />
-          </label>
+          </FormField>
 
           <div className="flex justify-between">
             <SecureButton type="button" variant="outline" onClick={() => setStep(5)} className="px-4 py-2 flex items-center gap-2">

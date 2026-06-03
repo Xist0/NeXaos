@@ -17,10 +17,9 @@ import SmallButton from "../../ui/SmallButton";
 import useApi from "../../../../hooks/useApi";
 import useLogger from "../../../../hooks/useLogger";
 import ImageManager from "../../ImageManager";
-import ColorBadge from "../../../ui/ColorBadge";
 import { formatCurrency } from "../../../../utils/format";
-import { getThumbUrl } from "../../../../utils/image";
-import PopoverSelect from "../../../ui/PopoverSelect";
+import FormField from "../../../ui/FormField";
+import FormSelect from "../../../ui/FormSelect";
 import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
 import ProductTypeField from "../../ProductTypeField";
 import ProductParametersBlock from "../../ProductParametersBlock";
@@ -1269,73 +1268,53 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
       {step === 1 && (
         <div className="glass-card p-6 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
             {isKitchen ? (
-              <label className="space-y-2">
-                <div className="text-xs font-semibold text-night-700">Тип кухни</div>
-                <PopoverSelect
-                  size="md"
+              <FormField label="Тип кухни">
+                <FormSelect
                   items={kitchenTypeItems}
                   value={form.kitchen_type_id}
                   placeholder="Не выбран"
                   allowClear
                   clearLabel="Не выбран"
-                  searchable={kitchenTypeItems.length > 10}
                   getKey={(t) => String(t.id)}
                   getLabel={(t) => `#${t.id} ${t.name}`}
                   onChange={(next) => setForm((p) => ({ ...p, kitchen_type_id: String(next || "") }))}
-                  buttonClassName="rounded-lg"
-                  popoverClassName="rounded-lg max-w-xl"
-                  maxHeightClassName="max-h-80"
                 />
-              </label>
+              </FormField>
             ) : null}
-            <label className="space-y-2 md:col-span-2">
-              <div className="text-xs font-semibold text-night-700">Название</div>
+            <FormField label="Название" className="sm:col-span-2">
               <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
-            </label>
+            </FormField>
 
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Коллекция</div>
-              <PopoverSelect
-                size="md"
+            <FormField label="Коллекция">
+              <FormSelect
                 items={collectionItems}
                 value={form.collection_id}
                 placeholder="Не выбрана"
                 allowClear
                 clearLabel="Не выбрана"
-                searchable={collectionItems.length > 8}
                 getKey={(c) => String(c.id)}
                 getLabel={(c) => String(c?.name || "")}
                 onChange={(next) => setForm((p) => ({ ...p, collection_id: String(next || "") }))}
-                buttonClassName="rounded-lg"
-                popoverClassName="rounded-lg max-w-xl"
-                maxHeightClassName="max-h-80"
               />
-            </label>
+            </FormField>
 
 
-            <label className="space-y-2 md:col-span-2">
-              <div className="text-xs font-semibold text-night-700">baseSku (для артикула)</div>
+            <FormField label="baseSku (для артикула)" className="sm:col-span-2">
               <SecureInput
                 value={form.baseSku}
                 onChange={(v) => setForm((p) => ({ ...p, baseSku: v }))}
                 placeholder="Например: PRYAMAYA"
               />
-            </label>
+            </FormField>
 
-            <label className="space-y-2 md:col-span-2">
-              <div
-                className="text-xs font-semibold text-night-700"
-                title="SKU формируется автоматически из baseSku/названия + суммарных размеров (Д/Г/В) + выбранных цветов. Поле доступно только для просмотра."
-              >
-                Артикул (SKU)
-              </div>
+            <FormField label="Артикул (SKU)" labelClassName="cursor-help" className="sm:col-span-2" title="SKU формируется автоматически из baseSku/названия + суммарных размеров (Д/Г/В) + выбранных цветов. Поле доступно только для просмотра.">
               <SecureInput value={effectiveSku} onChange={() => {}} disabled placeholder="Сформируется автоматически" />
-            </label>
+            </FormField>
 
 
-            <div className="md:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-3">
               <ProductTypeField
                 characteristics={form.characteristics}
                 onCharacteristicsChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
@@ -1355,25 +1334,22 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
       {step === 2 && (
         <div className="glass-card p-6 space-y-4">
           <div className="grid gap-4">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Описание</div>
+            <FormField label="Описание">
               <textarea
                 value={form.description}
                 onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                className="w-full px-4 py-2 border border-night-200 rounded-lg bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+                className="w-full px-4 py-2 border border-night-200 rounded-xl bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent min-h-[120px] resize-y"
                 rows={5}
               />
-            </label>
+            </FormField>
 
             <div className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Параметры</div>
 
-              <PopoverSelect
-                size="md"
+              <FormSelect
                 items={productParameterItems}
                 value={""}
                 placeholder="+ Добавить..."
-                searchable={productParameterItems.length > 10}
                 getKey={(p) => String(p.id)}
                 getLabel={(p) => `#${p.id} ${p.name}`}
                 onChange={(next) => {
@@ -1381,9 +1357,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                   if (!v) return;
                   addParameter(v);
                 }}
-                buttonClassName="rounded-lg"
-                popoverClassName="rounded-lg max-w-xl"
-                maxHeightClassName="max-h-80"
               />
 
               {(selectedParameters || []).length === 0 ? (
@@ -1403,12 +1376,11 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                           <div className="text-xs text-night-500">ID: {p.parameterId}</div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <PopoverSelect
+                          <FormSelect
                             size="sm"
                             items={Array.isArray(templates) ? templates : []}
                             value={""}
                             placeholder="Шаблон…"
-                            searchable={(Array.isArray(templates) ? templates : []).length > 8}
                             getKey={(t) => String(t.id)}
                             getLabel={(t) => {
                               const labelValue = String(t?.value || "").trim();
@@ -1473,12 +1445,10 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
             <div className="space-y-2">
               <div className="text-xs font-semibold text-night-700">Категории параметров изделий</div>
-              <PopoverSelect
-                size="md"
+              <FormSelect
                 items={productParameterCategoryItems}
                 value={""}
                 placeholder="+ Добавить..."
-                searchable={productParameterCategoryItems.length > 10}
                 getKey={(c) => String(c.id)}
                 getLabel={(c) => String(c?.name || "")}
                 onChange={(next) => {
@@ -1486,9 +1456,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                   if (!v) return;
                   addParameterCategory(v);
                 }}
-                buttonClassName="rounded-lg"
-                popoverClassName="rounded-lg max-w-xl"
-                maxHeightClassName="max-h-80"
               />
 
               {(selectedParameterCategories || []).length === 0 ? (
@@ -1591,12 +1558,10 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
               <div key={type} className="space-y-3">
                 <div className="text-xs font-semibold text-night-700 uppercase">{title}</div>
 
-                <PopoverSelect
-                  size="md"
+                <FormSelect
                   items={list}
                   value={""}
                   placeholder="+ Добавить..."
-                  searchable={list.length > 10}
                   getKey={(m) => String(m.id)}
                   getLabel={(m) => `#${m.id} ${m.name} (${m.length_mm}×${m.depth_mm}×${m.height_mm})`}
                   onChange={(next) => {
@@ -1604,9 +1569,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                     if (!v) return;
                     addModule(type, v);
                   }}
-                  buttonClassName="rounded-lg"
-                  popoverClassName="rounded-lg max-w-2xl"
-                  maxHeightClassName="max-h-80"
+                  popoverClassName="max-w-2xl"
                 />
 
                 {(selectedModulesByType[type] || []).length === 0 ? (
@@ -1643,12 +1606,10 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             <div className="space-y-3">
               <div className="text-xs font-semibold text-night-700 uppercase">Компоненты</div>
 
-              <PopoverSelect
-                size="md"
+              <FormSelect
                 items={catalogItemsSelectable}
                 value={""}
                 placeholder="+ Добавить..."
-                searchable={catalogItemsSelectable.length > 10}
                 getKey={(m) => String(m.id)}
                 getLabel={(m) => `#${m.id} ${m.name} (${m.length_mm}×${m.depth_mm}×${m.height_mm})`}
                 onChange={(next) => {
@@ -1656,9 +1617,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                   if (!v) return;
                   addCatalogItem(v);
                 }}
-                buttonClassName="rounded-lg"
-                popoverClassName="rounded-lg max-w-2xl"
-                maxHeightClassName="max-h-80"
+                popoverClassName="max-w-2xl"
               />
 
               {selectedCatalogItems.length === 0 ? (
@@ -1692,27 +1651,22 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Длина (мм)</div>
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            <FormField label="Длина (мм)">
               <SecureInput value={form.total_length_mm} onChange={(v) => setForm((p) => ({ ...p, total_length_mm: v }))} />
-            </label>
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Глубина (мм)</div>
+            </FormField>
+            <FormField label="Глубина (мм)">
               <SecureInput value={form.total_depth_mm} onChange={(v) => setForm((p) => ({ ...p, total_depth_mm: v }))} />
-            </label>
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Высота (мм)</div>
+            </FormField>
+            <FormField label="Высота (мм)">
               <SecureInput value={form.total_height_mm} onChange={(v) => setForm((p) => ({ ...p, total_height_mm: v }))} />
-            </label>
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Столешница (длина, мм)</div>
+            </FormField>
+            <FormField label="Столешница (длина, мм)">
               <SecureInput value={form.countertop_length_mm} onChange={(v) => setForm((p) => ({ ...p, countertop_length_mm: v }))} />
-            </label>
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Столешница (глубина, мм)</div>
+            </FormField>
+            <FormField label="Столешница (глубина, мм)">
               <SecureInput value={form.countertop_depth_mm} onChange={(v) => setForm((p) => ({ ...p, countertop_depth_mm: v }))} />
-            </label>
+            </FormField>
           </div>
 
           <div className="flex justify-between">
@@ -1756,16 +1710,14 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
       {step === 6 && (
         <div className="glass-card p-6 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Базовая цена (сумма модулей)</div>
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+            <FormField label="Базовая цена (сумма модулей)">
               <SecureInput value={String(computedBasePrice || 0)} onChange={() => {}} readOnly disabled />
               <div className="text-xs text-night-500">{formatCurrency(computedBasePrice || 0)}</div>
-            </label>
-            <label className="space-y-2">
-              <div className="text-xs font-semibold text-night-700">Итоговая цена</div>
+            </FormField>
+            <FormField label="Итоговая цена">
               <SecureInput value={form.final_price} onChange={(v) => setForm((p) => ({ ...p, final_price: v }))} />
-            </label>
+            </FormField>
           </div>
 
           <div className="flex justify-between">

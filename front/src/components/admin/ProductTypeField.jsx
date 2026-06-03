@@ -1,4 +1,5 @@
 import EditableSelect from "../ui/EditableSelect";
+import FormField from "../ui/FormField";
 import { PRODUCT_CHARACTERISTIC_FIELDS } from "../../constants/productCharacteristics";
 import { parseCharacteristicField } from "../../utils/characteristics";
 
@@ -16,15 +17,14 @@ const ProductTypeField = ({ characteristics, onCharacteristicsChange, suggestion
   };
 
   return (
-    <label className="space-y-2 block">
-      <div className="text-xs font-semibold text-night-700">{label}</div>
+    <FormField label={label}>
       <EditableSelect
         value={parsed.value}
         onChange={setProductType}
         suggestions={suggestions}
         placeholder="Выберите или введите…"
       />
-    </label>
+    </FormField>
   );
 };
 

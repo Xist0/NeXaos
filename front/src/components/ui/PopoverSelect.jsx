@@ -80,18 +80,16 @@ const PopoverSelect = ({
     switch (size) {
       case "sm":
         return {
-          button: "rounded-xl px-3 py-2 text-sm",
+          button: "px-3 py-2 text-sm",
           caret: "text-sm",
-          popover: "mt-0",
           searchWrap: "p-2",
           searchInput: "px-3 py-2 rounded-lg text-sm",
           option: "px-3 py-2 text-sm",
         };
       case "lg":
         return {
-          button: "rounded-2xl px-4 py-3 text-base",
+          button: "px-4 py-3 text-base",
           caret: "text-base",
-          popover: "mt-0",
           searchWrap: "p-3",
           searchInput: "px-4 py-3 rounded-xl text-base",
           option: "px-4 py-3 text-base",
@@ -99,15 +97,23 @@ const PopoverSelect = ({
       case "md":
       default:
         return {
-          button: "rounded-2xl px-3 py-2 text-sm",
+          button: "px-3 py-2 text-sm",
           caret: "text-sm",
-          popover: "mt-0",
           searchWrap: "p-2",
-          searchInput: "px-3 py-2 rounded-xl text-sm",
+          searchInput: "px-3 py-2 rounded-lg text-sm",
           option: "px-3 py-2 text-sm",
         };
     }
   }, [size]);
+
+  // When closed: button has full rounded corners.
+  // When open: button bottom corners are sharp (flush), popover top corners are sharp,
+  // popover bottom corners are rounded. This creates a seamless visual connection.
+  const buttonRounding = open
+    ? "rounded-t-xl rounded-b-none"
+    : "rounded-xl";
+
+  const popoverRounding = "rounded-b-xl";
 
   return (
     <div ref={rootRef} className="relative">
@@ -125,6 +131,7 @@ const PopoverSelect = ({
         className={clsx(
           "w-full flex items-center justify-between gap-3 border border-night-200 bg-white text-night-900",
           "focus:outline-none focus:ring-2 focus:ring-accent/20",
+          buttonRounding,
           disabled ? "opacity-60 cursor-not-allowed" : "hover:border-night-400",
           sizeStyles.button,
           buttonClassName
@@ -137,8 +144,8 @@ const PopoverSelect = ({
       </button>
 
       {open ? (
-        <div className={clsx("absolute z-50 top-full w-full", sizeStyles.popover, sideClass, popoverClassName)}>
-          <div className={clsx("border border-night-200 bg-white shadow-xl overflow-hidden", sizeStyles.button.split(" ").find((c) => c.startsWith("rounded-")))}>
+        <div className={clsx("absolute z-50 top-full w-full mt-0", sideClass, popoverClassName)}>
+          <div className={clsx("border border-t-0 border-night-200 bg-white shadow-xl overflow-hidden", popoverRounding)}>
             {searchable ? (
               <div className={clsx("border-b border-night-100", sizeStyles.searchWrap)}>
                 <input
