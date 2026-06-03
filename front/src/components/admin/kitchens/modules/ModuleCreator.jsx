@@ -22,6 +22,7 @@ import {
 } from "../../../../utils/characteristics";
 import SecureButton from "../../../ui/SecureButton";
 import SecureInput from "../../../ui/SecureInput";
+import SmallButton from "../../ui/SmallButton";
 import useApi from "../../../../hooks/useApi";
 import useLogger from "../../../../hooks/useLogger";
 import ImageManager from "../../ImageManager";

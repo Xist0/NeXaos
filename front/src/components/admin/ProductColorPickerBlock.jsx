@@ -116,7 +116,7 @@ const ProductColorPickerBlock = ({
               setOpenPrimary((v) => !v);
               setOpenSecondary(false);
             }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition h-10"
           >
             <span className="flex items-center gap-2">
               {selectedPrimary ? (
@@ -166,7 +166,7 @@ const ProductColorPickerBlock = ({
               setOpenSecondary((v) => !v);
               setOpenPrimary(false);
             }}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-lg border border-night-200 bg-white hover:border-accent transition h-10"
           >
             <span className="flex items-center gap-2">
               {selectedSecondary ? (

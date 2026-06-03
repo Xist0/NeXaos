@@ -13,6 +13,7 @@ import {
 } from "react-icons/fa";
 import SecureButton from "../../../ui/SecureButton";
 import SecureInput from "../../../ui/SecureInput";
+import SmallButton from "../../ui/SmallButton";
 import useApi from "../../../../hooks/useApi";
 import useLogger from "../../../../hooks/useLogger";
 import ImageManager from "../../ImageManager";
@@ -670,7 +671,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         setKitId(data.id);
         setForm((prev) => ({
           ...prev,
-          baseSku: "",
+          baseSku: data.base_sku || "",
           sku: data.sku || "",
           name: data.name || "",
           description: data.description || "",
@@ -1458,9 +1459,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                             />
                           </div>
                           <div className="flex gap-1">
-                            <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs h-10" onClick={() => removeParameter(idx)} title="Удалить параметр">
+                            <SmallButton onClick={() => removeParameter(idx)} title="Удалить параметр">
                               ×
-                            </SecureButton>
+                            </SmallButton>
                           </div>
                         </div>
                       </div>
@@ -1502,9 +1503,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                           <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${id}`}</div>
                           <div className="text-xs text-night-500">ID: {id}</div>
                         </div>
-                        <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => removeParameterCategory(idx)}>
+                        <SmallButton onClick={() => removeParameterCategory(idx)}>
                           Удалить
-                        </SecureButton>
+                        </SmallButton>
                       </div>
                     );
                   })}
@@ -1627,9 +1628,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                               onChange={(v) => updateQuantity(type, idx, v)}
                               className="w-20"
                             />
-                            <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs h-10" onClick={() => removeModule(type, idx)} title="Удалить модуль">
+                            <SmallButton onClick={() => removeModule(type, idx)} title="Удалить модуль">
                               ×
-                            </SecureButton>
+                            </SmallButton>
                           </div>
                         </div>
                       );
@@ -1679,9 +1680,9 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
                             onChange={(v) => updateCatalogItemQuantity(idx, v)}
                             className="w-20"
                           />
-                          <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs h-10" onClick={() => removeCatalogItem(idx)} title="Удалить компонент">
+                          <SmallButton onClick={() => removeCatalogItem(idx)} title="Удалить компонент">
                             ×
-                          </SecureButton>
+                          </SmallButton>
                         </div>
                       </div>
                     );

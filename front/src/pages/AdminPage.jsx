@@ -6,6 +6,7 @@ import EntityManager from "../components/admin/EntityManager";
 import ModulesAdmin from "../components/admin/kitchens/modules/ModulesAdmin";
 import KitSolutionsAdmin from "../components/admin/kitchens/ready-solutions/KitSolutionsAdmin";
 import ModuleDescriptionsAdmin from "../components/admin/kitchens/modules/ModuleDescriptionsAdmin";
+import CharacteristicValueTemplatesAdmin from "../components/admin/CharacteristicValueTemplatesAdmin";
 import CatalogItemsAdmin from "../components/admin/kitchens/catalog/CatalogItemsAdmin";
 import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight, FaUser } from "react-icons/fa";
 import useAuth from "../hooks/useAuth";
@@ -85,11 +86,19 @@ const adminSections = [
     ],
   },
   {
+    id: "calculations",
+    label: "Расчеты",
+    icon: FaCog,
+    items: [
+      { id: "calculationParameters", label: "Параметры расчета", endpoint: "/calculation-parameters" },
+      { id: "surchargeCost", label: "Надбавочная стоимость", endpoint: "/surcharge-cost" },
+    ],
+  },
+  {
     id: "other",
     label: "Прочее",
     icon: FaCog,
     items: [
-      { id: "calculationParameters", label: "Параметры расчета", endpoint: "/calculation-parameters" },
       { id: "materialPrices", label: "Цена материалов", endpoint: "/material-prices" },
       { id: "collections", label: "Коллекции", endpoint: "/collections" },
       { id: "productParameters", label: "Параметры изделий", endpoint: "/product-parameters" },
@@ -99,6 +108,7 @@ const adminSections = [
       { id: "kitchenTypes", label: "Тип кухни", endpoint: "/kitchen-types" },
       { id: "sizeTemplates", label: "Шаблоны размеров", endpoint: "/size-templates" },
       { id: "colors", label: "Цвета", endpoint: "/colors" },
+      { id: "characteristicValueTemplates", label: "Значения характеристик", component: "characteristicValueTemplates" },
     ],
   },
   {
@@ -977,6 +987,7 @@ const AdminPage = () => {
   const isModuleCreator = currentItem?.special === "moduleCreator";
   const isKitSolutionCreator = currentItem?.special === "kitSolutionCreator";
   const isModuleDescriptionCreator = currentItem?.special === "moduleDescriptionCreator";
+  const isCharacteristicValueTemplates = currentItem?.component === "characteristicValueTemplates";
   const isKitchenModuleTab = [
     "kitchenModulesBottom",
     "kitchenModulesTop",
@@ -1335,13 +1346,16 @@ const AdminPage = () => {
 
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ ПОДТИПОВ МОДУЛЕЙ */}
           {isModuleDescriptionCreator && <ModuleDescriptionsAdmin />}
-          
+
+          {/* ✅ СПЕЦИАЛЬНАЯ ФОРМА ДЛЯ ЗНАЧЕНИЙ ХАРАКТЕРИСТИК */}
+          {isCharacteristicValueTemplates && <CharacteristicValueTemplatesAdmin />}
+
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
           {currentItem?.component === "staffAuditLogs" && <StaffAuditLogs />}
           {currentItem?.component === "staffUsers" && <StaffUsersAdmin />}
           {activeTab === "siteVisual" && <SiteVisualAdmin />}
 
-          {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && activeTab !== "siteVisual" && (
+          {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && !isCharacteristicValueTemplates && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && activeTab !== "siteVisual" && (
             isCatalogItemsTab ? (
               <CatalogItemsAdmin key={activeTab} title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
             ) : (

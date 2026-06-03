@@ -36,15 +36,15 @@ const EditableSelect = ({
   }, [open]);
 
   return (
-    <div ref={rootRef} className={clsx("relative flex gap-2 items-center min-w-0", className)}>
-      <div className="flex-1 flex gap-2 items-center">
+    <div ref={rootRef} className={clsx("relative min-w-0", className)}>
+      <div className="relative flex items-center">
         <SecureInput
           value={value}
           onChange={onChange}
           disabled={disabled}
           placeholder={placeholder}
           list={options.length > 0 ? listId : undefined}
-          className="flex-1 min-w-0 px-3 py-2 border border-night-200 rounded-lg text-sm disabled:bg-night-50"
+          className="w-full min-w-0 px-3 py-2 border border-night-200 rounded-lg text-sm disabled:bg-night-50 h-10"
         />
         {options.length > 0 ? (
           <datalist id={listId}>
@@ -54,33 +54,6 @@ const EditableSelect = ({
           </datalist>
         ) : null}
       </div>
-      <button
-        type="button"
-        disabled={disabled || options.length === 0}
-        onClick={() => setOpen((v) => !v)}
-        className="shrink-0 px-3 py-2 h-10 rounded-lg border border-night-200 bg-white text-night-500 hover:border-accent disabled:opacity-40 text-xs"
-        aria-label="Выбрать из списка"
-        title="Выбрать из списка"
-      >
-        ▾
-      </button>
-      {open ? (
-        <div className="absolute z-[1000] right-0 top-full mt-1 min-w-[12rem] max-w-full rounded-xl border border-night-200 bg-white shadow-xl max-h-56 overflow-auto">
-          {options.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              className="w-full text-left px-3 py-2 text-sm text-night-800 hover:bg-night-50 border-b border-night-100 last:border-b-0"
-              onClick={() => {
-                onChange?.(opt);
-                setOpen(false);
-              }}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 };

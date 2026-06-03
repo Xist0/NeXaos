@@ -2,6 +2,8 @@ import { useRef } from "react";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import PopoverSelect from "../ui/PopoverSelect";
+import EditableSelect from "../ui/EditableSelect";
+import SmallButton from "./ui/SmallButton";
 
 const ProductParametersBlock = ({
   productParameterItems,
@@ -50,10 +52,9 @@ const ProductParametersBlock = ({
           />
         </div>
         {showGlobalTemplates ? (
-          <SecureButton
-            type="button"
+          <SmallButton
             variant="outline"
-            className="px-4 py-2 text-xs whitespace-nowrap rounded-2xl"
+            className="whitespace-nowrap rounded-2xl"
             onClick={() => {
               if (templatesOverlayOpen) {
                 setTemplatesOverlayOpen?.(false);
@@ -63,7 +64,7 @@ const ProductParametersBlock = ({
             }}
           >
             Шаблоны параметров
-          </SecureButton>
+          </SmallButton>
         ) : null}
 
         {showGlobalTemplates && templatesOverlayOpen ? (
@@ -71,9 +72,9 @@ const ProductParametersBlock = ({
             <div className="border border-night-200 rounded-lg bg-white shadow-lg overflow-hidden">
               <div className="px-3 py-2 border-b border-night-100 flex items-center justify-between gap-3">
                 <div className="text-xs font-semibold text-night-700">Выберите шаблон</div>
-                <SecureButton type="button" variant="outline" className="px-3 py-1.5 text-xs" onClick={() => setTemplatesOverlayOpen(false)}>
+                <SmallButton onClick={() => setTemplatesOverlayOpen(false)}>
                   Закрыть
-                </SecureButton>
+                </SmallButton>
               </div>
               {allTemplatesLoading ? <div className="px-3 py-3 text-sm text-night-600">Загрузка…</div> : null}
               {!allTemplatesLoading && allTemplates.length === 0 ? (
@@ -138,11 +139,13 @@ const ProductParametersBlock = ({
               >
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${p.parameterId}`}</div>
+                  <div className="text-xs text-night-500">ID: {p.parameterId}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <SecureInput
+                  <EditableSelect
                     value={String(p.value)}
                     onChange={(v) => updateParameterValue(idx, v)}
+                    suggestions={[]}
                     placeholder="Значение"
                     className="w-32"
                   />
@@ -150,7 +153,7 @@ const ProductParametersBlock = ({
                     type="number"
                     value={String(p.quantity)}
                     onChange={(v) => updateParameterQty(idx, v)}
-                    className="w-20"
+                    className="w-20 h-10"
                   />
                   <PopoverSelect
                     size="sm"
@@ -177,9 +180,9 @@ const ProductParametersBlock = ({
                     popoverClassName="rounded-lg"
                     maxHeightClassName="max-h-64"
                   />
-                  <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs h-10" onClick={() => removeParameter(idx)} title="Удалить параметр">
+                  <SmallButton onClick={() => removeParameter(idx)} title="Удалить параметр">
                     ×
-                  </SecureButton>
+                  </SmallButton>
                 </div>
               </div>
             );
@@ -222,9 +225,9 @@ const ProductParametersBlock = ({
                   <div className="text-sm font-semibold text-night-900 truncate">{full?.name || `#${id}`}</div>
                   <div className="text-xs text-night-500">ID: {id}</div>
                 </div>
-                <SecureButton type="button" variant="outline" className="px-3 py-2 text-xs" onClick={() => removeParameterCategory(idx)}>
+                <SmallButton onClick={() => removeParameterCategory(idx)}>
                   Удалить
-                </SecureButton>
+                </SmallButton>
               </div>
             );
           })}

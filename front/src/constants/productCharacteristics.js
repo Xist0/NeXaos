@@ -18,7 +18,7 @@ export const PRODUCT_CHARACTERISTIC_FIELDS = {
   lift_mechanism: { label: "Подъёмный механизм" },
   drawer_count: { label: "Кол-во ящиков (всего)" },
   drawers_type: { label: "Тип ящиков" },
-  drawers_detail: { label: "Вид и кол-во ящиков", multiline: true },
+  drawers_detail: { label: "Вид и кол-во ящиков" },
   hinges_count: { label: "Кол-во петель (всего)" },
   hinges_type: { label: "Тип петель" },
   shelf_count: { label: "Кол-во полок" },

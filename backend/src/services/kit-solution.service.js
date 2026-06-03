@@ -266,6 +266,9 @@ const saveKitSolutionWithModules = async (payload) => {
     description,
     characteristics,
     parameters,
+    moduleItems,
+    moduleIds,
+    componentItems,
     category_group,
     category,
     kitchen_type_id,
@@ -282,7 +285,7 @@ const saveKitSolutionWithModules = async (payload) => {
     final_price,
     preview_url,
     is_active,
-  } = kitData;
+  } = payload;
 
   const normalizedCategoryGroup = category_group != null && String(category_group).trim()
     ? String(category_group).trim()
