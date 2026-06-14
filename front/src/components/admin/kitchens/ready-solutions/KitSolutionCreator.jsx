@@ -21,13 +21,14 @@ import { formatCurrency } from "../../../../utils/format";
 import FormField from "../../../ui/FormField";
 import FormSelect from "../../../ui/FormSelect";
 import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
-import ProductTypeField from "../../ProductTypeField";
-import ProductParametersBlock from "../../ProductParametersBlock";
-import useCharacteristicValueTemplates from "../../../../hooks/useCharacteristicValueTemplates";
+import useCatalogParameters from "../../../../hooks/useCatalogParameters";
 import {
   characteristicsFromApi,
   createEmptyCharacteristicsForm,
+  getCharacteristicDimensions,
+  mergeEntityDimensionsIntoCharacteristics,
   normalizeCharacteristicsForSave,
+  parseCharacteristicField,
 } from "../../../../utils/characteristics";
 
 const LazyImg = ({ src, alt, className, onError }) => {
@@ -73,6 +74,15 @@ const LazyImg = ({ src, alt, className, onError }) => {
       )}
     </span>
   );
+};
+
+const resolveKitDimensions = (form) => {
+  const fromChar = getCharacteristicDimensions(form.characteristics);
+  return {
+    total_length_mm: Number(fromChar.length_mm ?? form.total_length_mm) || null,
+    total_depth_mm: Number(fromChar.depth_mm ?? form.total_depth_mm) || null,
+    total_height_mm: Number(fromChar.height_mm ?? form.total_height_mm) || null,
+  };
 };
 
 let colorsCache = null;
@@ -195,18 +205,19 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     const colors = Array.isArray(referenceData.colors) ? referenceData.colors : [];
     const primary = colors.find((c) => Number(c?.id) === Number(form.primary_color_id));
     const secondary = colors.find((c) => Number(c?.id) === Number(form.secondary_color_id));
+    const dims = getCharacteristicDimensions(form.characteristics);
 
     const parts = [
       normalizeSkuPart(articleName),
-      normalizeNum(form.total_length_mm),
-      normalizeNum(form.total_depth_mm),
-      normalizeNum(form.total_height_mm),
+      normalizeNum(dims.length_mm ?? form.total_length_mm),
+      normalizeNum(dims.depth_mm ?? form.total_depth_mm),
+      normalizeNum(dims.height_mm ?? form.total_height_mm),
       normalizeSkuPart(primary?.sku || ""),
       normalizeSkuPart(secondary?.sku || ""),
     ].filter(Boolean);
 
     return parts.length ? parts.join("-") : "";
-  }, [form.baseSku, form.name, form.primary_color_id, form.secondary_color_id, form.secondary_color_id, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, referenceData.colors]);
+  }, [form.baseSku, form.characteristics, form.name, form.primary_color_id, form.secondary_color_id, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, referenceData.colors]);
 
   const getKitPayloadParts = useCallback(() => {
     const moduleIds = ["bottom", "top"]
@@ -348,9 +359,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         primary_color_id: Number(form.primary_color_id) || null,
         secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
 
-        total_length_mm: Number(form.total_length_mm) || null,
-        total_depth_mm: Number(form.total_depth_mm) || null,
-        total_height_mm: Number(form.total_height_mm) || null,
+        ...resolveKitDimensions(form),
         countertop_length_mm: Number(form.countertop_length_mm) || null,
         countertop_depth_mm: Number(form.countertop_depth_mm) || null,
 
@@ -378,7 +387,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
   }, [fixedValues?.category, fixedValues?.category_group, form, getEffectiveSku, getKitPayloadParts, isKitchen, kitId, onDone, put, selectedParameterCategories, selectedParameters]);
 
   const colorPickerRef = useRef(null);
-  const { templatesByField } = useCharacteristicValueTemplates(get);
+  const { sections: catalogSections, templatesByField, fieldLabels } = useCatalogParameters(get);
 
   const [lengthWarning, setLengthWarning] = useState(null);
 
@@ -539,7 +548,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
       setLoading(true);
       try {
         if (!colorsCachePromise) {
-          colorsCachePromise = getRef.current("/colors", { limit: 500, is_active: true }).then((res) => {
+          colorsCachePromise = getRef.current("/colors", { limit: 500, isActive: true }).then((res) => {
             const data = Array.isArray(res?.data) ? res.data : [];
             colorsCache = data;
             return data;
@@ -689,7 +698,11 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           final_price: data.final_price != null ? String(data.final_price) : "",
           is_active: !!data.is_active,
 
-          characteristics: characteristicsFromApi(data.characteristics),
+          characteristics: mergeEntityDimensionsIntoCharacteristics(data.characteristics, {
+            total_length_mm: data.total_length_mm,
+            total_depth_mm: data.total_depth_mm,
+            total_height_mm: data.total_height_mm,
+          }),
         }));
 
         const params = Array.isArray(data.parameters) ? data.parameters : [];
@@ -773,7 +786,11 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           final_price: data.final_price != null ? String(data.final_price) : "",
           is_active: false,
 
-          characteristics: characteristicsFromApi(data.characteristics),
+          characteristics: mergeEntityDimensionsIntoCharacteristics(data.characteristics, {
+            total_length_mm: data.total_length_mm,
+            total_depth_mm: data.total_depth_mm,
+            total_height_mm: data.total_height_mm,
+          }),
         }));
 
         const params = Array.isArray(data.parameters) ? data.parameters : [];
@@ -870,15 +887,16 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     }
 
     setForm((prev) => {
-      const next = {
-        ...prev,
-        total_length_mm: String(bottomTotal || ""),
-        total_depth_mm: String(maxDepth || ""),
-        total_height_mm: String(totalHeight || ""),
-        countertop_length_mm: String(bottomTotal || ""),
-        countertop_depth_mm: String(bottomMaxDepth || maxDepth || ""),
+      const characteristics = { ...(prev.characteristics || {}) };
+      const patchDim = (key, val) => {
+        if (!val) return;
+        const current = parseCharacteristicField(characteristics[key]);
+        characteristics[key] = { ...current, value: String(Math.round(val)) };
       };
-      return next;
+      patchDim("width_mm", bottomTotal);
+      patchDim("depth_mm_char", maxDepth);
+      patchDim("height_mm_char", totalHeight);
+      return { ...prev, characteristics };
     });
   }, [isKitchen, referenceData.catalogItems, referenceData.modules, selectedCatalogItems, selectedModulesByType, buildSku]);
 
@@ -1012,9 +1030,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         primary_color_id: Number(form.primary_color_id) || null,
         secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
 
-        total_length_mm: Number(form.total_length_mm) || null,
-        total_depth_mm: Number(form.total_depth_mm) || null,
-        total_height_mm: Number(form.total_height_mm) || null,
+        ...resolveKitDimensions(form),
         countertop_length_mm: Number(form.countertop_length_mm) || null,
         countertop_depth_mm: Number(form.countertop_depth_mm) || null,
 
@@ -1083,9 +1099,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         primary_color_id: Number(form.primary_color_id) || null,
         secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
 
-        total_length_mm: Number(form.total_length_mm) || null,
-        total_depth_mm: Number(form.total_depth_mm) || null,
-        total_height_mm: Number(form.total_height_mm) || null,
+        ...resolveKitDimensions(form),
         countertop_length_mm: Number(form.countertop_length_mm) || null,
         countertop_depth_mm: Number(form.countertop_depth_mm) || null,
 
@@ -1200,18 +1214,19 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
   const skuPreview = useMemo(() => {
     if (String(form.sku || "").trim()) return "";
     const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
+    const dims = getCharacteristicDimensions(form.characteristics);
 
     const parts = [
       normalizeSkuPart(articleName),
-      normalizeNum(form.total_length_mm),
-      normalizeNum(form.total_depth_mm),
-      normalizeNum(form.total_height_mm),
+      normalizeNum(dims.length_mm ?? form.total_length_mm),
+      normalizeNum(dims.depth_mm ?? form.total_depth_mm),
+      normalizeNum(dims.height_mm ?? form.total_height_mm),
       normalizeSkuPart(selectedPrimaryColor?.sku || ""),
       normalizeSkuPart(selectedSecondaryColor?.sku || ""),
     ].filter(Boolean);
 
     return parts.length ? parts.join("-") : "";
-  }, [fixedValues?.category, fixedValues?.category_group, form.baseSku, form.name, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, selectedPrimaryColor?.sku, selectedSecondaryColor?.sku]);
+  }, [fixedValues?.category, fixedValues?.category_group, form.baseSku, form.characteristics, form.name, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, selectedPrimaryColor?.sku, selectedSecondaryColor?.sku]);
 
   const effectiveSku = form.sku || skuPreview;
 
@@ -1312,15 +1327,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             <FormField label="Артикул (SKU)" labelClassName="cursor-help" className="sm:col-span-2" title="SKU формируется автоматически из baseSku/названия + суммарных размеров (Д/Г/В) + выбранных цветов. Поле доступно только для просмотра.">
               <SecureInput value={effectiveSku} onChange={() => {}} disabled placeholder="Сформируется автоматически" />
             </FormField>
-
-
-            <div className="sm:col-span-2 lg:col-span-3">
-              <ProductTypeField
-                characteristics={form.characteristics}
-                onCharacteristicsChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
-                suggestions={templatesByField.product_type || []}
-              />
-            </div>
           </div>
 
           <div className="flex justify-end">
@@ -1498,28 +1504,14 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             value={form.characteristics}
             onChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
             templatesByField={templatesByField}
+            catalogSections={catalogSections}
+            fieldLabels={fieldLabels}
             colors={referenceData.colors}
             primaryColorId={form.primary_color_id}
             secondaryColorId={form.secondary_color_id}
             onPrimaryColorChange={(id) => setForm((p) => ({ ...p, primary_color_id: id }))}
             onSecondaryColorChange={(id) => setForm((p) => ({ ...p, secondary_color_id: id }))}
             colorPickerRef={colorPickerRef}
-          />
-          <ProductParametersBlock
-            productParameterItems={productParameterItems}
-            productParameterCategoryItems={productParameterCategoryItems}
-            referenceData={referenceData}
-            selectedParameters={selectedParameters}
-            selectedParameterCategories={selectedParameterCategories}
-            parameterTemplatesById={parameterTemplatesById}
-            ensureParameterTemplatesLoaded={ensureParameterTemplatesLoaded}
-            addParameter={addParameter}
-            updateParameterValue={updateParameterValue}
-            updateParameterQty={updateParameterQty}
-            removeParameter={removeParameter}
-            addParameterCategory={addParameterCategory}
-            removeParameterCategory={removeParameterCategory}
-            applyTemplateToParameter={applyTemplateToParameter}
           />
           <div className="flex justify-between pt-4 border-t border-night-200">
             <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
@@ -1650,24 +1642,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
               )}
             </div>
           )}
-
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-            <FormField label="Длина (мм)">
-              <SecureInput value={form.total_length_mm} onChange={(v) => setForm((p) => ({ ...p, total_length_mm: v }))} />
-            </FormField>
-            <FormField label="Глубина (мм)">
-              <SecureInput value={form.total_depth_mm} onChange={(v) => setForm((p) => ({ ...p, total_depth_mm: v }))} />
-            </FormField>
-            <FormField label="Высота (мм)">
-              <SecureInput value={form.total_height_mm} onChange={(v) => setForm((p) => ({ ...p, total_height_mm: v }))} />
-            </FormField>
-            <FormField label="Столешница (длина, мм)">
-              <SecureInput value={form.countertop_length_mm} onChange={(v) => setForm((p) => ({ ...p, countertop_length_mm: v }))} />
-            </FormField>
-            <FormField label="Столешница (глубина, мм)">
-              <SecureInput value={form.countertop_depth_mm} onChange={(v) => setForm((p) => ({ ...p, countertop_depth_mm: v }))} />
-            </FormField>
-          </div>
 
           <div className="flex justify-between">
             <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">

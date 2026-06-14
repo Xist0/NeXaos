@@ -7,7 +7,13 @@ import { FaArrowLeft, FaPlus } from "react-icons/fa";
 import { LuCopy, LuPencil, LuTrash2 } from "react-icons/lu";
 import { getImageUrl } from "../../../../utils/image";
 
-const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) => {
+const ModulesAdmin = ({
+  title = "Модули",
+  fixedModuleCategoryId = null,
+  fixedDescriptionId = null,
+  onBack = null,
+  onModulesChanged = null,
+}) => {
   const { get, del } = useApi();
   const logger = useLogger();
   const [mode, setMode] = useState("list");
@@ -59,6 +65,7 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
       await delRef.current(`/modules/${id}`);
       hasLoadedRef.current = false;
       await loadModules({ force: true });
+      await onModulesChanged?.();
     } catch (e) {
       loggerRef.current?.error("Не удалось удалить модуль", e);
       hasLoadedRef.current = false;
@@ -77,9 +84,15 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
   };
 
   const filteredItems = useMemo(() => {
-    if (!fixedModuleCategoryId) return items;
-    return items.filter((m) => Number(m?.module_category_id) === Number(fixedModuleCategoryId));
-  }, [items, fixedModuleCategoryId]);
+    let list = items;
+    if (fixedModuleCategoryId) {
+      list = list.filter((m) => Number(m?.module_category_id) === Number(fixedModuleCategoryId));
+    }
+    if (fixedDescriptionId) {
+      list = list.filter((m) => Number(m?.description_id) === Number(fixedDescriptionId));
+    }
+    return list;
+  }, [items, fixedModuleCategoryId, fixedDescriptionId]);
 
   if (mode === "create") {
     return (
@@ -95,10 +108,12 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
         </div>
         <ModuleCreator
           fixedModuleCategoryId={fixedModuleCategoryId}
+          fixedDescriptionId={fixedDescriptionId}
           onDone={async () => {
             setMode("list");
             hasLoadedRef.current = false;
             await loadModules({ force: true });
+            await onModulesChanged?.();
           }}
         />
       </div>
@@ -128,12 +143,14 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
         <ModuleCreator
           duplicateFromId={duplicateFromId}
           fixedModuleCategoryId={fixedModuleCategoryId}
+          fixedDescriptionId={fixedDescriptionId}
           submitLabel="Сохранить новый товар"
           onDone={async () => {
             setDuplicateFromId(null);
             setMode("list");
             hasLoadedRef.current = false;
             await loadModules({ force: true });
+            await onModulesChanged?.();
           }}
         />
       </div>
@@ -163,11 +180,13 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
         <ModuleCreator
           moduleId={editingId}
           fixedModuleCategoryId={fixedModuleCategoryId}
+          fixedDescriptionId={fixedDescriptionId}
           onDone={async () => {
             setEditingId(null);
             setMode("list");
             hasLoadedRef.current = false;
             await loadModules({ force: true });
+            await onModulesChanged?.();
           }}
         />
       </div>
@@ -178,6 +197,11 @@ const ModulesAdmin = ({ title = "Модули", fixedModuleCategoryId = null }) 
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
+          {onBack ? (
+            <SecureButton type="button" variant="ghost" onClick={onBack} className="px-0 py-1 text-sm text-night-500 hover:text-night-900 flex items-center gap-2 mb-1">
+              <FaArrowLeft /> Назад к подтипам
+            </SecureButton>
+          ) : null}
           <h2 className="text-xl font-semibold text-night-900">{title}</h2>
           <p className="text-sm text-night-500">Список созданных модулей. Здесь можно редактировать и удалять.</p>
         </div>

@@ -2,69 +2,97 @@
 export const PRODUCT_CHARACTERISTIC_FIELDS = {
   product_type: { label: "Тип изделия" },
   material_corpus: { label: "Материал корпуса" },
-  corpus_color: { label: "Цвет корпуса" },
   material_facade: { label: "Материал фасада" },
-  facade_color: { label: "Цвет фасада" },
-  facade_thickness_mm: { label: "Толщина фасада" },
   back_panel: { label: "Задняя стенка" },
-  glass_insert_color: { label: "Цвет стеклянной вставки" },
+  facade_thickness_mm: { label: "Толщина фасада" },
+  film: { label: "Пленка" },
   milling: { label: "Фрезеровка" },
+  showcase_back_panel_color: { label: "Цвет задней стенки витрины", colorRole: "all" },
+  corpus_color: { label: "Цвет корпуса", colorRole: "corpus" },
+  facade_color: { label: "Цвет фасада", colorRole: "facade" },
+  glass_insert_color: { label: "Цвет стеклянной вставки", colorRole: "all" },
   module_purpose: { label: "Назначение модуля" },
-  tech_niche: { label: "Ниша для техники" },
-  front_count: { label: "Кол-во фасадов" },
-  opening_type: { label: "Тип открывания" },
-  opening_method: { label: "Способ открывания" },
+  front_count: { label: "Кол-во распашных фасадов" },
   lift_mechanism_count: { label: "Кол-во подъёмных механизмов" },
-  lift_mechanism: { label: "Подъёмный механизм" },
   drawer_count: { label: "Кол-во ящиков (всего)" },
-  drawers_type: { label: "Тип ящиков" },
-  drawers_detail: { label: "Вид и кол-во ящиков" },
   hinges_count: { label: "Кол-во петель (всего)" },
-  hinges_type: { label: "Тип петель" },
   shelf_count: { label: "Кол-во полок" },
-  shelves_type: { label: "Тип полок" },
   hangers_count: { label: "Кол-во навесов" },
-  hangers_type: { label: "Тип навесов" },
   supports_count: { label: "Кол-во опор" },
+  tech_niche: { label: "Ниша для техники" },
+  opening_type: { label: "Тип открывания" },
+  lift_mechanism: { label: "Подъёмный механизм" },
+  drawers_type: { label: "Тип ящиков" },
+  hinges_type: { label: "Тип петель" },
+  shelves_type: { label: "Тип полок" },
+  hangers_type: { label: "Тип навесов" },
   supports_type: { label: "Тип опор" },
+  opening_method: { label: "Способ открывания" },
+  drawers_detail: { label: "Вид и кол-во ящиков" },
   supports_height_mm: { label: "Высота опор, мм" },
   width_mm: { label: "Ширина, мм" },
   height_mm_char: { label: "Высота, мм" },
   depth_mm_char: { label: "Глубина, мм" },
   countertop: { label: "Столешница" },
-  countertop_thickness: { label: "Толщина" },
-  countertop_color: { label: "Цвет" },
   plinth: { label: "Цоколь" },
-  lighting: { label: "Подсветка" },
-  side_posts_facade_color: { label: "Боковые стойки в цвет фасада" },
   cutlery_tray: { label: "Лоток для столовых приборов" },
+  countertop_thickness: { label: "Толщина" },
+  lighting: { label: "Подсветка" },
   dish_dryer: { label: "Сушка для посуды" },
+  countertop_color: { label: "Цвет" },
+  side_posts_facade_color: { label: "Боковые стойки в цвет фасада" },
 };
 
-/** Секции и строки полей (как в таблице ТЗ — несколько значений в одной строке). */
+export const COLOR_CHARACTERISTIC_KEYS = [
+  "showcase_back_panel_color",
+  "corpus_color",
+  "facade_color",
+  "glass_insert_color",
+];
+
+/** Полная структура для отображения на странице товара. */
 export const PRODUCT_CHARACTERISTIC_SECTIONS = [
   {
     id: "general",
     title: "Общие параметры",
     rows: [
       ["product_type"],
-      ["material_corpus", "corpus_color"],
-      ["material_facade", "facade_color", "facade_thickness_mm"],
-      ["back_panel", "glass_insert_color", "milling"],
+      ["material_corpus"],
+      ["material_facade"],
+      ["back_panel"],
+      ["facade_thickness_mm"],
+      ["film"],
+      ["milling"],
     ],
+  },
+  {
+    id: "colors",
+    title: "Цвета",
+    rows: COLOR_CHARACTERISTIC_KEYS.map((key) => [key]),
   },
   {
     id: "main",
     title: "Основные характеристики",
     rows: [
-      ["module_purpose", "tech_niche"],
-      ["front_count", "opening_type", "opening_method"],
-      ["lift_mechanism_count", "lift_mechanism"],
-      ["drawer_count", "drawers_type", "drawers_detail"],
-      ["hinges_count", "hinges_type"],
-      ["shelf_count", "shelves_type"],
-      ["hangers_count", "hangers_type"],
-      ["supports_count", "supports_type", "supports_height_mm"],
+      ["module_purpose"],
+      ["front_count"],
+      ["lift_mechanism_count"],
+      ["drawer_count"],
+      ["hinges_count"],
+      ["shelf_count"],
+      ["hangers_count"],
+      ["supports_count"],
+      ["tech_niche"],
+      ["opening_type"],
+      ["lift_mechanism"],
+      ["drawers_type"],
+      ["hinges_type"],
+      ["shelves_type"],
+      ["hangers_type"],
+      ["supports_type"],
+      ["opening_method"],
+      ["drawers_detail"],
+      ["supports_height_mm"],
     ],
   },
   {
@@ -76,34 +104,44 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
     id: "extra",
     title: "Дополнительная информация",
     rows: [
-      ["countertop", "countertop_thickness", "countertop_color"],
-      ["plinth", "lighting", "side_posts_facade_color"],
-      ["cutlery_tray", "dish_dryer"],
+      ["countertop"],
+      ["plinth"],
+      ["cutlery_tray"],
+      ["countertop_thickness"],
+      ["lighting"],
+      ["dish_dryer"],
     ],
   },
 ];
 
+/** Секции редактора на шаге «Характеристики» (без габаритов и цветов). */
+export const PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS = PRODUCT_CHARACTERISTIC_SECTIONS.filter(
+  (section) => section.id !== "dimensions" && section.id !== "colors"
+);
+
+/** Секция «Габариты» для 4-й вкладки. */
+export const PRODUCT_CHARACTERISTIC_DIMENSIONS_SECTION = PRODUCT_CHARACTERISTIC_SECTIONS.find(
+  (section) => section.id === "dimensions"
+);
+
 export const ALL_CHARACTERISTIC_KEYS = Object.keys(PRODUCT_CHARACTERISTIC_FIELDS);
 
-const STEP1_FIELD_KEYS = new Set(["product_type"]);
-const COLOR_MATERIAL_FIELD_KEYS = new Set([
-  "material_corpus",
-  "corpus_color",
-  "material_facade",
-  "facade_color",
-  "facade_thickness_mm",
-]);
+export const resolveColorId = (colors, storedValue) => {
+  const value = String(storedValue ?? "").trim();
+  if (!value || !Array.isArray(colors)) return "";
 
-/** Секции для редактора на шаге «Характеристики» (без габаритов и полей шага 1 / цветов). */
-export const PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS = PRODUCT_CHARACTERISTIC_SECTIONS.map((section) => {
-  if (section.id === "dimensions") return null;
-  if (section.id === "general") {
-    return {
-      ...section,
-      rows: section.rows
-        .map((row) => row.filter((key) => !STEP1_FIELD_KEYS.has(key) && !COLOR_MATERIAL_FIELD_KEYS.has(key)))
-        .filter((row) => row.length > 0),
-    };
-  }
-  return section;
-}).filter(Boolean);
+  const byId = colors.find((c) => String(c.id) === value);
+  if (byId) return String(byId.id);
+
+  const match = colors.find((c) => {
+    const candidates = [c.name, c.sku, c.code].map((part) => String(part ?? "").trim()).filter(Boolean);
+    return candidates.includes(value);
+  });
+
+  return match?.id != null ? String(match.id) : "";
+};
+
+export const colorDisplayValue = (color) => {
+  if (!color) return "";
+  return String(color.name || color.sku || color.code || "").trim();
+};

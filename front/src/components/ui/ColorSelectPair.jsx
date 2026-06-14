@@ -1,115 +1,74 @@
-import { useEffect, useRef, useState } from "react";
-import ColorBadge from "./ColorBadge";
-import { getThumbUrl } from "../../utils/image";
+import { forwardRef, useEffect, useRef, useState } from "react";
+import clsx from "clsx";
+import {
+  ColorGroup,
+  ColorSelectPopover,
+  ColorSelectTrigger,
+} from "./colorSelectShared";
 
-const LazyImg = ({ src, alt, className, crossOrigin = "anonymous" }) => {
-  const holderRef = useRef(null);
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    if (isVisible) return;
-    const el = holderRef.current;
-    if (!el) return;
-    if (typeof IntersectionObserver === "undefined") {
-      queueMicrotask(() => setIsVisible(true));
-      return;
-    }
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((e) => e.isIntersecting)) {
-          setIsVisible(true);
-          obs.disconnect();
-        }
-      },
-      { root: null, rootMargin: "50px", threshold: 0.01 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [isVisible]);
-
-  return (
-    <span ref={holderRef} className={className}>
-      {isVisible && (
-        <img
-          src={src}
-          alt={alt}
-          className={className}
-          crossOrigin={crossOrigin}
-          loading="lazy"
-          decoding="async"
-        />
-      )}
-    </span>
-  );
-};
-
-const ColorGroup = ({
-  title,
-  colors = [],
+const ColorPickerField = ({
+  label,
+  open,
+  setOpen,
+  closeOther,
+  colors,
   selectedId,
   onSelect,
-  selectedClassName = "border-accent bg-accent/5",
-  divider = false,
-}) => {
-  if (!colors || colors.length === 0) return null;
-  return (
-    <>
-      {divider && <div className="my-2 border-t border-night-200" />}
-      {title && (
-        <div className="text-xs font-semibold text-night-500 uppercase tracking-wide px-1">
-          {title}
-        </div>
-      )}
-      <div className="space-y-1">
-        {colors.map((c) => {
-          const isSelected = Number(selectedId) === Number(c.id);
-          return (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => onSelect(String(c.id))}
-              className={`w-full flex items-center gap-2 p-2 rounded-lg border transition ${
-                isSelected ? selectedClassName : "border-night-200 hover:border-accent"
-              }`}
-            >
-              <LazyImg
-                src={getThumbUrl(c.image_url, { w: 64, h: 64, q: 65, fit: "cover" })}
-                alt={c.name}
-                className="h-8 w-8 rounded object-cover border border-night-200 flex-shrink-0"
-              />
-              <span className="text-xs text-night-700 truncate">{c.name}</span>
-            </button>
-          );
-        })}
-      </div>
-    </>
-  );
-};
+  placeholder,
+  groups,
+  rootZ = false,
+}) => (
+  <div className="space-y-2 min-w-0">
+    <div className="text-xs font-semibold text-night-700">{label}</div>
+    <div className={clsx("relative min-w-0", (open || rootZ) && "z-50")}>
+      <ColorSelectTrigger
+        open={open}
+        placeholder={placeholder}
+        selectedColor={colors.find((c) => Number(c.id) === Number(selectedId))}
+        onClick={() => {
+          closeOther?.();
+          setOpen((v) => !v);
+        }}
+      />
+      <ColorSelectPopover open={open}>
+        {groups.map((group, index) => (
+          <ColorGroup
+            key={group.keyPrefix}
+            title={group.title}
+            colors={group.colors}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            selectedClassName={group.selectedClassName}
+            divider={index > 0}
+            keyPrefix={group.keyPrefix}
+          />
+        ))}
+      </ColorSelectPopover>
+    </div>
+  </div>
+);
 
-/**
- * Пара склеенных селектов цветов (основной + доп.) без разрыва и скруглений на стыке.
- * Используется в формах создания товаров.
- */
-const ColorSelectPair = ({
-  colors = [],
-  primaryColorId,
-  secondaryColorId,
-  onPrimaryChange,
-  onSecondaryChange,
-  label = "Выбор цвета",
-  ref: externalRef,
-}) => {
+export { ColorPickerField };
+
+const ColorSelectPair = forwardRef(function ColorSelectPair(
+  {
+    colors = [],
+    primaryColorId,
+    secondaryColorId,
+    onPrimaryChange,
+    onSecondaryChange,
+    sectionLabel = "Выбор цвета",
+  },
+  ref
+) {
   const [openPrimary, setOpenPrimary] = useState(false);
   const [openSecondary, setOpenSecondary] = useState(false);
   const internalRef = useRef(null);
-  const rootRef = externalRef || internalRef;
+  const rootRef = ref || internalRef;
 
   const facadeColors = colors.filter((c) => c?.type === "facade");
   const corpusColors = colors.filter((c) => c?.type === "corpus");
   const universalColors = colors.filter((c) => !c?.type);
-
-  const selectedPrimary = colors.find((c) => Number(c.id) === Number(primaryColorId));
-  const selectedSecondary = colors.find((c) => Number(c.id) === Number(secondaryColorId));
 
   useEffect(() => {
     if (!openPrimary && !openSecondary) return;
@@ -125,116 +84,55 @@ const ColorSelectPair = ({
   }, [openPrimary, openSecondary, rootRef]);
 
   return (
-    <div className="space-y-3" ref={rootRef}>
-      <h3 className="text-base font-bold text-night-900 border-b border-night-200 pb-2">
-        {label}
-      </h3>
+    <div className="min-w-0 lg:col-span-3" ref={rootRef}>
+      <div className="relative py-2 mb-3">
+        <div className="border-t border-night-200" />
+        <span className="absolute -top-2 left-3 px-2 text-xs text-night-500 bg-white">
+          {sectionLabel}
+        </span>
+      </div>
 
-      <div className="grid gap-0 md:grid-cols-2">
-        {/* Основной цвет */}
-        <div className="space-y-2">
-          <div className="text-xs font-semibold text-night-700">Основной цвет</div>
-          <button
-            type="button"
-            onClick={() => {
-              setOpenPrimary((v) => !v);
-              setOpenSecondary(false);
-            }}
-            className="w-full flex items-center justify-between px-3 py-2 border border-night-200 bg-white hover:border-accent transition h-10 rounded-t-xl rounded-b-none"
-          >
-            <span className="flex items-center gap-2">
-              {selectedPrimary ? (
-                <ColorBadge colorData={selectedPrimary} />
-              ) : (
-                <span className="text-xs text-night-500">Выберите цвет</span>
-              )}
-            </span>
-            <span className="text-night-400">▾</span>
-          </button>
-          {openPrimary && (
-            <div className="relative">
-              <div className="absolute z-[1000] top-full mt-1 w-full rounded-b-xl border border-t-0 border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
-                <div className="p-2 space-y-2">
-                  <ColorGroup
-                    title="Основные цвета"
-                    colors={facadeColors}
-                    selectedId={primaryColorId}
-                    onSelect={(id) => {
-                      onPrimaryChange?.(id);
-                      setOpenPrimary(false);
-                    }}
-                    selectedClassName="border-accent bg-accent/5"
-                  />
-                  <ColorGroup
-                    title="Универсальные цвета"
-                    colors={universalColors}
-                    selectedId={primaryColorId}
-                    onSelect={(id) => {
-                      onPrimaryChange?.(id);
-                      setOpenPrimary(false);
-                    }}
-                    selectedClassName="border-accent bg-accent/5"
-                    divider
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
+        <ColorPickerField
+          label="Основной цвет"
+          open={openPrimary}
+          setOpen={setOpenPrimary}
+          closeOther={() => setOpenSecondary(false)}
+          colors={colors}
+          selectedId={primaryColorId}
+          placeholder="Выберите цвет"
+          onSelect={(id) => {
+            onPrimaryChange?.(id);
+            setOpenPrimary(false);
+          }}
+          groups={[
+            { title: "Основные цвета", colors: facadeColors, selectedClassName: "border-accent bg-accent/5", keyPrefix: "primary-facade" },
+            { title: "Универсальные цвета", colors: universalColors, selectedClassName: "border-accent bg-accent/5", keyPrefix: "primary-universal" },
+          ]}
+          rootZ={openPrimary}
+        />
 
-        {/* Доп. цвет — склеен с основным */}
-        <div className="space-y-2 md:border-l-0">
-          <div className="text-xs font-semibold text-night-700">Доп. цвет</div>
-          <button
-            type="button"
-            onClick={() => {
-              setOpenSecondary((v) => !v);
-              setOpenPrimary(false);
-            }}
-            className="w-full flex items-center justify-between px-3 py-2 border border-night-200 bg-white hover:border-accent transition h-10 rounded-t-xl rounded-b-none"
-          >
-            <span className="flex items-center gap-2">
-              {selectedSecondary ? (
-                <ColorBadge colorData={selectedSecondary} />
-              ) : (
-                <span className="text-xs text-night-500">Выберите цвет</span>
-              )}
-            </span>
-            <span className="text-night-400">▾</span>
-          </button>
-          {openSecondary && (
-            <div className="relative">
-              <div className="absolute z-[1000] top-full mt-1 w-full rounded-b-xl border border-t-0 border-night-200 bg-white shadow-xl max-h-80 overflow-auto">
-                <div className="p-2 space-y-2">
-                  <ColorGroup
-                    title="Доп. цвета"
-                    colors={corpusColors}
-                    selectedId={secondaryColorId}
-                    onSelect={(id) => {
-                      onSecondaryChange?.(id);
-                      setOpenSecondary(false);
-                    }}
-                    selectedClassName="border-green-500 bg-green-50"
-                  />
-                  <ColorGroup
-                    title="Универсальные цвета"
-                    colors={universalColors}
-                    selectedId={secondaryColorId}
-                    onSelect={(id) => {
-                      onSecondaryChange?.(id);
-                      setOpenSecondary(false);
-                    }}
-                    selectedClassName="border-green-500 bg-green-50"
-                    divider
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <ColorPickerField
+          label="Доп. цвет (опционально)"
+          open={openSecondary}
+          setOpen={setOpenSecondary}
+          closeOther={() => setOpenPrimary(false)}
+          colors={colors}
+          selectedId={secondaryColorId}
+          placeholder="Выберите цвет"
+          onSelect={(id) => {
+            onSecondaryChange?.(id);
+            setOpenSecondary(false);
+          }}
+          groups={[
+            { title: "Доп. цвета", colors: corpusColors, selectedClassName: "border-green-500 bg-green-50", keyPrefix: "secondary-corpus" },
+            { title: "Универсальные цвета", colors: universalColors, selectedClassName: "border-green-500 bg-green-50", keyPrefix: "secondary-universal" },
+          ]}
+          rootZ={openSecondary}
+        />
       </div>
     </div>
   );
-};
+});
 
 export default ColorSelectPair;

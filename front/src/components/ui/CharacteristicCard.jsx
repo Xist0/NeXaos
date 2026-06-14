@@ -23,7 +23,7 @@ const CharacteristicCard = ({
   disabled = false,
 }) => (
   <div
-    className={`rounded-xl border p-3 space-y-2 min-w-0 ${
+    className={`rounded-xl border p-3 space-y-2 min-w-0 overflow-visible ${
       visible ? "border-night-100 bg-white" : "border-night-100/60 bg-night-50/60"
     }`}
   >
@@ -32,12 +32,16 @@ const CharacteristicCard = ({
       <button
         type="button"
         onClick={() => onVisibilityChange?.(!visible)}
-        className="relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent bg-accent"
+        className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent ${
+          visible ? "bg-accent" : "bg-night-300"
+        }`}
         aria-pressed={visible}
         title={visible ? "Скрыть характеристику" : "Показать характеристику"}
       >
         <span
-          className="inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform translate-x-4"
+          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+            visible ? "translate-x-4" : "translate-x-0.5"
+          }`}
         />
       </button>
     </div>

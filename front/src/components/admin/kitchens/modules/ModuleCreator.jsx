@@ -8,13 +8,11 @@ import {
   FaImage,
   FaCamera,
   FaCog,
-  FaRulerCombined,
   FaDollarSign,
   FaClipboardList,
 } from "react-icons/fa";
 import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
-import ProductParametersBlock from "../../ProductParametersBlock";
-import useCharacteristicValueTemplates from "../../../../hooks/useCharacteristicValueTemplates";
+import useCatalogParameters from "../../../../hooks/useCatalogParameters";
 import {
   characteristicsFromApi,
   createEmptyCharacteristicsForm,
@@ -96,7 +94,14 @@ const toOptionalString = (value) => {
   return str ? str : undefined;
 };
 
-const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedModuleCategoryId = null, onDone }) => {
+const ModuleCreator = ({
+  moduleId: initialModuleId = null,
+  duplicateFromId = null,
+  submitLabel = "Сохранить",
+  fixedModuleCategoryId = null,
+  fixedDescriptionId = null,
+  onDone,
+}) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
   const getRef = useRef(get);
@@ -197,12 +202,12 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
       return {
         ...prev,
         module_category_id: next,
-        baseSku: "",
-        description_id: null,
-        sku: "",
+        baseSku: fixedDescriptionId ? prev.baseSku : "",
+        description_id: fixedDescriptionId ? prev.description_id : null,
+        sku: fixedDescriptionId ? prev.sku : "",
       };
     });
-  }, [fixedModuleCategoryId]);
+  }, [fixedModuleCategoryId, fixedDescriptionId]);
 
   useEffect(() => {
     const onPointerDown = (e) => {
@@ -373,9 +378,9 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
         case 1:
           return !!form.baseSku && !!form.description_id && !!form.module_category_id;
         case 2:
-          return !!form.name && Number(form.length_mm) > 0 && !!form.module_category_id;
+          return !!form.name?.trim() && !!form.module_category_id;
         case 3:
-          return !!form.facade_color;
+          return true;
         case 4:
           return true;
         case 5:
@@ -514,7 +519,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
       try {
         const [descriptionsRes, allColorsRes, moduleCategoriesRes, collectionsRes, productParametersRes, productParameterCategoriesRes] = await Promise.all([
           getRef.current("/module-descriptions", { limit: 200 }),
-          getRef.current("/colors", { limit: 500, is_active: true }),
+          getRef.current("/colors", { limit: 500, isActive: true }),
           getRef.current("/module-categories", { limit: 200 }),
           getRef.current("/collections", { limit: 500, isActive: true }),
           getRef.current("/product-parameters", { limit: 500 }),
@@ -561,7 +566,15 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { templatesByField } = useCharacteristicValueTemplates(get);
+  const { sections: catalogSections, templatesByField, fieldLabels, allFieldKeys } = useCatalogParameters(get);
+
+  useEffect(() => {
+    if (!allFieldKeys?.length) return;
+    setForm((prev) => ({
+      ...prev,
+      characteristics: characteristicsFromApi(prev.characteristics, allFieldKeys),
+    }));
+  }, [allFieldKeys]);
 
   const moduleColors = useMemo(
     () => [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])],
@@ -571,7 +584,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
   const steps = useMemo(
     () => [
       { number: 1, title: "Тип", icon: FaCog },
-      { number: 2, title: "Размеры", icon: FaRulerCombined },
+      { number: 2, title: "Основное", icon: FaClipboardList },
       { number: 3, title: "Характеристики", icon: FaClipboardList },
       { number: 4, title: "Фото", icon: FaCamera },
       { number: 5, title: "Цена", icon: FaDollarSign },
@@ -626,6 +639,28 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
     parts.push(skuNonceRef.current);
     return parts.filter(Boolean).join("-");
   }, []);
+
+  useEffect(() => {
+    if (!fixedDescriptionId || !referenceData.isLoaded) return;
+    const baseSku = referenceData.baseSkus.find((d) => Number(d.id) === Number(fixedDescriptionId));
+    if (!baseSku) return;
+
+    setForm((prev) => {
+      if (Number(prev.description_id) === Number(baseSku.id) && prev.baseSku === baseSku.code) return prev;
+      const initialSku = buildSku({ baseSku: baseSku.code, length_mm: prev.length_mm || 800 });
+      return {
+        ...prev,
+        baseSku: baseSku.code,
+        description_id: baseSku.id,
+        module_category_id: String(fixedModuleCategoryId || baseSku.module_category_id || prev.module_category_id || ""),
+        sku: prev.sku || initialSku,
+        name: prev.name || `${baseSku.name} ${prev.length_mm || 800}мм`,
+      };
+    });
+    if (fixedModuleCategoryId && fixedDescriptionId && !initialModuleId && !duplicateFromId) {
+      setStep(2);
+    }
+  }, [fixedDescriptionId, fixedModuleCategoryId, referenceData.isLoaded, referenceData.baseSkus, initialModuleId, duplicateFromId, buildSku]);
 
   const handleTypeSelect = (baseSku) => {
     const initialSku = buildSku({ baseSku: baseSku.code, length_mm: 800 });
@@ -1040,66 +1075,29 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
           </div>
         )}
 
-        {/* Step 2 */}
+        {/* Step 2 — Основное */}
         {step === 2 && (
-          <div className="space-y-8">
-
-            <div className="bg-gradient-to-r from-night-50 to-accent/5 p-8 rounded-3xl border mb-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-end">
-                <div>
-                  <label className="block text-sm font-semibold text-night-700 mb-3">Название</label>
-                  <SecureInput
-                    value={form.name || ""}
-                    onChange={(v) => setForm((prev) => ({ ...prev, name: v }))}
-                    placeholder="B100 800мм"
-                    className="text-xl"
-                  />
-                  <label className="block text-sm font-semibold text-night-700 mb-3 mt-6">baseSku (для артикула)</label>
-                  <SecureInput value={form.baseSku || ""} onChange={() => {}} disabled placeholder="Выбран на предыдущем шаге" />
-
-                  <label
-                    className="block text-sm font-semibold text-night-700 mb-3 mt-6"
-                    title="SKU формируется автоматически из baseSku + длины + выбранного цвета фасада + случайного суффикса. Поле доступно только для просмотра."
-                  >
-                    SKU
-                  </label>
-                  <SecureInput value={form.sku || ""} onChange={() => {}} disabled />
-                </div>
-              </div>
-
-              <div className="mt-8">
-                <label className="block text-sm font-semibold text-night-700 mb-3">
-                  Категория модуля <span className="text-accent">*</span>
-                </label>
-                <PopoverSelect
-                  items={moduleCategoryItems}
-                  value={form.module_category_id ?? ""}
-                  disabled={Boolean(fixedModuleCategoryId)}
-                  placeholder="Выберите категорию…"
-                  searchable
-                  getKey={(c) => String(c.id)}
-                  getLabel={(c) => `${c.name}${c.sku_prefix ? ` (${String(c.sku_prefix).toUpperCase()})` : ""}`}
-                  onChange={(next) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      module_category_id: String(next || ""),
-                      baseSku: "",
-                      description_id: null,
-                      sku: "",
-                      name: "",
-                    }));
-                    setStep(1);
-                  }}
-                  buttonClassName="h-14 px-4 border-2 focus:ring-0"
-                  popoverClassName="max-w-xl"
-                  maxHeightClassName="max-h-80"
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
+              <div>
+                <label className="block text-sm font-semibold text-night-700 mb-2">Название</label>
+                <SecureInput
+                  value={form.name || ""}
+                  onChange={(v) => setForm((prev) => ({ ...prev, name: v }))}
+                  placeholder="B100 800мм"
                 />
               </div>
-
-              <div className="mt-6">
-                <label className="block text-sm font-semibold text-night-700 mb-3">Коллекция</label>
+              <div>
+                <label className="block text-sm font-semibold text-night-700 mb-2">baseSKU</label>
+                <SecureInput value={form.baseSku || ""} onChange={() => {}} disabled placeholder="Выбран на шаге «Тип»" />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-night-700 mb-2">SKU</label>
+                <SecureInput value={form.sku || ""} onChange={() => {}} disabled />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-night-700 mb-2">Коллекция</label>
                 <PopoverSelect
-                  size="lg"
                   items={collectionItems}
                   value={form.collection_id ?? ""}
                   placeholder="Не выбрана"
@@ -1109,60 +1107,12 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
                   getKey={(c) => String(c.id)}
                   getLabel={(c) => String(c?.name || "")}
                   onChange={(next) => setForm((prev) => ({ ...prev, collection_id: String(next || "") }))}
-                  buttonClassName="h-14 px-4 border-2 focus:ring-0"
+                  buttonClassName="h-11 px-4"
                   popoverClassName="max-w-xl"
                   maxHeightClassName="max-h-80"
                 />
               </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div>
-                <label className="block text-sm font-semibold text-night-700">
-                  Длина <span className="text-accent">*</span>
-                </label>
-                <SecureInput
-                  type="number"
-                  value={form.length_mm || ""}
-                  onChange={(v) => handleDimensionChange(v, "length_mm")}
-                  min={200}
-                  max={4000}
-                  placeholder="800"
-                  className="text-2xl font-mono text-right"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-night-700">Глубина</label>
-                <SecureInput
-                  type="number"
-                  value={form.depth_mm || ""}
-                  onChange={(v) => handleDimensionChange(v, "depth_mm")}
-                  min={200}
-                  max={1000}
-                  placeholder="580"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-night-700">Высота</label>
-                <SecureInput
-                  type="number"
-                  value={form.height_mm || ""}
-                  onChange={(v) => handleDimensionChange(v, "height_mm")}
-                  min={200}
-                  max={3000}
-                  placeholder="820"
-                />
-              </div>
-            </div>
-
-            <label className="block text-sm font-semibold text-night-700 mb-3">Краткое описание</label>
-            <SecureInput
-              as="textarea"
-              value={form.short_desc || ""}
-              onChange={(v) => setForm((prev) => ({ ...prev, short_desc: v }))}
-              rows={4}
-            />
-
 
             <div className="flex justify-between pt-8 border-t">
               <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-4 py-2 flex items-center gap-2">
@@ -1181,6 +1131,8 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
               value={form.characteristics}
               onChange={(next) => setForm((prev) => ({ ...prev, characteristics: next }))}
               templatesByField={templatesByField}
+              catalogSections={catalogSections}
+              fieldLabels={fieldLabels}
               colors={moduleColors}
               primaryColorId={form.primary_color_id}
               secondaryColorId={form.secondary_color_id}
@@ -1194,27 +1146,11 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
               }}
               colorPickerRef={colorPickerRef}
             />
-            <ProductParametersBlock
-              productParameterItems={productParameterItems}
-              productParameterCategoryItems={productParameterCategoryItems}
-              referenceData={referenceData}
-              selectedParameters={selectedParameters}
-              selectedParameterCategories={selectedParameterCategories}
-              parameterTemplatesById={parameterTemplatesById}
-              ensureParameterTemplatesLoaded={ensureParameterTemplatesLoaded}
-              addParameter={addParameter}
-              updateParameterValue={updateParameterValue}
-              updateParameterQty={updateParameterQty}
-              removeParameter={removeParameter}
-              addParameterCategory={addParameterCategory}
-              removeParameterCategory={removeParameterCategory}
-              applyTemplateToParameter={applyTemplateToParameter}
-            />
             <div className="flex justify-between pt-4 border-t">
               <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
                 <FaArrowLeft /> Назад
               </SecureButton>
-              <SecureButton type="button" onClick={() => setStep(4)} className="px-4 py-2">
+              <SecureButton type="button" onClick={goToPhotos} className="px-4 py-2" disabled={loading}>
                 Далее
               </SecureButton>
             </div>
@@ -1223,7 +1159,6 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
 
         {step === 4 && (
           <div className="space-y-8">
-
             <div className="text-center mb-10">
               <h3 className="text-2xl font-bold text-night-900 mb-2">Фото и превью</h3>
               <div className="text-night-600">
@@ -1257,7 +1192,7 @@ const ModuleCreator = ({ moduleId: initialModuleId = null, duplicateFromId = nul
             )}
 
             <div className="flex justify-between pt-8 border-t">
-              <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 flex items-center gap-2">
+              <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">
                 <FaArrowLeft /> Назад
               </SecureButton>
               <SecureButton type="button" onClick={goToPrice} className="px-4 py-2" disabled={!moduleId || loading}>

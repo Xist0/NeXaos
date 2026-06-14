@@ -3,10 +3,8 @@ import { useLocation } from "react-router-dom";
 import SecureButton from "../components/ui/SecureButton";
 import OrdersTable from "../components/admin/OrdersTable";
 import EntityManager from "../components/admin/EntityManager";
-import ModulesAdmin from "../components/admin/kitchens/modules/ModulesAdmin";
+import ModulesHierarchyAdmin from "../components/admin/kitchens/modules/ModulesHierarchyAdmin";
 import KitSolutionsAdmin from "../components/admin/kitchens/ready-solutions/KitSolutionsAdmin";
-import ModuleDescriptionsAdmin from "../components/admin/kitchens/modules/ModuleDescriptionsAdmin";
-import CharacteristicValueTemplatesAdmin from "../components/admin/CharacteristicValueTemplatesAdmin";
 import CatalogItemsAdmin from "../components/admin/kitchens/catalog/CatalogItemsAdmin";
 import { FaShoppingCart, FaBox, FaBook, FaCog, FaEdit, FaTrash, FaPlus, FaChevronDown, FaChevronRight, FaUser } from "react-icons/fa";
 import useAuth from "../hooks/useAuth";
@@ -14,6 +12,11 @@ import { ROLES } from "../utils/constants";
 import StaffAuditLogs from "../components/admin/StaffAuditLogs";
 import StaffUsersAdmin from "../components/admin/StaffUsersAdmin";
 import SiteVisualAdmin from "../components/admin/SiteVisualAdmin";
+import SheetMaterialsAdmin from "../components/admin/SheetMaterialsAdmin";
+import LinearMaterialsAdmin from "../components/admin/LinearMaterialsAdmin";
+import CountertopsAdmin from "../components/admin/CountertopsAdmin";
+import HardwareAdmin from "../components/admin/HardwareAdmin";
+import CatalogParametersHierarchyAdmin from "../components/admin/CatalogParametersHierarchyAdmin";
 
 // Структура разделов админ панели
 const adminSections = [
@@ -30,10 +33,10 @@ const adminSections = [
     label: "Материал",
     icon: FaBox,
     items: [
-      { id: "sheetMaterials", label: "Листовой материал", endpoint: "/sheet-materials" },
-      { id: "materialClasses", label: "Классы материалов", endpoint: "/material-classes" },
-      { id: "materials", label: "Материалы", endpoint: "/materials" },
-      { id: "linearMaterials", label: "Погонный материал", endpoint: "/linear-materials" },
+      { id: "sheetMaterialsAdmin", label: "Листовой материал", component: "sheetMaterialsAdmin" },
+      { id: "linearMaterialsAdmin", label: "Погонный материал", component: "linearMaterialsAdmin" },
+      { id: "countertopsAdmin", label: "Столешницы", component: "countertopsAdmin" },
+      { id: "hardwareAdmin", label: "Фурнитура", component: "hardwareAdmin" },
     ],
   },
   {
@@ -43,15 +46,7 @@ const adminSections = [
     items: [
       // ——— Кухня (активно) ———
       { id: "kitSolutions", label: "Готовые решения", endpoint: "/kit-solutions", special: "kitSolutionCreator" },
-      { id: "modules", label: "Модули", endpoint: "/modules", special: "moduleCreator" },
-      { id: "kitchenModulesBottom", label: "Кухня — Модули — Нижние", component: "kitchenModulesBottom" },
-      { id: "kitchenModulesTop", label: "Кухня — Модули — Верхние", component: "kitchenModulesTop" },
-      { id: "kitchenModulesMezzanine", label: "Кухня — Модули — Антресольные", component: "kitchenModulesMezzanine" },
-      { id: "kitchenModulesTall", label: "Кухня — Модули — Пеналы", component: "kitchenModulesTall" },
-      { id: "catalogKitchenCountertops", label: "Кухня — Столешницы", endpoint: "/catalog-items" },
-      { id: "catalogKitchenFillers", label: "Кухня — Доборные элементы", endpoint: "/catalog-items" },
-      { id: "catalogKitchenAccessories", label: "Кухня — Аксессуары", endpoint: "/catalog-items" },
-
+      { id: "modules", label: "Модули", special: "modulesHierarchy" },
       // ——— Не кухня (скрыто, на будущее) ———
       // { id: "catalogHallwayReady", label: "Прихожая — Готовые прихожие", endpoint: "/catalog-items" },
       // { id: "catalogHallwayWardrobes", label: "Прихожая — Шкафы", endpoint: "/catalog-items" },
@@ -99,16 +94,11 @@ const adminSections = [
     label: "Прочее",
     icon: FaCog,
     items: [
-      { id: "materialPrices", label: "Цена материалов", endpoint: "/material-prices" },
       { id: "collections", label: "Коллекции", endpoint: "/collections" },
-      { id: "productParameters", label: "Параметры изделий", endpoint: "/product-parameters" },
-      { id: "productParameterCategories", label: "Категории параметров изделий", endpoint: "/product-parameter-categories" },
-      { id: "moduleCategories", label: "Типы модулей", endpoint: "/module-categories" },
-      { id: "moduleDescriptions", label: "Подтипы модулей", endpoint: "/module-descriptions", special: "moduleDescriptionCreator" },
+      { id: "catalogParameters", label: "Параметры каталога", component: "catalogParameters" },
       { id: "kitchenTypes", label: "Тип кухни", endpoint: "/kitchen-types" },
       { id: "sizeTemplates", label: "Шаблоны размеров", endpoint: "/size-templates" },
       { id: "colors", label: "Цвета", endpoint: "/colors" },
-      { id: "characteristicValueTemplates", label: "Значения характеристик", component: "characteristicValueTemplates" },
     ],
   },
   {
@@ -914,7 +904,6 @@ const AdminPage = () => {
     // hallway: false,
     // livingroom: false,
     kitchen: true,
-    kitchenModules: false,
     // bedroom: false,
   });
 
@@ -949,21 +938,9 @@ const AdminPage = () => {
 
   const toggleCatalogGroup = (groupId) => {
     setExpandedCatalogGroups((prev) => {
-      // Вложенная группа кухни ("Модули") не должна закрывать саму "Кухню"
-      if (groupId === "kitchenModules") {
-        return {
-          ...prev,
-          kitchenModules: !prev.kitchenModules,
-        };
-      }
-
       const nextValue = !prev[groupId];
       const next = Object.fromEntries(Object.keys(prev).map((k) => [k, false]));
       next[groupId] = nextValue;
-      // если закрыли кухню — закрываем и вложенные "Модули"
-      if (groupId !== "kitchen") {
-        next.kitchenModules = false;
-      }
       return next;
     });
   };
@@ -984,16 +961,9 @@ const AdminPage = () => {
   const currentItem = currentSection?.items.find((item) => item.id === activeTab) || currentSection?.items?.[0];
   const entityConfig = entityConfigs[currentItem?.id];
   const isCatalogItemsTab = Boolean(entityConfig?.endpoint === "/catalog-items");
-  const isModuleCreator = currentItem?.special === "moduleCreator";
+  const isModulesHierarchy = currentItem?.special === "modulesHierarchy";
   const isKitSolutionCreator = currentItem?.special === "kitSolutionCreator";
-  const isModuleDescriptionCreator = currentItem?.special === "moduleDescriptionCreator";
-  const isCharacteristicValueTemplates = currentItem?.component === "characteristicValueTemplates";
-  const isKitchenModuleTab = [
-    "kitchenModulesBottom",
-    "kitchenModulesTop",
-    "kitchenModulesMezzanine",
-    "kitchenModulesTall",
-  ].includes(activeTab);
+  const isCatalogParameters = currentItem?.component === "catalogParameters";
 
   const allowDelete = role === ROLES.ADMIN;
 
@@ -1183,68 +1153,6 @@ const AdminPage = () => {
                                   </button>
                                 );
                               })}
-                              <button
-                                type="button"
-                                onClick={() => toggleCatalogGroup("kitchenModules")}
-                                className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
-                                  expandedCatalogGroups.kitchenModules
-                                    ? "bg-night-50 text-night-800"
-                                    : "text-night-600 hover:bg-night-50"
-                                }`}
-                              >
-                                <span className="text-left">Модули</span>
-                                {expandedCatalogGroups.kitchenModules ? (
-                                  <FaChevronDown className="text-[10px] transition-transform rotate-180" />
-                                ) : (
-                                  <FaChevronRight className="text-[10px]" />
-                                )}
-                              </button>
-                              {expandedCatalogGroups.kitchenModules && (
-                                <div className="ml-4 space-y-1">
-                                  {[
-                                    { id: "kitchenModulesBottom", label: "Нижние" },
-                                    { id: "kitchenModulesTop", label: "Верхние" },
-                                    { id: "kitchenModulesMezzanine", label: "Антресольные" },
-                                    { id: "kitchenModulesTall", label: "Пеналы" },
-                                  ].map((item) => {
-                                    const isActive = activeTab === item.id;
-                                    return (
-                                      <button
-                                        key={item.id}
-                                        onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
-                                        className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
-                                          isActive
-                                            ? "bg-accent text-white shadow-sm"
-                                            : "text-night-600 hover:bg-night-50"
-                                        }`}
-                                      >
-                                        <span className="text-left">{item.label}</span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {[
-                                { id: "catalogKitchenCountertops", label: "Столешницы" },
-                                { id: "catalogKitchenFillers", label: "Доборные элементы" },
-                                { id: "catalogKitchenAccessories", label: "Аксессуары" },
-                              ].map((item) => {
-                                const isActive = activeTab === item.id;
-                                return (
-                                  <button
-                                    key={item.id}
-                                    onClick={() => handleTabClick(item.id, { ...item, sectionId: section.id })}
-                                    className={`w-full flex items-center justify-between px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
-                                      isActive
-                                        ? "bg-accent text-white shadow-sm"
-                                        : "text-night-600 hover:bg-night-50"
-                                    }`}
-                                  >
-                                    <span className="text-left">{item.label}</span>
-                                  </button>
-                                );
-                              })}
                             </div>
                           )}
 
@@ -1325,37 +1233,24 @@ const AdminPage = () => {
           {/* Заказы */}
           {activeTab === "orders" && <OrdersTable />}
 
-          {activeTab === "kitchenModulesBottom" && (
-            <ModulesAdmin key={activeTab} title="Кухня — Модули — Нижние" fixedModuleCategoryId={1} />
-          )}
-          {activeTab === "kitchenModulesTop" && (
-            <ModulesAdmin key={activeTab} title="Кухня — Модули — Верхние" fixedModuleCategoryId={2} />
-          )}
-          {activeTab === "kitchenModulesMezzanine" && (
-            <ModulesAdmin key={activeTab} title="Кухня — Модули — Антресольные" fixedModuleCategoryId={2} />
-          )}
-          {activeTab === "kitchenModulesTall" && (
-            <ModulesAdmin key={activeTab} title="Кухня — Модули — Пеналы" fixedModuleCategoryId={3} />
-          )}
-
-          {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ МОДУЛЕЙ */}
-          {isModuleCreator && <ModulesAdmin key={activeTab} />}
+          {isModulesHierarchy && <ModulesHierarchyAdmin key={activeTab} />}
 
           {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ ГОТОВЫХ РЕШЕНИЙ */}
           {isKitSolutionCreator && <KitSolutionsAdmin key={activeTab} />}
 
-          {/* ✅ СПЕЦИАЛЬНАЯ ЭТАПНАЯ ФОРМА ДЛЯ ПОДТИПОВ МОДУЛЕЙ */}
-          {isModuleDescriptionCreator && <ModuleDescriptionsAdmin />}
-
           {/* ✅ СПЕЦИАЛЬНАЯ ФОРМА ДЛЯ ЗНАЧЕНИЙ ХАРАКТЕРИСТИК */}
-          {isCharacteristicValueTemplates && <CharacteristicValueTemplatesAdmin />}
+          {isCatalogParameters && <CatalogParametersHierarchyAdmin />}
 
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
           {currentItem?.component === "staffAuditLogs" && <StaffAuditLogs />}
           {currentItem?.component === "staffUsers" && <StaffUsersAdmin />}
+          {currentItem?.component === "sheetMaterialsAdmin" && <SheetMaterialsAdmin />}
+          {currentItem?.component === "linearMaterialsAdmin" && <LinearMaterialsAdmin />}
+          {currentItem?.component === "countertopsAdmin" && <CountertopsAdmin />}
+          {currentItem?.component === "hardwareAdmin" && <HardwareAdmin />}
           {activeTab === "siteVisual" && <SiteVisualAdmin />}
 
-          {entityConfig && !isKitchenModuleTab && !isModuleCreator && !isKitSolutionCreator && !isModuleDescriptionCreator && !isCharacteristicValueTemplates && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && activeTab !== "siteVisual" && (
+          {entityConfig && !isModulesHierarchy && !isKitSolutionCreator && !isCatalogParameters && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && currentItem?.component !== "sheetMaterialsAdmin" && currentItem?.component !== "linearMaterialsAdmin" && currentItem?.component !== "countertopsAdmin" && currentItem?.component !== "hardwareAdmin" && activeTab !== "siteVisual" && (
             isCatalogItemsTab ? (
               <CatalogItemsAdmin key={activeTab} title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
             ) : (

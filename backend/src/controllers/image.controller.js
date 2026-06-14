@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const logger = require("../utils/logger");
 const config = require("../config/env");
+const { optimizeUploadedImage } = require("../utils/image-optimize");
 
 const normalizeSkuForFolder = (sku) => {
   const transliterate = (str) => {
@@ -511,9 +512,43 @@ const uploadImage = async (req, res) => {
     throw ApiError.internal(`Не удалось сохранить файл: ${err.message}`);
   }
 
+  let savedPath = newPath;
+  let savedMimeType = req.file?.mimetype || null;
+  const isVideo = savedMimeType && String(savedMimeType).startsWith("video/");
+
+  if (!isVideo && fs.existsSync(savedPath)) {
+    try {
+      const optimized = await optimizeUploadedImage(savedPath, { mimeType: savedMimeType });
+      savedPath = optimized.path;
+      savedMimeType = optimized.mimeType || savedMimeType;
+
+      if (optimized.ext && optimized.ext !== ext) {
+        if (entityType === "modules" && moduleData) {
+          const folder = resolveExistingModuleFolder(moduleData.sku);
+          newFilename = getImageFilename(moduleData, sortOrder, optimized.ext);
+          const desiredPath = path.join(uploadDir, newFilename);
+          if (path.resolve(savedPath) !== path.resolve(desiredPath)) {
+            if (fs.existsSync(desiredPath)) fs.unlinkSync(desiredPath);
+            fs.renameSync(savedPath, desiredPath);
+            savedPath = desiredPath;
+          }
+          urlPath = `/uploads/modules/${folder}/${newFilename}`;
+        } else {
+          newFilename = path.basename(savedPath);
+          urlPath = `/uploads/${newFilename}`;
+        }
+      }
+    } catch (optimizeErr) {
+      logger.warn("Оптимизация изображения пропущена", {
+        path: savedPath,
+        error: optimizeErr.message,
+      });
+    }
+  }
+
   // Сохраняем запись в БД
-  const mimeType = req.file?.mimetype || null;
-  const mediaType = mimeType && String(mimeType).startsWith("video/") ? "video" : "image";
+  const mimeType = savedMimeType;
+  const mediaType = isVideo ? "video" : "image";
   const { rows } = await query(
     `INSERT INTO images (entity_type, entity_id, url, alt, sort_order, media_type, mime_type)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -532,8 +567,8 @@ const uploadImage = async (req, res) => {
     url: urlPath,
     sortOrder,
     isPreview: sortOrder === 0,
-    fileSize: req.file.size,
-    mimetype: req.file.mimetype,
+    fileSize: fs.existsSync(savedPath) ? fs.statSync(savedPath).size : req.file.size,
+    mimetype: mimeType,
     user: req.user?.id,
     role: req.user?.roleName,
     userName: req.user?.fullName || req.user?.email,

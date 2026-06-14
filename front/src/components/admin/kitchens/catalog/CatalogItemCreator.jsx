@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaArrowLeft, FaCamera, FaCheckCircle, FaClipboardList, FaCog, FaDollarSign, FaRulerCombined, FaSave, FaSpinner } from "react-icons/fa";
 import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
-import ProductTypeField from "../../ProductTypeField";
+import ProductDimensionsSection from "../../ProductDimensionsSection";
 import ProductParametersBlock from "../../ProductParametersBlock";
 import useCharacteristicValueTemplates from "../../../../hooks/useCharacteristicValueTemplates";
 import {
   characteristicsFromApi,
   createEmptyCharacteristicsForm,
+  getCharacteristicDimensions,
+  mergeEntityDimensionsIntoCharacteristics,
   normalizeCharacteristicsForSave,
 } from "../../../../utils/characteristics";
 import SecureButton from "../../../ui/SecureButton";
@@ -62,6 +64,15 @@ const normalizeNum = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return "";
   return String(Math.round(n));
+};
+
+const resolveFormDimensions = (form) => {
+  const fromChar = getCharacteristicDimensions(form.characteristics);
+  return {
+    length_mm: toOptionalInt(fromChar.length_mm ?? form.length_mm),
+    depth_mm: toOptionalInt(fromChar.depth_mm ?? form.depth_mm),
+    height_mm: toOptionalInt(fromChar.height_mm ?? form.height_mm),
+  };
 };
 
 const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedValues = null, title = "", onDone }) => {
@@ -291,7 +302,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       setIsLoadingReferences(true);
       try {
         if (!colorsCachePromise) {
-          colorsCachePromise = getRef.current("/colors", { limit: 500, is_active: true }).then((res) => {
+          colorsCachePromise = getRef.current("/colors", { limit: 500, isActive: true }).then((res) => {
             const data = Array.isArray(res?.data) ? res.data : [];
             colorsCache = data;
             return data;
@@ -414,9 +425,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         primary_color_id: toOptionalInt(form.primary_color_id),
         secondary_color_id: toOptionalInt(form.secondary_color_id),
 
-        length_mm: toOptionalInt(form.length_mm),
-        depth_mm: toOptionalInt(form.depth_mm),
-        height_mm: toOptionalInt(form.height_mm),
+        ...resolveFormDimensions(form),
 
         base_price: 0,
         final_price: toOptionalNumber(form.final_price) ?? 0,
@@ -452,7 +461,11 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       height_mm: data.height_mm != null ? String(data.height_mm) : "",
       preview_url: data.preview_url || null,
       final_price: data.final_price != null ? String(data.final_price) : "",
-      characteristics: characteristicsFromApi(data.characteristics),
+      characteristics: mergeEntityDimensionsIntoCharacteristics(data.characteristics, {
+        length_mm: data.length_mm,
+        depth_mm: data.depth_mm,
+        height_mm: data.height_mm,
+      }),
     }));
 
     setIsActive(!!data.is_active);
@@ -563,9 +576,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         primary_color_id: toOptionalInt(form.primary_color_id),
         secondary_color_id: toOptionalInt(form.secondary_color_id),
 
-        length_mm: toOptionalInt(form.length_mm),
-        depth_mm: toOptionalInt(form.depth_mm),
-        height_mm: toOptionalInt(form.height_mm),
+        ...resolveFormDimensions(form),
 
         base_price: 0,
         final_price: 0,
@@ -639,9 +650,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         primary_color_id: toOptionalInt(form.primary_color_id),
         secondary_color_id: toOptionalInt(form.secondary_color_id),
 
-        length_mm: toOptionalInt(form.length_mm),
-        depth_mm: toOptionalInt(form.depth_mm),
-        height_mm: toOptionalInt(form.height_mm),
+        ...resolveFormDimensions(form),
 
         base_price: 0,
         final_price: toOptionalNumber(form.final_price),
@@ -696,12 +705,13 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
   const skuPreview = useMemo(() => {
     if (String(form.sku || "").trim()) return "";
     const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
+    const dims = getCharacteristicDimensions(form.characteristics);
 
     const parts = [
       normalizeSkuPart(articleName),
-      normalizeNum(form.length_mm),
-      normalizeNum(form.depth_mm),
-      normalizeNum(form.height_mm),
+      normalizeNum(dims.length_mm ?? form.length_mm),
+      normalizeNum(dims.depth_mm ?? form.depth_mm),
+      normalizeNum(dims.height_mm ?? form.height_mm),
       normalizeSkuPart(selectedPrimaryColor?.sku || ""),
       normalizeSkuPart(selectedSecondaryColor?.sku || ""),
     ].filter(Boolean);
@@ -711,6 +721,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     fixedValues?.category,
     fixedValues?.category_group,
     form.baseSku,
+    form.characteristics,
     form.depth_mm,
     form.height_mm,
     form.length_mm,
@@ -804,14 +815,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
             <FormField label="Название">
               <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
             </FormField>
-
-            <div className="sm:col-span-2 lg:col-span-3">
-              <ProductTypeField
-                characteristics={form.characteristics}
-                onCharacteristicsChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
-                suggestions={templatesByField.product_type || []}
-              />
-            </div>
           </div>
 
           <div className="flex justify-end">
@@ -891,18 +894,12 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       )}
 
       {step === 4 && (
-        <div className="glass-card p-6 space-y-4">
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-            <FormField label="Длина (мм)">
-              <SecureInput type="number" value={form.length_mm} onChange={(v) => setForm((p) => ({ ...p, length_mm: v }))} />
-            </FormField>
-            <FormField label="Глубина (мм)">
-              <SecureInput type="number" value={form.depth_mm} onChange={(v) => setForm((p) => ({ ...p, depth_mm: v }))} />
-            </FormField>
-            <FormField label="Высота (мм)">
-              <SecureInput type="number" value={form.height_mm} onChange={(v) => setForm((p) => ({ ...p, height_mm: v }))} />
-            </FormField>
-          </div>
+        <div className="glass-card p-6 space-y-6">
+          <ProductDimensionsSection
+            value={form.characteristics}
+            onChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
+            templatesByField={templatesByField}
+          />
 
           <div className="flex justify-between">
             <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">

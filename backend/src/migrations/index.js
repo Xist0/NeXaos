@@ -35,5 +35,7 @@ module.exports = [
   require("./034_create_product_parameter_value_templates"),
   require("./035_create_site_settings"),
   require("./036_create_characteristic_value_templates"),
+  require("./037_add_category_to_materials_and_hardware"),
+  require("./038_catalog_parameter_hierarchy"),
 ];
 

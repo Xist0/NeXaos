@@ -210,6 +210,8 @@ app.use(
         res.setHeader("Content-Type", "image/gif");
       } else if (filePath.endsWith('.webp')) {
         res.setHeader("Content-Type", "image/webp");
+      } else if (filePath.endsWith('.avif')) {
+        res.setHeader("Content-Type", "image/avif");
       }
     },
   })

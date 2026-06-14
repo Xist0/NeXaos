@@ -2,6 +2,7 @@ const router = require("express").Router();
 const path = require("path");
 const fs = require("fs");
 const multer = require("multer");
+const { optimizeUploadedImage } = require("../utils/image-optimize");
 const ApiError = require("../utils/api-error");
 const asyncHandler = require("../utils/async-handler");
 const { authGuard, optionalAuth, requireAdminOrManager, requireAdmin, requireAnyRole } = require("../middleware/auth.middleware");
@@ -247,19 +248,36 @@ const handleMulterErrorUpload = (err, req, res, next) => {
   next();
 };
 
-router.post("/upload", authGuard, requireAdminOrManager, upload.single("file"), handleMulterErrorUpload, (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "Файл не получен" });
-  }
+router.post("/upload", authGuard, requireAdminOrManager, upload.single("file"), handleMulterErrorUpload, async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Файл не получен" });
+    }
 
-  const urlPath = `/uploads/${req.file.filename}`;
-  res.status(201).json({
-    url: urlPath,
-    filename: req.file.filename,
-    originalName: req.file.originalname,
-    size: req.file.size,
-    mimetype: req.file.mimetype,
-  });
+    let savedPath = req.file.path;
+    let savedMimeType = req.file.mimetype;
+    let savedSize = req.file.size;
+
+    if (!savedMimeType || !String(savedMimeType).startsWith("video/")) {
+      const optimized = await optimizeUploadedImage(savedPath, { mimeType: savedMimeType });
+      savedPath = optimized.path;
+      savedMimeType = optimized.mimeType || savedMimeType;
+      if (fs.existsSync(savedPath)) {
+        savedSize = fs.statSync(savedPath).size;
+      }
+    }
+
+    const urlPath = `/uploads/${path.basename(savedPath)}`;
+    res.status(201).json({
+      url: urlPath,
+      filename: path.basename(savedPath),
+      originalName: req.file.originalname,
+      size: savedSize,
+      mimetype: savedMimeType,
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Обработка ошибок multer для валидации файлов
