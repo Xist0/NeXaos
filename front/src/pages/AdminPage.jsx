@@ -17,6 +17,7 @@ import LinearMaterialsAdmin from "../components/admin/LinearMaterialsAdmin";
 import CountertopsAdmin from "../components/admin/CountertopsAdmin";
 import HardwareAdmin from "../components/admin/HardwareAdmin";
 import CatalogParametersHierarchyAdmin from "../components/admin/CatalogParametersHierarchyAdmin";
+import CalculationParametersAdmin from "../components/admin/CalculationParametersAdmin";
 
 // Структура разделов админ панели
 const adminSections = [
@@ -85,7 +86,7 @@ const adminSections = [
     label: "Расчеты",
     icon: FaCog,
     items: [
-      { id: "calculationParameters", label: "Параметры расчета", endpoint: "/calculation-parameters" },
+      { id: "calculationParameters", label: "Параметры расчета", component: "calculationParameters" },
       { id: "surchargeCost", label: "Надбавочная стоимость", endpoint: "/surcharge-cost" },
     ],
   },
@@ -964,6 +965,7 @@ const AdminPage = () => {
   const isModulesHierarchy = currentItem?.special === "modulesHierarchy";
   const isKitSolutionCreator = currentItem?.special === "kitSolutionCreator";
   const isCatalogParameters = currentItem?.component === "catalogParameters";
+  const isCalculationParameters = currentItem?.component === "calculationParameters";
 
   const allowDelete = role === ROLES.ADMIN;
 
@@ -1241,6 +1243,8 @@ const AdminPage = () => {
           {/* ✅ СПЕЦИАЛЬНАЯ ФОРМА ДЛЯ ЗНАЧЕНИЙ ХАРАКТЕРИСТИК */}
           {isCatalogParameters && <CatalogParametersHierarchyAdmin />}
 
+          {isCalculationParameters && <CalculationParametersAdmin />}
+
           {/* ВСЕ ОСТАЛЬНЫЕ EntityManager (кроме modules) */}
           {currentItem?.component === "staffAuditLogs" && <StaffAuditLogs />}
           {currentItem?.component === "staffUsers" && <StaffUsersAdmin />}
@@ -1250,7 +1254,7 @@ const AdminPage = () => {
           {currentItem?.component === "hardwareAdmin" && <HardwareAdmin />}
           {activeTab === "siteVisual" && <SiteVisualAdmin />}
 
-          {entityConfig && !isModulesHierarchy && !isKitSolutionCreator && !isCatalogParameters && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && currentItem?.component !== "sheetMaterialsAdmin" && currentItem?.component !== "linearMaterialsAdmin" && currentItem?.component !== "countertopsAdmin" && currentItem?.component !== "hardwareAdmin" && activeTab !== "siteVisual" && (
+          {entityConfig && !isModulesHierarchy && !isKitSolutionCreator && !isCatalogParameters && !isCalculationParameters && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && currentItem?.component !== "sheetMaterialsAdmin" && currentItem?.component !== "linearMaterialsAdmin" && currentItem?.component !== "countertopsAdmin" && currentItem?.component !== "hardwareAdmin" && activeTab !== "siteVisual" && (
             isCatalogItemsTab ? (
               <CatalogItemsAdmin key={activeTab} title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
             ) : (

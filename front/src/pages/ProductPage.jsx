@@ -701,31 +701,11 @@ const ProductPage = () => {
             </div>
           )}
 
-          {(item.length_mm || item.depth_mm || item.height_mm || item.primary_color || item.secondary_color || item.facade_color || item.corpus_color) && (
+          {(item.length_mm || item.depth_mm || item.height_mm) && (
             <div className="glass-card p-4">
               <div className="space-y-4">
-                {(item.primary_color || item.secondary_color || item.facade_color || item.corpus_color) && (
-                  <div>
-                    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Цвета</div>
-                    <div className="space-y-2">
-                      {(item.primary_color || item.facade_color) && (
-                        <div className="grid grid-cols-[88px_1fr] items-center gap-3">
-                          <span className="text-night-500 text-sm">Основной:</span>
-                          {item.primary_color ? <ColorBadge colorData={item.primary_color} /> : <ColorBadge value={item.facade_color} />}
-                        </div>
-                      )}
-                      {(item.secondary_color || item.corpus_color) && (
-                        <div className="grid grid-cols-[88px_1fr] items-center gap-3">
-                          <span className="text-night-500 text-sm">Доп.:</span>
-                          {item.secondary_color ? <ColorBadge colorData={item.secondary_color} /> : <ColorBadge value={item.corpus_color} />}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
                 {(item.length_mm || item.depth_mm || item.height_mm) && (
-                  <div className={item.primary_color || item.secondary_color || item.facade_color || item.corpus_color ? "border-t border-night-200 pt-4" : ""}>
+                  <div>
                     <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Габариты</div>
                     <div className="grid grid-cols-3 gap-3">
                       <div>
@@ -909,22 +889,16 @@ const ProductPage = () => {
             </div>
           )}
 
-          {hasSpecCharacteristics &&
-            specCharacteristicSections.map((section) => (
-              <div key={section.id} className="space-y-3">
-                <h4 className="text-sm font-bold text-night-800 uppercase tracking-wide border-b border-night-100 pb-2">
-                  {section.title}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
-                  {section.rows.map((row) => (
-                    <div key={row.key} className="min-w-0">
-                      <div className="text-night-500 text-xs mb-0.5">{row.label}</div>
-                      <div className="font-semibold text-night-900 break-words">{row.value}</div>
-                    </div>
-                  ))}
+          {hasSpecCharacteristics && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
+              {specCharacteristicSections.flatMap((section) => section.rows).map((row) => (
+                <div key={row.key} className="min-w-0">
+                  <div className="text-night-500 text-xs mb-0.5">{row.label}</div>
+                  <div className="font-semibold text-night-900 break-words">{row.value}</div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+          )}
         </div>
       )}
 

@@ -400,6 +400,13 @@ router.get("/public/works", optionalAuth, asyncHandler(async (req, res) => {
 // POST /api/modules/calculate-countertop - рассчитать длину столешницы
 router.post("/modules/calculate-countertop", optionalAuth, asyncHandler(moduleController.calculateCountertop));
 
+// POST /api/modules/calculate-price - рассчитать стоимость модуля
+router.post("/modules/calculate-price", optionalAuth, asyncHandler(moduleController.calculatePrice));
+
+// POST /api/admin/seed-catalog-parameters - инициализировать структуру параметров каталога
+const { seedCatalogParametersHandler } = require("../services/catalog-parameters-seed.service");
+router.post("/admin/seed-catalog-parameters", authGuard, requireAdmin, asyncHandler(seedCatalogParametersHandler));
+
 // POST /api/modules/check-compatibility - проверить совместимость модулей
 router.post("/modules/check-compatibility", optionalAuth, asyncHandler(moduleController.checkCompatibility));
 

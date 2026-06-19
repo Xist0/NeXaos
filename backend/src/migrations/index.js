@@ -37,5 +37,6 @@ module.exports = [
   require("./036_create_characteristic_value_templates"),
   require("./037_add_category_to_materials_and_hardware"),
   require("./038_catalog_parameter_hierarchy"),
+  require("./039_seed_catalog_parameters"),
 ];
 

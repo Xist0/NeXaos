@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FaArrowLeft, FaCamera, FaCheckCircle, FaClipboardList, FaCog, FaDollarSign, FaRulerCombined, FaSave, FaSpinner } from "react-icons/fa";
-import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
-import ProductDimensionsSection from "../../ProductDimensionsSection";
-import ProductParametersBlock from "../../ProductParametersBlock";
-import useCharacteristicValueTemplates from "../../../../hooks/useCharacteristicValueTemplates";
+import { FaArrowLeft, FaCamera, FaCheckCircle, FaClipboardList, FaCog, FaDollarSign, FaSave, FaSpinner } from "react-icons/fa";
+import CatalogItemCharacteristicsForm from "../../CatalogItemCharacteristicsForm";
+import useCatalogParameters from "../../../../hooks/useCatalogParameters";
 import {
   characteristicsFromApi,
   createEmptyCharacteristicsForm,
@@ -13,11 +11,9 @@ import {
 } from "../../../../utils/characteristics";
 import SecureButton from "../../../ui/SecureButton";
 import SecureInput from "../../../ui/SecureInput";
-import SmallButton from "../../ui/SmallButton";
 import useApi from "../../../../hooks/useApi";
 import useLogger from "../../../../hooks/useLogger";
 import ImageManager from "../../ImageManager";
-import { formatCurrency } from "../../../../utils/format";
 import FormField from "../../../ui/FormField";
 import FormSelect from "../../../ui/FormSelect";
 
@@ -25,10 +21,6 @@ let colorsCache = null;
 let colorsCachePromise = null;
 let collectionsCache = null;
 let collectionsCachePromise = null;
-let productParametersCache = null;
-let productParametersCachePromise = null;
-let productParameterCategoriesCache = null;
-let productParameterCategoriesCachePromise = null;
 
 const toOptionalInt = (value) => {
   if (value === null || value === undefined) return undefined;
@@ -78,6 +70,7 @@ const resolveFormDimensions = (form) => {
 const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedValues = null, title = "", onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
+  const { templatesByField, fieldLabels, loading: catalogLoading } = useCatalogParameters(get);
 
   const getRef = useRef(get);
   const loggerRef = useRef(logger);
@@ -87,20 +80,15 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
   const [isActive, setIsActive] = useState(false);
 
-  const colorPickerRef = useRef(null);
-  const { templatesByField } = useCharacteristicValueTemplates(get);
-
-  const [itemId, setItemId] = useState(initialCatalogItemId);
-  const createLockRef = useRef(false);
-
   const [referenceData, setReferenceData] = useState({
     colors: [],
     collections: [],
-    productParameters: [],
-    productParameterCategories: [],
     isLoaded: false,
   });
   const [isLoadingReferences, setIsLoadingReferences] = useState(true);
+
+  const [itemId, setItemId] = useState(initialCatalogItemId);
+  const createLockRef = useRef(false);
 
   const [form, setForm] = useState({
     baseSku: "",
@@ -118,36 +106,13 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     characteristics: createEmptyCharacteristicsForm(),
   });
 
-  const [selectedParameters, setSelectedParameters] = useState([]);
-  const [selectedParameterCategories, setSelectedParameterCategories] = useState([]);
-
-  const [parameterTemplatesById, setParameterTemplatesById] = useState({});
-  const templatesLoadingRef = useRef(new Set());
-
-  const [templatesOverlayOpen, setTemplatesOverlayOpen] = useState(false);
-  const [allTemplatesLoading, setAllTemplatesLoading] = useState(false);
-  const [allTemplates, setAllTemplates] = useState([]);
-  const templatesPopoverRef = useRef(null);
-
-  const ensureParameterTemplatesLoaded = useCallback(
-    async (parameterId) => {
-      const id = Number(parameterId);
-      if (!Number.isFinite(id) || id <= 0) return;
-      if (parameterTemplatesById[String(id)]) return;
-      if (templatesLoadingRef.current.has(id)) return;
-      templatesLoadingRef.current.add(id);
-      try {
-        const res = await getRef.current("/product-parameter-value-templates", { limit: 200, parameterId: id });
-        const list = Array.isArray(res?.data) ? res.data : [];
-        setParameterTemplatesById((prev) => ({ ...prev, [String(id)]: list }));
-      } catch (_e) {
-        setParameterTemplatesById((prev) => ({ ...prev, [String(id)]: [] }));
-      } finally {
-        templatesLoadingRef.current.delete(id);
-      }
-    },
-    [parameterTemplatesById]
-  );
+  const handlePriceCalculated = useCallback((price) => {
+    if (!Number.isFinite(Number(price)) || Number(price) <= 0) return;
+    setForm((prev) => {
+      if (String(prev.final_price || "").trim()) return prev;
+      return { ...prev, final_price: String(Math.round(price)) };
+    });
+  }, []);
 
   const collectionItems = useMemo(() => {
     return (referenceData.collections || [])
@@ -155,146 +120,10 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
   }, [referenceData.collections]);
 
-  const productParameterItems = useMemo(() => {
-    return (referenceData.productParameters || [])
-      .slice()
-      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
-  }, [referenceData.productParameters]);
-
-  const productParameterCategoryItems = useMemo(() => {
-    return (referenceData.productParameterCategories || [])
-      .slice()
-      .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
-  }, [referenceData.productParameterCategories]);
-
-  const openTemplatesOverlay = useCallback(async () => {
-    setTemplatesOverlayOpen(true);
-    if (allTemplates.length > 0) return;
-
-    setAllTemplatesLoading(true);
-    try {
-      const res = await getRef.current("/product-parameter-value-templates", { limit: 500 });
-      const list = Array.isArray(res?.data) ? res.data : [];
-      setAllTemplates(list);
-
-      setParameterTemplatesById((prev) => {
-        const next = { ...prev };
-        for (const t of list) {
-          const pid = Number(t?.parameter_id);
-          if (!Number.isFinite(pid) || pid <= 0) continue;
-          const key = String(pid);
-          if (!Array.isArray(next[key])) next[key] = [];
-          if (!next[key].some((x) => Number(x?.id) === Number(t?.id))) {
-            next[key] = [...next[key], t];
-          }
-        }
-        return next;
-      });
-    } catch (_e) {
-      setAllTemplates([]);
-    } finally {
-      setAllTemplatesLoading(false);
-    }
-  }, [allTemplates.length]);
-
-  useEffect(() => {
-    if (!templatesOverlayOpen) return;
-    const onPointerDown = (e) => {
-      const root = templatesPopoverRef.current;
-      if (!root) return;
-      if (root.contains(e.target)) return;
-      setTemplatesOverlayOpen(false);
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [templatesOverlayOpen]);
-
-  const applyTemplateToParameter = useCallback(
-    ({ parameterId, template }) => {
-      const pid = Number(parameterId);
-      if (!Number.isFinite(pid) || pid <= 0) return;
-      if (!template) return;
-
-      const nextValue = template?.value ?? "";
-      const nextQty = Number(template?.quantity) || 1;
-
-      setSelectedParameters((prev) => {
-        const idx = prev.findIndex((x) => Number(x?.parameterId) === pid);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = { ...next[idx], value: nextValue, quantity: nextQty };
-          return next;
-        }
-        return [...prev, { parameterId: pid, quantity: nextQty, value: nextValue }];
-      });
-    },
-    []
-  );
-
   useEffect(() => {
     getRef.current = get;
     loggerRef.current = logger;
   }, [get, logger]);
-
-  const addParameter = (parameterId) => {
-    const id = Number(parameterId);
-    if (!Number.isFinite(id) || id <= 0) return;
-    setSelectedParameters((prev) => {
-      const idx = prev.findIndex((x) => Number(x.parameterId) === id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], quantity: Math.max(1, Number(next[idx].quantity || 1) + 1) };
-        return next;
-      }
-      return [...prev, { parameterId: id, quantity: 1, value: "" }];
-    });
-  };
-
-  const updateParameterQty = (index, qty) => {
-    setSelectedParameters((prev) => {
-      const next = [...prev];
-      if (!next[index]) return prev;
-      const q = Number(qty);
-      next[index] = { ...next[index], quantity: Number.isFinite(q) ? Math.max(1, Math.round(q)) : 1 };
-      return next;
-    });
-  };
-
-  const updateParameterValue = (index, value) => {
-    setSelectedParameters((prev) => {
-      const next = [...prev];
-      if (!next[index]) return prev;
-      next[index] = { ...next[index], value: value === null || value === undefined ? "" : String(value) };
-      return next;
-    });
-  };
-
-  const removeParameter = (index) => {
-    setSelectedParameters((prev) => {
-      const next = [...prev];
-      next.splice(index, 1);
-      return next;
-    });
-  };
-
-  const addParameterCategory = (categoryId) => {
-    const id = Number(categoryId);
-    if (!Number.isFinite(id) || id <= 0) return;
-    setSelectedParameterCategories((prev) => {
-      if (prev.some((x) => Number(x) === id)) return prev;
-      return [...prev, id];
-    });
-  };
-
-  const removeParameterCategory = (index) => {
-    setSelectedParameterCategories((prev) => {
-      const next = [...prev];
-      next.splice(index, 1);
-      return next;
-    });
-  };
 
   useEffect(() => {
     const loadRefs = async () => {
@@ -317,35 +146,13 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
           });
         }
 
-        if (!productParametersCachePromise) {
-          productParametersCachePromise = getRef.current("/product-parameters", { limit: 500 }).then((res) => {
-            const data = Array.isArray(res?.data) ? res.data : [];
-            productParametersCache = data;
-            return data;
-          });
-        }
-
-        if (!productParameterCategoriesCachePromise) {
-          productParameterCategoriesCachePromise = getRef.current("/product-parameter-categories", { limit: 500 }).then((res) => {
-            const data = Array.isArray(res?.data) ? res.data : [];
-            productParameterCategoriesCache = data;
-            return data;
-          });
-        }
-
-        const [colorsData, collectionsData, productParametersData, productParameterCategoriesData] = await Promise.all([
+        const [colorsData, collectionsData] = await Promise.all([
           Array.isArray(colorsCache) ? Promise.resolve(colorsCache) : colorsCachePromise,
           Array.isArray(collectionsCache) ? Promise.resolve(collectionsCache) : collectionsCachePromise,
-          Array.isArray(productParametersCache) ? Promise.resolve(productParametersCache) : productParametersCachePromise,
-          Array.isArray(productParameterCategoriesCache)
-            ? Promise.resolve(productParameterCategoriesCache)
-            : productParameterCategoriesCachePromise,
         ]);
         setReferenceData({
           colors: Array.isArray(colorsData) ? colorsData : [],
           collections: Array.isArray(collectionsData) ? collectionsData : [],
-          productParameters: Array.isArray(productParametersData) ? productParametersData : [],
-          productParameterCategories: Array.isArray(productParameterCategoriesData) ? productParameterCategoriesData : [],
           isLoaded: true,
         });
       } catch (e) {
@@ -432,8 +239,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         preview_url: form.preview_url || null,
         is_active: !!isActive,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
-        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
       await put(`/catalog-items/${itemId}`, payload);
@@ -444,7 +249,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     } finally {
       setLoading(false);
     }
-  }, [canProceedBase, fixedValues?.category, fixedValues?.category_group, form, getEffectiveSku, isActive, itemId, onDone, put, selectedParameterCategories, selectedParameters]);
+  }, [canProceedBase, fixedValues?.category, fixedValues?.category_group, form, getEffectiveSku, isActive, itemId, onDone, put]);
 
   const applyLoadedItemToForm = useCallback((data) => {
     setForm((prev) => ({
@@ -469,17 +274,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     }));
 
     setIsActive(!!data.is_active);
-
-    const params = Array.isArray(data.parameters) ? data.parameters : [];
-    setSelectedParameters(
-      params
-        .map((p) => ({
-          parameterId: Number(p.id),
-          quantity: Number.isFinite(Number(p.quantity)) ? Number(p.quantity) : 1,
-          value: p?.value === null || p?.value === undefined ? "" : String(p.value),
-        }))
-        .filter((x) => Number.isFinite(x.parameterId) && x.parameterId > 0)
-    );
   }, []);
 
   useEffect(() => {
@@ -541,10 +335,9 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     () => [
       { number: 1, title: "Тип", icon: FaCog },
       { number: 2, title: "Описание", icon: FaCheckCircle },
-      { number: 3, title: "Характеристики", icon: FaClipboardList },
-      { number: 4, title: "Размеры", icon: FaRulerCombined },
-      { number: 5, title: "Фото", icon: FaCamera },
-      { number: 6, title: "Цена", icon: FaDollarSign },
+      { number: 3, title: "Параметры и расчёт", icon: FaClipboardList },
+      { number: 4, title: "Фото", icon: FaCamera },
+      { number: 5, title: "Цена", icon: FaDollarSign },
     ],
     []
   );
@@ -583,8 +376,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         preview_url: form.preview_url || null,
         is_active: false,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
-        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
       const resp = await post("/catalog-items", payload);
@@ -607,13 +398,13 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
   const goToPhotos = async () => {
     const id = await createItemIfNeeded();
     if (!id) return;
-    setStep(5);
+    setStep(4);
   };
 
   const goToPrice = async () => {
     const id = await createItemIfNeeded();
     if (!id) return;
-    setStep(6);
+    setStep(5);
   };
 
   const finalizeItem = async () => {
@@ -657,8 +448,6 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         preview_url: form.preview_url,
         is_active: true,
 
-        parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
-        parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
       };
 
       await put(`/catalog-items/${itemId}`, payload);
@@ -682,22 +471,12 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
         characteristics: createEmptyCharacteristicsForm(),
       });
-      setSelectedParameterCategories([]);
     } catch (e) {
       loggerRef.current?.error("Не удалось сохранить позицию каталога", e);
     } finally {
       setLoading(false);
     }
   };
-
-  const colorsByType = useMemo(() => {
-    const list = Array.isArray(referenceData.colors) ? referenceData.colors : [];
-    return {
-      facade: list.filter((c) => c?.type === "facade"),
-      corpus: list.filter((c) => c?.type === "corpus"),
-      universal: list.filter((c) => !c?.type),
-    };
-  }, [referenceData.colors]);
 
   const selectedPrimaryColor = referenceData.colors.find((c) => c.id === Number(form.primary_color_id));
   const selectedSecondaryColor = referenceData.colors.find((c) => c.id === Number(form.secondary_color_id));
@@ -775,8 +554,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
                   variant={step === s.number ? "primary" : "outline"}
                   className="px-3 py-2 text-xs flex items-center gap-2"
                   onClick={() => {
+                    if (s.number === 4) return;
                     if (s.number === 5) return;
-                    if (s.number === 6) return;
                     setStep(s.number);
                   }}
                 >
@@ -848,61 +627,23 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
       {step === 3 && (
         <div className="glass-card p-6 space-y-6">
-          <ProductCharacteristicsEditor
-            value={form.characteristics}
-            onChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
-            templatesByField={templatesByField}
-            colors={referenceData.colors}
-            primaryColorId={form.primary_color_id}
-            secondaryColorId={form.secondary_color_id}
-            onPrimaryColorChange={(id) => setForm((p) => ({ ...p, primary_color_id: id }))}
-            onSecondaryColorChange={(id) => setForm((p) => ({ ...p, secondary_color_id: id }))}
-            colorPickerRef={colorPickerRef}
-          />
-          <ProductParametersBlock
-            productParameterItems={productParameterItems}
-            productParameterCategoryItems={productParameterCategoryItems}
-            referenceData={referenceData}
-            selectedParameters={selectedParameters}
-            selectedParameterCategories={selectedParameterCategories}
-            parameterTemplatesById={parameterTemplatesById}
-            ensureParameterTemplatesLoaded={ensureParameterTemplatesLoaded}
-            addParameter={addParameter}
-            updateParameterValue={updateParameterValue}
-            updateParameterQty={updateParameterQty}
-            removeParameter={removeParameter}
-            addParameterCategory={addParameterCategory}
-            removeParameterCategory={removeParameterCategory}
-            templatesOverlayOpen={templatesOverlayOpen}
-            setTemplatesOverlayOpen={setTemplatesOverlayOpen}
-            allTemplatesLoading={allTemplatesLoading}
-            allTemplates={allTemplates}
-            openTemplatesOverlay={openTemplatesOverlay}
-            applyTemplateToParameter={applyTemplateToParameter}
-            templatesPopoverRef={templatesPopoverRef}
-            showGlobalTemplates
-          />
+          {catalogLoading ? (
+            <div className="text-sm text-night-500 flex items-center gap-2">
+              <FaSpinner className="animate-spin" /> Загружаем параметры каталога…
+            </div>
+          ) : (
+            <CatalogItemCharacteristicsForm
+              value={form.characteristics}
+              onChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
+              templatesByField={templatesByField}
+              fieldLabels={fieldLabels}
+              colors={referenceData.colors}
+              post={post}
+              onPriceCalculated={handlePriceCalculated}
+            />
+          )}
           <div className="flex justify-between pt-4 border-t border-night-200">
             <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
-              <FaArrowLeft /> Назад
-            </SecureButton>
-            <SecureButton type="button" onClick={() => setStep(4)} className="px-4 py-2">
-              Далее
-            </SecureButton>
-          </div>
-        </div>
-      )}
-
-      {step === 4 && (
-        <div className="glass-card p-6 space-y-6">
-          <ProductDimensionsSection
-            value={form.characteristics}
-            onChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
-            templatesByField={templatesByField}
-          />
-
-          <div className="flex justify-between">
-            <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
             </SecureButton>
             <SecureButton type="button" onClick={goToPhotos} className="px-4 py-2">
@@ -912,15 +653,14 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         </div>
       )}
 
-
-      {step === 5 && (
+      {step === 4 && (
         <div className="glass-card p-6 space-y-6">
           <div className="flex items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="text-sm font-semibold text-night-900">Фото</div>
               <div className="text-xs text-night-500">Загрузите медиа и выберите превью.</div>
             </div>
-            <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 flex items-center gap-2">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(3)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
             </SecureButton>
           </div>
@@ -940,14 +680,15 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         </div>
       )}
 
-      {step === 6 && (
+      {step === 5 && (
         <div className="glass-card p-6 space-y-4">
           <FormField label="Итоговая цена">
             <SecureInput type="number" value={form.final_price} onChange={(v) => setForm((p) => ({ ...p, final_price: v }))} />
           </FormField>
+          <p className="text-xs text-night-400">Цена подставляется автоматически из расчёта на шаге «Параметры и расчёт».</p>
 
           <div className="flex justify-between">
-            <SecureButton type="button" variant="outline" onClick={() => setStep(5)} className="px-4 py-2 flex items-center gap-2">
+            <SecureButton type="button" variant="outline" onClick={() => setStep(4)} className="px-4 py-2 flex items-center gap-2">
               <FaArrowLeft /> Назад
             </SecureButton>
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FaArrowLeft, FaSave, FaTimes } from "react-icons/fa";
+import { FaArrowLeft, FaSave, FaTimes, FaSync } from "react-icons/fa";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import FormField from "../ui/FormField";
@@ -12,7 +12,7 @@ import { invalidateCatalogParametersCache } from "../../hooks/useCatalogParamete
 const LEVEL = { CATEGORIES: "categories", PARAMETERS: "parameters", VALUES: "values" };
 
 const CatalogParametersHierarchyAdmin = () => {
-  const { get, post, del } = useApi();
+  const { get, post, put, del } = useApi();
 
   const [level, setLevel] = useState(LEVEL.CATEGORIES);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -23,17 +23,23 @@ const CatalogParametersHierarchyAdmin = () => {
   const [values, setValues] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const [categoryPanel, setCategoryPanel] = useState(false);
+  const [categoryPanel, setCategoryPanel] = useState(null);
   const [categoryName, setCategoryName] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
 
-  const [paramPanel, setParamPanel] = useState(false);
+  const [paramPanel, setParamPanel] = useState(null);
   const [paramName, setParamName] = useState("");
+  const [editingParamId, setEditingParamId] = useState(null);
 
-  const [valuePanel, setValuePanel] = useState(false);
+  const [valuePanel, setValuePanel] = useState(null);
   const [valueText, setValueText] = useState("");
+  const [editingValueId, setEditingValueId] = useState(null);
+
+  const [categoryEditMode, setCategoryEditMode] = useState(false);
   const [paramEditMode, setParamEditMode] = useState(false);
   const [valueEditMode, setValueEditMode] = useState(false);
   const [confirm, setConfirm] = useState(null);
+  const [seeding, setSeeding] = useState(false);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -120,40 +126,63 @@ const CatalogParametersHierarchyAdmin = () => {
       }));
   }, [selectedParameter, valuesByParam]);
 
-  const makeFieldKey = (name, id) => {
-    const base = transliterate(name).replace(/-/g, "_") || `param_${id || Date.now()}`;
+  const makeFieldKey = (name) => {
+    const base = transliterate(name).replace(/-/g, "_") || `param_${Date.now()}`;
     return base.slice(0, 120);
+  };
+
+  const closeCategoryPanel = () => {
+    setCategoryPanel(null);
+    setCategoryName("");
+    setEditingCategoryId(null);
+  };
+
+  const closeParamPanel = () => {
+    setParamPanel(null);
+    setParamName("");
+    setEditingParamId(null);
+  };
+
+  const closeValuePanel = () => {
+    setValuePanel(null);
+    setValueText("");
+    setEditingValueId(null);
   };
 
   const handleSaveCategory = async () => {
     const name = categoryName.trim();
     if (!name) return;
     try {
-      await post("/product-parameter-categories", { name });
-      setCategoryPanel(false);
-      setCategoryName("");
+      if (editingCategoryId) {
+        await put(`/product-parameter-categories/${editingCategoryId}`, { name });
+      } else {
+        await post("/product-parameter-categories", { name });
+      }
+      closeCategoryPanel();
       await loadAll();
     } catch (e) {
-      window.alert(e?.message || "Не удалось сохранить категорию");
+      window.alert(e?.response?.data?.message || e?.message || "Не удалось сохранить категорию");
     }
   };
 
   const handleSaveParameter = async () => {
     const name = paramName.trim();
     if (!name || !selectedCategory) return;
-    const fieldKey = makeFieldKey(name);
     try {
-      await post("/product-parameters", {
-        name,
-        category_id: selectedCategory.id,
-        field_key: fieldKey,
-        sort_order: (paramsByCategory.get(Number(selectedCategory.id)) || []).length + 1,
-      });
-      setParamPanel(false);
-      setParamName("");
+      if (editingParamId) {
+        await put(`/product-parameters/${editingParamId}`, { name, category_id: selectedCategory.id });
+      } else {
+        await post("/product-parameters", {
+          name,
+          category_id: selectedCategory.id,
+          field_key: makeFieldKey(name),
+          sort_order: (paramsByCategory.get(Number(selectedCategory.id)) || []).length + 1,
+        });
+      }
+      closeParamPanel();
       await loadAll();
     } catch (e) {
-      window.alert(e?.message || "Не удалось сохранить характеристику");
+      window.alert(e?.response?.data?.message || e?.message || "Не удалось сохранить характеристику");
     }
   };
 
@@ -161,16 +190,23 @@ const CatalogParametersHierarchyAdmin = () => {
     const value = valueText.trim();
     if (!value || !selectedParameter) return;
     try {
-      await post("/product-parameter-value-templates", {
-        parameter_id: selectedParameter.id,
-        value,
-        quantity: 1,
-      });
-      setValuePanel(false);
-      setValueText("");
+      if (editingValueId) {
+        await put(`/product-parameter-value-templates/${editingValueId}`, {
+          parameter_id: selectedParameter.id,
+          value,
+          quantity: 1,
+        });
+      } else {
+        await post("/product-parameter-value-templates", {
+          parameter_id: selectedParameter.id,
+          value,
+          quantity: 1,
+        });
+      }
+      closeValuePanel();
       await loadAll();
     } catch (e) {
-      window.alert(e?.message || "Не удалось сохранить позицию");
+      window.alert(e?.response?.data?.message || e?.message || "Не удалось сохранить позицию");
     }
   };
 
@@ -229,28 +265,41 @@ const CatalogParametersHierarchyAdmin = () => {
     });
   };
 
+  const handleSeedStructure = async () => {
+    setSeeding(true);
+    try {
+      await post("/admin/seed-catalog-parameters");
+      await loadAll();
+    } catch (e) {
+      window.alert(e?.response?.data?.message || e?.message || "Не удалось инициализировать структуру");
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const goToCategories = () => {
     setLevel(LEVEL.CATEGORIES);
     setSelectedCategory(null);
     setSelectedParameter(null);
+    setCategoryEditMode(false);
     setParamEditMode(false);
     setValueEditMode(false);
-    setCategoryPanel(false);
-    setParamPanel(false);
-    setValuePanel(false);
+    closeCategoryPanel();
+    closeParamPanel();
+    closeValuePanel();
   };
 
   const goToParameters = () => {
     setLevel(LEVEL.PARAMETERS);
     setSelectedParameter(null);
     setValueEditMode(false);
-    setValuePanel(false);
+    closeValuePanel();
   };
 
   const titles = {
-    [LEVEL.CATEGORIES]: "Категории параметров",
-    [LEVEL.PARAMETERS]: "Характеристики",
-    [LEVEL.VALUES]: "Позиции списка",
+    [LEVEL.CATEGORIES]: "Основной раздел",
+    [LEVEL.PARAMETERS]: "Параметры раздела",
+    [LEVEL.VALUES]: "Варианты списка",
   };
 
   return (
@@ -276,34 +325,53 @@ const CatalogParametersHierarchyAdmin = () => {
           ) : null}
         </nav>
 
-        <div>
-          <h2 className="text-xl font-semibold text-night-900">{titles[level]}</h2>
-          <p className="text-sm text-night-400">
-            {level === LEVEL.CATEGORIES && "Например: Общие параметры, Основные характеристики"}
-            {level === LEVEL.PARAMETERS && "Например: Назначение модуля, Тип открывания"}
-            {level === LEVEL.VALUES && "Варианты для выпадающего списка при создании модуля"}
-          </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-night-900">{titles[level]}</h2>
+            <p className="text-sm text-night-400 mt-1">
+              {level === LEVEL.CATEGORIES && "Общие параметры, Основные характеристики, Дополнительная информация"}
+              {level === LEVEL.PARAMETERS && "Например: Тип изделия, Назначение модуля, Тип открывания"}
+              {level === LEVEL.VALUES && "Варианты для выпадающего списка при создании позиции каталога"}
+            </p>
+          </div>
+          {level === LEVEL.CATEGORIES ? (
+            <SecureButton
+              type="button"
+              variant="outline"
+              onClick={handleSeedStructure}
+              disabled={seeding}
+              className="px-3 py-2 text-xs flex items-center gap-2"
+            >
+              <FaSync className={seeding ? "animate-spin" : ""} /> Инициализировать структуру
+            </SecureButton>
+          ) : null}
         </div>
 
         {level === LEVEL.CATEGORIES ? (
           <AdminNavPlates
             items={categoryPlates}
             showAdd
-            showEdit={false}
-            deleteMode="conditional"
-            onStartAdd={() => setCategoryPanel(true)}
+            showEdit
+            editMode={categoryEditMode}
+            onToggleEdit={() => setCategoryEditMode((v) => !v)}
+            onStartAdd={() => {
+              closeCategoryPanel();
+              setCategoryPanel("add");
+            }}
             panel={
               categoryPanel ? (
                 <div className="rounded-xl border border-night-200 bg-night-50/80 p-4 space-y-4 max-w-lg">
-                  <div className="text-sm font-semibold text-night-800">Новая категория</div>
-                  <FormField label="Название категории" required>
+                  <div className="text-sm font-semibold text-night-800">
+                    {editingCategoryId ? "Редактировать раздел" : "Новый раздел"}
+                  </div>
+                  <FormField label="Название раздела" required>
                     <SecureInput value={categoryName} onChange={setCategoryName} placeholder="Общие параметры" />
                   </FormField>
                   <div className="flex gap-2">
                     <SecureButton type="button" onClick={handleSaveCategory} className="px-4 py-2 text-sm flex items-center gap-2">
                       <FaSave /> Сохранить
                     </SecureButton>
-                    <SecureButton type="button" variant="ghost" onClick={() => { setCategoryPanel(false); setCategoryName(""); }} className="px-4 py-2 text-sm flex items-center gap-2">
+                    <SecureButton type="button" variant="ghost" onClick={closeCategoryPanel} className="px-4 py-2 text-sm flex items-center gap-2">
                       <FaTimes /> Отмена
                     </SecureButton>
                   </div>
@@ -311,11 +379,17 @@ const CatalogParametersHierarchyAdmin = () => {
               ) : null
             }
             onSelectItem={(item) => {
+              if (categoryEditMode) {
+                setEditingCategoryId(item.id);
+                setCategoryName(item.label);
+                setCategoryPanel("edit");
+                return;
+              }
               setSelectedCategory(item.raw);
               setLevel(LEVEL.PARAMETERS);
             }}
             onDeleteItem={handleDeleteCategory}
-            emptyLabel={loading ? "Загрузка…" : "Категории не добавлены."}
+            emptyLabel={loading ? "Загрузка…" : "Разделы не добавлены. Нажмите «Инициализировать структуру»."}
           />
         ) : null}
 
@@ -327,19 +401,24 @@ const CatalogParametersHierarchyAdmin = () => {
               showEdit
               editMode={paramEditMode}
               onToggleEdit={() => setParamEditMode((v) => !v)}
-              onStartAdd={() => setParamPanel(true)}
+              onStartAdd={() => {
+                closeParamPanel();
+                setParamPanel("add");
+              }}
               panel={
                 paramPanel ? (
                   <div className="rounded-xl border border-night-200 bg-night-50/80 p-4 space-y-4 max-w-lg">
-                    <div className="text-sm font-semibold text-night-800">Новая характеристика</div>
-                    <FormField label="Название характеристики" required>
-                      <SecureInput value={paramName} onChange={setParamName} placeholder="Назначение модуля" />
+                    <div className="text-sm font-semibold text-night-800">
+                      {editingParamId ? "Редактировать параметр" : "Новый параметр"}
+                    </div>
+                    <FormField label="Название параметра" required>
+                      <SecureInput value={paramName} onChange={setParamName} placeholder="Тип изделия" />
                     </FormField>
                     <div className="flex gap-2">
                       <SecureButton type="button" onClick={handleSaveParameter} className="px-4 py-2 text-sm flex items-center gap-2">
                         <FaSave /> Сохранить
                       </SecureButton>
-                      <SecureButton type="button" variant="ghost" onClick={() => { setParamPanel(false); setParamName(""); }} className="px-4 py-2 text-sm flex items-center gap-2">
+                      <SecureButton type="button" variant="ghost" onClick={closeParamPanel} className="px-4 py-2 text-sm flex items-center gap-2">
                         <FaTimes /> Отмена
                       </SecureButton>
                     </div>
@@ -347,15 +426,20 @@ const CatalogParametersHierarchyAdmin = () => {
                 ) : null
               }
               onSelectItem={(item) => {
-                if (paramEditMode) return;
+                if (paramEditMode) {
+                  setEditingParamId(item.id);
+                  setParamName(item.label);
+                  setParamPanel("edit");
+                  return;
+                }
                 setSelectedParameter(item.raw);
                 setLevel(LEVEL.VALUES);
               }}
               onDeleteItem={handleDeleteParameter}
-              emptyLabel={loading ? "Загрузка…" : "Характеристики не добавлены."}
+              emptyLabel={loading ? "Загрузка…" : "Параметры не добавлены."}
             />
             <SecureButton type="button" variant="outline" onClick={goToCategories} className="px-4 py-2 text-sm flex items-center gap-2">
-              <FaArrowLeft /> К категориям
+              <FaArrowLeft /> К разделам
             </SecureButton>
           </>
         ) : null}
@@ -368,31 +452,42 @@ const CatalogParametersHierarchyAdmin = () => {
               showEdit
               editMode={valueEditMode}
               onToggleEdit={() => setValueEditMode((v) => !v)}
-              onStartAdd={() => setValuePanel(true)}
+              onStartAdd={() => {
+                closeValuePanel();
+                setValuePanel("add");
+              }}
               panel={
                 valuePanel ? (
                   <div className="rounded-xl border border-night-200 bg-night-50/80 p-4 space-y-4 max-w-lg">
-                    <div className="text-sm font-semibold text-night-800">Новая позиция</div>
+                    <div className="text-sm font-semibold text-night-800">
+                      {editingValueId ? "Редактировать вариант" : "Новый вариант"}
+                    </div>
                     <FormField label="Значение" required>
-                      <SecureInput value={valueText} onChange={setValueText} placeholder="Для техники и хранения" />
+                      <SecureInput value={valueText} onChange={setValueText} placeholder="Напольный" />
                     </FormField>
                     <div className="flex gap-2">
                       <SecureButton type="button" onClick={handleSaveValue} className="px-4 py-2 text-sm flex items-center gap-2">
                         <FaSave /> Сохранить
                       </SecureButton>
-                      <SecureButton type="button" variant="ghost" onClick={() => { setValuePanel(false); setValueText(""); }} className="px-4 py-2 text-sm flex items-center gap-2">
+                      <SecureButton type="button" variant="ghost" onClick={closeValuePanel} className="px-4 py-2 text-sm flex items-center gap-2">
                         <FaTimes /> Отмена
                       </SecureButton>
                     </div>
                   </div>
                 ) : null
               }
-              onSelectItem={() => {}}
+              onSelectItem={(item) => {
+                if (valueEditMode) {
+                  setEditingValueId(item.id);
+                  setValueText(item.label);
+                  setValuePanel("edit");
+                }
+              }}
               onDeleteItem={handleDeleteValue}
-              emptyLabel={loading ? "Загрузка…" : "Позиции не добавлены."}
+              emptyLabel={loading ? "Загрузка…" : "Варианты не добавлены."}
             />
             <SecureButton type="button" variant="outline" onClick={goToParameters} className="px-4 py-2 text-sm flex items-center gap-2">
-              <FaArrowLeft /> К характеристикам
+              <FaArrowLeft /> К параметрам
             </SecureButton>
           </>
         ) : null}

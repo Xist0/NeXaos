@@ -31,6 +31,22 @@ const calculateCountertop = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Рассчитать стоимость модуля по параметрам (логика Excel)
+ * POST /api/modules/calculate-price
+ */
+const calculatePrice = asyncHandler(async (req, res) => {
+  const modulePriceService = require("../services/module-price.service");
+  const result = await modulePriceService.calculatePrice(req.body || {});
+
+  logger.info("Выполнен расчёт стоимости модуля", {
+    price: result.price,
+    user: req.user?.id,
+  });
+
+  res.status(200).json({ data: result });
+});
+
+/**
  * Проверить соответствие длины нижних и верхних модулей
  * POST /api/modules/check-compatibility
  */
@@ -119,6 +135,7 @@ const getDescriptionByBaseSku = asyncHandler(async (req, res) => {
 
 module.exports = {
   calculateCountertop,
+  calculatePrice,
   checkCompatibility,
   findSimilar,
   getModulesWithDescriptions,
