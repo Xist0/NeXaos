@@ -38,5 +38,7 @@ module.exports = [
   require("./037_add_category_to_materials_and_hardware"),
   require("./038_catalog_parameter_hierarchy"),
   require("./039_seed_catalog_parameters"),
+  require("./040_add_price_per_m2_and_sheet_dims_to_hardware"),
+  require("./041_add_hardware_matrix_to_modules"),
 ];
 

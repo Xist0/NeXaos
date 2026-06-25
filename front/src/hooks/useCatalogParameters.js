@@ -3,6 +3,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 let catalogCache = null;
 let catalogCachePromise = null;
 
+/** Фиксированный порядок секций (категорий) параметров каталога. */
+const SECTION_ORDER = [
+  "Общие параметры",
+  "Основные характеристики",
+  "Дополнительная информация",
+];
+
+const sectionSortKey = (name) => {
+  const idx = SECTION_ORDER.indexOf(String(name || "").trim());
+  return idx >= 0 ? idx : SECTION_ORDER.length;
+};
+
 const buildCatalog = (categories, parameters, valueTemplates) => {
   const templatesByField = {};
   const fieldLabels = {};
@@ -28,7 +40,7 @@ const buildCatalog = (categories, parameters, valueTemplates) => {
 
   const sections = (categories || [])
     .slice()
-    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"))
+    .sort((a, b) => sectionSortKey(a.name) - sectionSortKey(b.name) || String(a.name || "").localeCompare(String(b.name || ""), "ru"))
     .map((cat) => {
       const fields = (paramsByCategory.get(Number(cat.id)) || [])
         .slice()

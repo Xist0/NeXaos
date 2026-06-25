@@ -5,7 +5,7 @@ const ROUND = (value, digits = 0) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   const factor = 10 ** digits;
-  return Math.round(n * factor) / factor;
+  return Math.ceil(n * factor) / factor;
 };
 
 const SUM = (...args) => {
@@ -48,6 +48,54 @@ const HW_LOOKUP = (lookup, table) => {
       String(r.sku ?? "").trim().toLowerCase() === key
   );
   return Number(row?.price_per_unit ?? 0) || 0;
+};
+
+const normalizeKey = (value) => String(value ?? "").trim().toLowerCase();
+
+const FASTENER_CATEGORY = "крепежная фурнитура";
+
+const HW_MATRIX_COLUMNS = ["drawer", "hinge", "support", "shelf", "bottom", "post", "rail", "lid"];
+
+/** Сопоставление legacy-ключей матрицы с наименованиями в справочнике фурнитуры. */
+const LEGACY_HW_KEY_NAMES = {
+  cross_brace: ["меж-я стяжка", "межсекционная стяжка"],
+  dowel_8x30: ["шкант 8х30"],
+  euro_screw_7x50: ["евровинт 7х50"],
+  screw_3_5x16: ["саморез 3,5х16"],
+  screw_3_5x19: ["саморез 3,5х19"],
+  screw_4x60: ["саморез 4x60"],
+  flipper: ["flipper"],
+  eccentric: ["эксцентрик"],
+  brace_d20: ["стяжка d20"],
+};
+
+const findHardwareByName = (hardware, name) => {
+  const key = normalizeKey(name);
+  return hardware.find(
+    (item) =>
+      normalizeKey(item.name) === key ||
+      normalizeKey(item.sku) === key
+  );
+};
+
+const resolveMatrixKeys = (lookupKey, hardware) => {
+  const keys = new Set();
+  if (lookupKey != null && lookupKey !== "") {
+    keys.add(String(lookupKey));
+    keys.add(normalizeKey(lookupKey));
+  }
+
+  const legacyNames = LEGACY_HW_KEY_NAMES[lookupKey] || [];
+  for (const legacyName of legacyNames) {
+    keys.add(normalizeKey(legacyName));
+    const item = findHardwareByName(hardware, legacyName);
+    if (item?.id != null) keys.add(String(item.id));
+  }
+
+  const directItem = findHardwareByName(hardware, lookupKey);
+  if (directItem?.id != null) keys.add(String(directItem.id));
+
+  return Array.from(keys);
 };
 
 const parseDrawerCounts = (drawersDetail, characteristics = {}) => {
@@ -93,17 +141,20 @@ const calculateModulePrice = (input, refs) => {
   const L4 = Number(coeff.general) || 1;
   const O4 = Number(coeff.sheet) || 1;
   const O5 = Number(coeff.edge) || 1;
+  const addSheet = Number(coeff.addSheet) || 0;
+  const addEdge = Number(coeff.addEdge) || 0;
 
   const materials = refs.materials || [];
   const hardware = refs.hardware || [];
   const edgePricePerM = Number(refs.edgePricePerM) || VLOOKUP("Кромка", materials, 2) || 0;
 
-  const G5 = chars.showcase_back_panel_color || chars.back_panel || "";
+  const G5 = chars.showcase_back_panel_color || "";
+  const D11 = chars.back_panel || "";
   const G7 = chars.corpus_color || chars.material_corpus || "";
   const G9 = chars.facade_color || chars.material_facade || "";
   const G18 = chars.lift_mechanism || "";
   const D18 = Number(chars.lift_mechanism_count) || 0;
-  const G20 = chars.hinges_type || chars.drawers_type || "";
+  const G20 = chars.hinges_type || "";
   const D22 = Number(chars.hinges_count) || 0;
   const G24 = chars.shelves_type || "";
   const D24 = Number(chars.shelf_count) || 0;
@@ -117,15 +168,15 @@ const calculateModulePrice = (input, refs) => {
   const K21 = drawers.k116;
   const K22 = drawers.k199;
 
-  // N7 — площадь корпуса
+  // N7 — площадь корпуса (дно + крышка + 2 боковины)
   const N7 = IFERROR(
-    () => (((D31 * D35) + ((D33 - 100) * D35 * 2) + ((D31 * 80) * 2)) / 1_000_000) * O4,
+    () => (2 * D31 * D35 + 2 * (D33 - 100) * D35) / 1_000_000 * O4,
     0
   );
 
-  // N8 — периметр корпуса
+  // N8 — периметр корпуса (дно + крышка + 2 боковины)
   const N8 = IFERROR(
-    () => ((((D31 + D35) * 2) + (((D33 - 100 + D35) * 2) * 2) + (2 * (D31 + 80) * 2)) / 1000) * O5,
+    () => (4 * (D31 + D35) + 4 * (D33 - 100 + D35)) / 1000 * O5,
     0
   );
 
@@ -153,13 +204,19 @@ const calculateModulePrice = (input, refs) => {
     SUM(O20, O21, O22)
   );
 
-  // H5 — задняя стенка витрины
-  const H5 = IFERROR(() => (D31 * D33) / 1_000_000 * VLOOKUP(G5, materials), 0);
-  const E11 = H5;
+  // H5 — задняя стенка (только для ЛХДФ белый)
+  const H5 = IF(
+    String(D11).trim().toLowerCase() === "лхдф белый",
+    IFERROR(() => (D31 * D33) / 1_000_000 * (VLOOKUP(D11, materials) + addSheet), 0),
+    0
+  );
+
+  // E11 — цвет задней стенки витрины (для любого материала)
+  const E11 = IFERROR(() => (D31 * D33) / 1_000_000 * (VLOOKUP(G5, materials) + addSheet), 0);
 
   // H7 — корпус
   const materialPrice = VLOOKUP(G7, materials);
-  const H7 = materialPrice * SUM(N10, N7) + SUM(N11, N8) * edgePricePerM;
+  const H7 = (materialPrice + addSheet) * SUM(N10, N7) + (edgePricePerM + addEdge) * SUM(N11, N8);
 
   // H9 — фасады
   const specialMaterials = ["латунь", "черный браш"];
@@ -167,7 +224,7 @@ const calculateModulePrice = (input, refs) => {
   const H9 = IF(
     specialMaterials.includes(g9lower),
     N13 * (Number(refs.specialFacadePrice1) || 0) + N13 * (Number(refs.specialFacadePrice2) || 0),
-    IFERROR(() => VLOOKUP(G9, materials) * N13 + N14 * VLOOKUP(G9, materials, 2), 0)
+    IFERROR(() => (VLOOKUP(G9, materials) + addSheet) * N13 + (VLOOKUP(G9, materials, 2) + addEdge) * N14, 0)
   );
 
   // H18 — подъёмные механизмы
@@ -177,7 +234,26 @@ const calculateModulePrice = (input, refs) => {
   const hingeWithDamper = HW_LOOKUP("С доводчиком", hardware) || HW_LOOKUP("петля с доводчиком", hardware);
   const hingePush = HW_LOOKUP("От нажатия", hardware) || HW_LOOKUP("петля от нажатия", hardware);
   const screwPrice = HW_LOOKUP("Саморез 3,5х16", hardware);
-  const N31 = Number(hardwareMatrix.screw_3_5x16?.total) || D22 * 2;
+
+  const hwQty = (lookupKey, col) => {
+    for (const key of resolveMatrixKeys(lookupKey, hardware)) {
+      const qty = Number(hardwareMatrix[key]?.[col]);
+      if (Number.isFinite(qty) && qty !== 0) return qty;
+    }
+    return 0;
+  };
+
+  const hwRowTotal = (lookupKey) => SUM(...HW_MATRIX_COLUMNS.map((col) => hwQty(lookupKey, col)));
+
+  const rowTotalByNames = (names, fallback = 0) => {
+    for (const name of [].concat(names)) {
+      const total = hwRowTotal(name);
+      if (total > 0) return total;
+    }
+    return fallback;
+  };
+
+  const N31 = rowTotalByNames(["Саморез 3,5х16", "screw_3_5x16"], D22 * 2);
   const H22 = IFERROR(
     () =>
       IF(
@@ -189,12 +265,12 @@ const calculateModulePrice = (input, refs) => {
   );
 
   // H24 — полки
-  const P34 = Number(hardwareMatrix.flipper?.total) || 0;
+  const P34 = rowTotalByNames(["FLIPPER", "flipper"], 0);
   const H24 = IFERROR(
     () =>
       IF(
         G24 === "Съемные",
-        VLOOKUP(G7, materials) * (D31 * D35 / 1_000_000 * O5) + HW_LOOKUP("FLIPPER", hardware) * P34,
+        (VLOOKUP(G7, materials) + addSheet) * (D31 * D35 / 1_000_000 * O5) + HW_LOOKUP("FLIPPER", hardware) * P34,
         0
       ) * D24,
     0
@@ -221,7 +297,7 @@ const calculateModulePrice = (input, refs) => {
   );
 
   // H28 — опоры
-  const O32 = Number(hardwareMatrix.screw_3_5x19?.total) || D28;
+  const O32 = rowTotalByNames(["Саморез 3,5х19", "screw_3_5x19"], D28);
   const H28 = IFERROR(
     () =>
       IF(
@@ -252,67 +328,39 @@ const calculateModulePrice = (input, refs) => {
   const L21 = drawerHwPrice(J21, K21 || "нет");
   const L22 = drawerHwPrice(J22, K22 || "нет");
 
-  // Фурнитура U28-U37
-  const hwQty = (key, col) => Number(hardwareMatrix[key]?.[col]) || 0;
-  const hwRowTotal = (key) => {
-    const cols = ["drawer", "hinge", "support", "shelf", "bottom", "post", "rail", "lid"];
-    return SUM(...cols.map((c) => hwQty(key, c)));
-  };
+  const fasteningItems = (hardware || [])
+    .filter((item) => normalizeKey(item.category) === FASTENER_CATEGORY)
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
 
-  const hwPrices = {
-    cross_brace: HW_LOOKUP("Меж-я стяжка", hardware) || HW_LOOKUP("Межсекционная стяжка", hardware),
-    dowel_8x30: HW_LOOKUP("Шкант 8х30", hardware),
-    euro_screw_7x50: HW_LOOKUP("евровинт 7х50", hardware),
-    screw_3_5x16: screwPrice,
-    screw_3_5x19: HW_LOOKUP("Саморез 3,5х19", hardware),
-    screw_4x60: HW_LOOKUP("Саморез 4x60", hardware),
-    flipper: HW_LOOKUP("FLIPPER", hardware),
-    eccentric: HW_LOOKUP("Эксцентрик", hardware),
-    brace_d20: HW_LOOKUP("Стяжка D20", hardware),
-  };
-
-  const hardwareRows = [
-    { key: "cross_brace", label: "Меж-я стяжка" },
-    { key: "dowel_8x30", label: "Шкант 8х30" },
-    { key: "euro_screw_7x50", label: "евровинт 7х50" },
-    { key: "screw_3_5x16", label: "Саморез 3,5х16" },
-    { key: "screw_3_5x19", label: "Саморез 3,5х19" },
-    { key: "screw_4x60", label: "Саморез 4x60" },
-    { key: "flipper", label: "FLIPPER" },
-    { key: "eccentric", label: "Эксцентрик" },
-    { key: "brace_d20", label: "Стяжка D20" },
-  ].map((row) => {
-    const qty = hwRowTotal(row.key);
-    const unitPrice = hwPrices[row.key] || 0;
-    return {
-      ...row,
-      drawer: hwQty(row.key, "drawer"),
-      hinge: hwQty(row.key, "hinge"),
-      support: hwQty(row.key, "support"),
-      shelf: hwQty(row.key, "shelf"),
-      bottom: hwQty(row.key, "bottom"),
-      post: hwQty(row.key, "post"),
-      rail: hwQty(row.key, "rail"),
-      lid: hwQty(row.key, "lid"),
-      price: unitPrice * qty,
+  const hardwareRows = fasteningItems.map((item) => {
+    const key = String(item.id);
+    const unitPrice = Number(item.price_per_unit) || 0;
+    const row = {
+      key,
+      id: item.id,
+      label: item.name,
+      unitPrice,
     };
+
+    let qty = 0;
+    for (const col of HW_MATRIX_COLUMNS) {
+      row[col] = hwQty(key, col);
+      qty += row[col];
+    }
+    row.price = unitPrice * qty;
+    return row;
   });
 
-  const U28 = hwPrices.cross_brace * hwRowTotal("cross_brace");
-  const U29 = hwPrices.dowel_8x30 * hwRowTotal("dowel_8x30");
-  const U30 = hwPrices.euro_screw_7x50 * hwRowTotal("euro_screw_7x50");
-  const U31 = hwPrices.screw_3_5x16 * hwRowTotal("screw_3_5x16");
-  const U32 = hwPrices.screw_3_5x19 * hwRowTotal("screw_3_5x19");
-  const U33 = hwPrices.screw_4x60 * hwRowTotal("screw_4x60");
-  const U34 = hwPrices.flipper * hwRowTotal("flipper");
-  const U35 = hwPrices.eccentric * hwRowTotal("eccentric");
-  const U36 = hwPrices.brace_d20 * hwRowTotal("brace_d20");
-  const U37 = SUM(U28, U29, U30, U31, U32, U33, U34, U35, U36);
+  const U37 = SUM(...hardwareRows.map((row) => row.price));
 
   const sumH = SUM(H5, H7, H9, H18, H22, H24, H26, H28);
   const sumL = SUM(L20, L21, L22);
   const S = sumH + sumL + E11 + U37;
-  const K3 = ROUND(S * L4, 0);
+  const markupSheet = addSheet * SUM(N10, N7);
+  const markupEdge = addEdge * SUM(N11, N8, N14);
+  const markupGeneral = S * (L4 - 1);
+  const S_withAdd = S + markupSheet + markupEdge;
+  const K3 = ROUND(S_withAdd * L4, 0);
 
   return {
     price: K3,
@@ -321,6 +369,24 @@ const calculateModulePrice = (input, refs) => {
       L20, L21, L22,
       E11, U37,
       sumH, sumL, S, coefficient: L4,
+      markupSheet, markupEdge, markupGeneral,
+      addSheet, addEdge,
+    },
+    fieldBreakdown: {
+      back_panel: H5,
+      showcase_back_panel_color: E11,
+      material_corpus: H7,
+      corpus_color: H7,
+      material_facade: H9,
+      facade_color: H9,
+      lift_mechanism: H18,
+      hinges_type: H22,
+      drawers_type: 0,
+      shelves_type: H24,
+      hangers_type: H26,
+      supports_type: H28,
+      drawers_detail: SUM(L20, L21, L22),
+      hardware_small: U37,
     },
     areas: {
       corpusArea: ROUND(N7, 4),
@@ -341,7 +407,7 @@ const calculateModulePrice = (input, refs) => {
       rows: hardwareRows,
       total: ROUND(U37, 2),
     },
-    details: { D31, D33, D35, N7, N8, N10, N11, N13, N14 },
+    details: { D31, D33, D35, D16, N7, N8, N10, N11, N13, N14, K20, K21, K22, O4, O5, addSheet, addEdge },
   };
 };
 

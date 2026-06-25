@@ -6,12 +6,20 @@ import {
 /** Фиксированная раскладка формы создания позиции каталога (3 колонки). */
 export const CATALOG_ITEM_FORM_SECTIONS = [
   {
-    id: "general",
-    title: "Общие параметры",
+    id: "materials",
+    title: "Материалы",
     columns: [
-      ["product_type", "material_corpus", "material_facade", "back_panel"],
-      COLOR_CHARACTERISTIC_KEYS,
-      ["facade_thickness_mm", "film", "milling"],
+      ["material_corpus", "material_facade", "back_panel", "film", "milling"],
+      ["plinth", "cutlery_tray", "ventilation_grid", "dish_dryer"],
+    ],
+  },
+  {
+    id: "other_materials",
+    title: "Прочие материалы",
+    columns: [
+      ["supports_type"],
+      ["hangers_type"],
+      ["lift_mechanism", "drawers_detail"],
     ],
   },
   {
@@ -19,7 +27,8 @@ export const CATALOG_ITEM_FORM_SECTIONS = [
     title: "Основные характеристики",
     columns: [
       [
-        "module_purpose",
+        "product_type",
+        "facade_thickness_mm",
         "front_count",
         "lift_mechanism_count",
         "drawer_count",
@@ -31,14 +40,12 @@ export const CATALOG_ITEM_FORM_SECTIONS = [
       [
         "tech_niche",
         "opening_type",
-        "lift_mechanism",
         "drawers_type",
         "hinges_type",
         "shelves_type",
-        "hangers_type",
-        "supports_type",
+        "opening_method",
       ],
-      ["opening_method", "drawers_detail", "supports_height_mm"],
+      ["supports_height_mm"],
     ],
   },
   {
@@ -47,20 +54,11 @@ export const CATALOG_ITEM_FORM_SECTIONS = [
     columns: [["width_mm"], ["height_mm_char"], ["depth_mm_char"]],
   },
   {
-    id: "other",
-    title: "Прочее",
-    columns: [
-      ["film_under_milling", "milling_type"],
-      ["frame", "glass_in_frame"],
-    ],
-  },
-  {
     id: "extra",
     title: "Дополнительная информация",
     columns: [
-      ["countertop", "plinth", "cutlery_tray"],
-      ["countertop_thickness", "lighting", "dish_dryer"],
-      ["countertop_color", "side_posts_facade_color"],
+      ["lighting"],
+      ["side_posts_facade_color"],
     ],
   },
 ];

@@ -184,7 +184,7 @@ const createCrudController = (entity) => {
 
       if (colorIds.length > 0) {
         const { rows: colorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE id = ANY($1::int[])`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = ANY($1::int[])`,
           [colorIds]
         );
         const byId = new Map(colorRows.map((row) => [row.id, row]));
@@ -210,7 +210,7 @@ const createCrudController = (entity) => {
 
       if (colorIds.length > 0) {
         const { rows: colorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE id = ANY($1::int[])`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = ANY($1::int[])`,
           [colorIds]
         );
         const byId = new Map(colorRows.map((row) => [row.id, row]));
@@ -304,7 +304,7 @@ const createCrudController = (entity) => {
       // Добавляем данные о цветах
       if (data.primary_color_id) {
         const { rows: primaryColorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
           [data.primary_color_id]
         );
         if (primaryColorRows[0]) {
@@ -312,7 +312,7 @@ const createCrudController = (entity) => {
         }
       } else if (data.facade_color) {
         const { rows: primaryColorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE sku = $1 LIMIT 1`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE sku = $1 LIMIT 1`,
           [data.facade_color]
         );
         if (primaryColorRows[0]) {
@@ -322,7 +322,7 @@ const createCrudController = (entity) => {
       
       if (data.secondary_color_id) {
         const { rows: secondaryColorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
           [data.secondary_color_id]
         );
         if (secondaryColorRows[0]) {
@@ -330,7 +330,7 @@ const createCrudController = (entity) => {
         }
       } else if (data.corpus_color) {
         const { rows: secondaryColorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE sku = $1 LIMIT 1`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE sku = $1 LIMIT 1`,
           [data.corpus_color]
         );
         if (secondaryColorRows[0]) {
@@ -343,7 +343,7 @@ const createCrudController = (entity) => {
     if (entity.route === "kit-solutions") {
       if (data.primary_color_id) {
         const { rows: primaryColorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
           [data.primary_color_id]
         );
         if (primaryColorRows[0]) {
@@ -353,7 +353,7 @@ const createCrudController = (entity) => {
       
       if (data.secondary_color_id) {
         const { rows: secondaryColorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
           [data.secondary_color_id]
         );
         if (secondaryColorRows[0]) {
@@ -366,7 +366,7 @@ const createCrudController = (entity) => {
     if (entity.route === "hardware-extended") {
       if (data.primary_color_id) {
         const { rows: primaryColorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
           [data.primary_color_id]
         );
         if (primaryColorRows[0]) {
@@ -376,7 +376,7 @@ const createCrudController = (entity) => {
       
       if (data.secondary_color_id) {
         const { rows: secondaryColorRows } = await query(
-          `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
           [data.secondary_color_id]
         );
         if (secondaryColorRows[0]) {

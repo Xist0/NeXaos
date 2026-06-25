@@ -22,6 +22,7 @@ import FormField from "../../../ui/FormField";
 import FormSelect from "../../../ui/FormSelect";
 import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
 import useCatalogParameters from "../../../../hooks/useCatalogParameters";
+import useMaterialsForSelect from "../../../../hooks/useMaterialsForSelect";
 import {
   characteristicsFromApi,
   createEmptyCharacteristicsForm,
@@ -388,6 +389,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
   const colorPickerRef = useRef(null);
   const { sections: catalogSections, templatesByField, fieldLabels } = useCatalogParameters(get);
+  const { materials: materialsData } = useMaterialsForSelect(get);
 
   const [lengthWarning, setLengthWarning] = useState(null);
 
@@ -1512,6 +1514,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             onPrimaryColorChange={(id) => setForm((p) => ({ ...p, primary_color_id: id }))}
             onSecondaryColorChange={(id) => setForm((p) => ({ ...p, secondary_color_id: id }))}
             colorPickerRef={colorPickerRef}
+            materialsBySourceType={materialsData.bySourceType || {}}
           />
           <div className="flex justify-between pt-4 border-t border-night-200">
             <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">

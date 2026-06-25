@@ -11,20 +11,14 @@ import { buildMaterialSku } from "../../utils/translit";
 
 const API = "/api/hardware-extended";
 
-const STATIC_HARDWARE_GROUPS = [
-  "Крепежная фурнитура",
-  "Расходники",
-  "Навесы",
-  "Лоток",
-  "Сушка",
-  "Решётка вентиляционная",
-  "Опора",
-  "Петли",
-  "Подъемные механизмы",
-  "Выдвижные системы",
+const OTHER_MATERIAL_GROUPS = [
+  "Рамка",
+  "Стекло в рамку",
+  "Пленка под фрезу",
+  "Вид фрезы",
 ];
 
-const HardwareAdmin = () => {
+const OtherMaterialsAdmin = () => {
   const { items, loading, fetchItems, createItem, updateItem, deleteItem } = useAdminCrud(API);
 
   const [selectedGroup, setSelectedGroup] = useState(null);
@@ -33,11 +27,9 @@ const HardwareAdmin = () => {
   const [editingId, setEditingId] = useState(null);
   const [itemForm, setItemForm] = useState({
     name: "",
-    price_per_unit: "",
+    price_per_m2: "",
   });
   const [confirm, setConfirm] = useState(null);
-
-  const groups = STATIC_HARDWARE_GROUPS;
 
   const groupItems = useMemo(
     () => (selectedGroup ? items.filter((i) => i.category === selectedGroup) : []),
@@ -53,21 +45,14 @@ const HardwareAdmin = () => {
     setModalOpen(true);
     setFormOpen(false);
     setEditingId(null);
-    setItemForm({
-      name: "",
-      price_per_unit: "",
-    });
+    setItemForm({ name: "", price_per_m2: "" });
   };
 
   const handleSaveItem = async () => {
     if (!selectedGroup || !itemForm.name.trim()) return;
 
-    const rawPpu = String(itemForm.price_per_unit ?? "").trim();
-    const pricePerUnit = parsePrice(rawPpu);
-    if (rawPpu && pricePerUnit === undefined) {
-      window.alert("Некорректная стоимость за ед. Пример: 1 260,00");
-      return;
-    }
+    const rawM2 = String(itemForm.price_per_m2 ?? "").trim();
+    const pricePerM2 = parsePrice(rawM2);
 
     const payload = {
       name: itemForm.name.trim(),
@@ -76,7 +61,7 @@ const HardwareAdmin = () => {
       is_active: true,
     };
 
-    if (pricePerUnit !== undefined) payload.price_per_unit = pricePerUnit;
+    if (pricePerM2 !== undefined) payload.price_per_m2 = pricePerM2;
 
     try {
       if (editingId) {
@@ -86,10 +71,7 @@ const HardwareAdmin = () => {
       }
       setFormOpen(false);
       setEditingId(null);
-      setItemForm({
-        name: "",
-        price_per_unit: "",
-      });
+      setItemForm({ name: "", price_per_m2: "" });
       await fetchItems();
     } catch (e) {
       console.error(e);
@@ -101,7 +83,7 @@ const HardwareAdmin = () => {
     setEditingId(row.id);
     setItemForm({
       name: row.name || "",
-      price_per_unit: row.price_per_unit != null && row.price_per_unit !== "" ? String(row.price_per_unit) : "",
+      price_per_m2: row.price_per_m2 != null && row.price_per_m2 !== "" ? String(row.price_per_m2) : "",
     });
     setFormOpen(true);
   };
@@ -123,7 +105,7 @@ const HardwareAdmin = () => {
 
   const columnsForGroup = useMemo(() => [
     { key: "name", label: "Наименование позиции" },
-    { key: "price", label: "Стоимость", className: "text-right", render: (r) => fmtPrice(r.price_per_unit) },
+    { key: "price_m2", label: "Стоимость за м²", className: "text-right", render: (r) => fmtPrice(r.price_per_m2) },
   ], []);
 
   const formFieldsForGroup = useMemo(() => (
@@ -131,10 +113,10 @@ const HardwareAdmin = () => {
       <FormField label="Наименование позиции" required>
         <SecureInput value={itemForm.name} onChange={(v) => setItemForm((p) => ({ ...p, name: v }))} />
       </FormField>
-      <FormField label="Стоимость">
+      <FormField label="Стоимость за м²">
         <AdminPriceInput
-          value={itemForm.price_per_unit}
-          onChange={(v) => setItemForm((p) => ({ ...p, price_per_unit: v }))}
+          value={itemForm.price_per_m2}
+          onChange={(v) => setItemForm((p) => ({ ...p, price_per_m2: v }))}
         />
       </FormField>
     </div>
@@ -144,19 +126,16 @@ const HardwareAdmin = () => {
     <div className="flex-1 min-w-0 w-full">
       <section className="glass-card p-6 space-y-6">
         <div>
-          <h2 className="text-xl font-semibold text-night-900">Фурнитура</h2>
-          <p className="text-sm text-night-400">Группы и позиции фурнитуры</p>
+          <h2 className="text-xl font-semibold text-night-900">Прочее материал</h2>
+          <p className="text-sm text-night-400">Рамка, стекло, пленка, фрезеровка</p>
         </div>
 
-        <div className="border-t border-night-200 pt-4">
-          <div className="text-sm font-semibold text-night-800 mb-2">Фурнитура</div>
-          <AdminGroupPlates
-            groups={STATIC_HARDWARE_GROUPS}
-            selectedGroup={selectedGroup}
-            readOnly
-            onSelectGroup={handleGroupClick}
-          />
-        </div>
+        <AdminGroupPlates
+          groups={OTHER_MATERIAL_GROUPS}
+          selectedGroup={selectedGroup}
+          readOnly
+          onSelectGroup={handleGroupClick}
+        />
 
         {loading ? <p className="text-sm text-night-500">Загрузка…</p> : null}
       </section>
@@ -177,20 +156,14 @@ const HardwareAdmin = () => {
         }}
         onStartAdd={() => {
           setEditingId(null);
-          setItemForm({
-            name: "",
-            price_per_unit: "",
-          });
+          setItemForm({ name: "", price_per_m2: "" });
           setFormOpen(true);
         }}
         onStartEdit={handleEditItem}
         onCancelForm={() => {
           setFormOpen(false);
           setEditingId(null);
-          setItemForm({
-            name: "",
-            price_per_unit: "",
-          });
+          setItemForm({ name: "", price_per_m2: "" });
         }}
         onSaveForm={handleSaveItem}
         onDeleteRow={handleDeleteItem}
@@ -206,4 +179,4 @@ const HardwareAdmin = () => {
   );
 };
 
-export default HardwareAdmin;
+export default OtherMaterialsAdmin;

@@ -8,6 +8,10 @@ const ColorBadge = ({ value, labelPrefix, colorData }) => {
       ? getThumbUrl(colorData.image_url, { w: 48, h: 48, q: 70, fit: "inside" })
       : null;
 
+    const fallbackStyle = colorData.hex
+      ? { backgroundColor: colorData.hex }
+      : { backgroundColor: "#e2e8f0" };
+
     return (
       <span className="inline-flex items-center gap-2 text-sm min-w-0">
         {labelPrefix && (
@@ -20,16 +24,16 @@ const ColorBadge = ({ value, labelPrefix, colorData }) => {
                 src={imageUrl}
                 alt={colorData.name}
                 className="h-5 w-5 rounded object-cover border border-night-200"
-                crossOrigin="anonymous"
                 onError={(e) => {
                   e.target.style.display = "none";
+                  e.target.nextElementSibling?.style?.removeProperty("display");
                 }}
               />
-            ) : (
-              <span
-                className="h-5 w-5 rounded-full border border-night-200 bg-night-100"
-              />
-            )}
+            ) : null}
+            <span
+              className="h-5 w-5 rounded-full border border-night-200 block"
+              style={imageUrl ? { ...fallbackStyle, display: "none" } : fallbackStyle}
+            />
           </span>
           <span className="font-medium text-night-900 truncate max-w-[180px]">{colorData.name}</span>
         </span>

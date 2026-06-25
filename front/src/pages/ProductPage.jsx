@@ -605,8 +605,14 @@ const ProductPage = () => {
                     </div>
 
                     <div className="space-y-2">
-                      <div className="text-night-500 text-sm">
+                      <div className="text-night-500 text-sm flex items-center gap-2">
                         Выбран цвет: <span className="text-night-900 font-medium">{selectedColorLabel || "—"}</span>
+                        {item?.primary_color && (
+                          <ColorBadge value={selectedColorLabel} colorData={item.primary_color} labelPrefix="" />
+                        )}
+                        {item?.secondary_color && (
+                          <ColorBadge value="" colorData={item.secondary_color} labelPrefix="Доп:" />
+                        )}
                       </div>
                       <div className="relative overflow-hidden">
                         <button
@@ -698,32 +704,6 @@ const ProductPage = () => {
                   </div>
                 );
               })()}
-            </div>
-          )}
-
-          {(item.length_mm || item.depth_mm || item.height_mm) && (
-            <div className="glass-card p-4">
-              <div className="space-y-4">
-                {(item.length_mm || item.depth_mm || item.height_mm) && (
-                  <div>
-                    <div className="text-xs font-semibold text-night-500 uppercase tracking-wide mb-2">Габариты</div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <span className="text-night-500 text-xs block mb-1">Длина</span>
-                        <span className="font-semibold text-night-900">{item.length_mm || "—"} мм</span>
-                      </div>
-                      <div>
-                        <span className="text-night-500 text-xs block mb-1">Глубина</span>
-                        <span className="font-semibold text-night-900">{item.depth_mm || "—"} мм</span>
-                      </div>
-                      <div>
-                        <span className="text-night-500 text-xs block mb-1">Высота</span>
-                        <span className="font-semibold text-night-900">{item.height_mm || "—"} мм</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           )}
         </div>

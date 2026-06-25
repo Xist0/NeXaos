@@ -2,7 +2,17 @@
   "permissions": {
     "allow": [
       "Agent(Explore)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(type *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(npm start)",
+      "Bash(curl *)",
+      "Bash(timeout *)",
+      "Bash(netstat *)",
+      "Bash(findstr *)",
+      "Bash(powershell *)",
+      "Bash(del *)"
     ]
   },
   "$version": 4

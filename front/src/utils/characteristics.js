@@ -1,6 +1,7 @@
 import {
   PRODUCT_CHARACTERISTIC_FIELDS,
   PRODUCT_CHARACTERISTIC_SECTIONS,
+  CALCULATION_ONLY_KEYS,
 } from "../constants/productCharacteristics";
 
 const LABEL_BY_KEY = Object.fromEntries(
@@ -139,6 +140,7 @@ export const characteristicsToDisplayRows = (apiValue, catalogSections = null, f
   for (const section of PRODUCT_CHARACTERISTIC_SECTIONS) {
     for (const rowKeys of section.rows) {
       for (const key of rowKeys) {
+        if (CALCULATION_ONLY_KEYS.includes(key)) continue;
         const def = PRODUCT_CHARACTERISTIC_FIELDS[key];
         if (!def) continue;
         const parsed = parseCharacteristicField(source[key]);

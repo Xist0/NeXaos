@@ -110,7 +110,7 @@ const DrawerTypesMultiSelect = ({
         )}
 
         {selected.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[104px] overflow-y-auto pr-1">
             {selected.map((item) => (
               <div key={item.type} className="flex items-center gap-2 text-xs">
                 <span className="flex-1 text-night-700 truncate">{item.type}</span>

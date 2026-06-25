@@ -38,7 +38,7 @@ export const sheetAreaM2 = (lengthMm, widthMm) => {
   const l = Number(lengthMm);
   const w = Number(widthMm);
   if (!l || !w) return null;
-  return Math.round(((l * w) / 1_000_000) * 1000) / 1000;
+  return Math.ceil(((l * w) / 1_000_000) * 1000) / 1000;
 };
 
 export const loadStoredGroups = (key) => {

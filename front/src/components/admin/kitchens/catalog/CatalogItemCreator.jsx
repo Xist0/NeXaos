@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FaArrowLeft, FaCamera, FaCheckCircle, FaClipboardList, FaCog, FaDollarSign, FaSave, FaSpinner } from "react-icons/fa";
 import CatalogItemCharacteristicsForm from "../../CatalogItemCharacteristicsForm";
-import useCatalogParameters from "../../../../hooks/useCatalogParameters";
+import useCatalogParameters, { invalidateCatalogParametersCache } from "../../../../hooks/useCatalogParameters";
+import useMaterialsForSelect from "../../../../hooks/useMaterialsForSelect";
 import {
   characteristicsFromApi,
   createEmptyCharacteristicsForm,
   getCharacteristicDimensions,
   mergeEntityDimensionsIntoCharacteristics,
   normalizeCharacteristicsForSave,
+  parseCharacteristicField,
 } from "../../../../utils/characteristics";
 import SecureButton from "../../../ui/SecureButton";
 import SecureInput from "../../../ui/SecureInput";
@@ -70,10 +72,24 @@ const resolveFormDimensions = (form) => {
 const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplicateFromId = null, submitLabel = "Сохранить", fixedValues = null, title = "", onDone }) => {
   const { get, post, put } = useApi();
   const logger = useLogger();
-  const { templatesByField, fieldLabels, loading: catalogLoading } = useCatalogParameters(get);
+  const { sections, templatesByField, fieldLabels, loading: catalogLoading, reload: reloadCatalog } = useCatalogParameters(get);
+  const { materials: materialsData } = useMaterialsForSelect(get);
+  const hardwareItems = useMemo(() => materialsData.hardwareItems || [], [materialsData.hardwareItems]);
+
+  const [hardwareMatrix, setHardwareMatrix] = useState({});
+
+  const fasteningItems = useMemo(() => {
+    return (hardwareItems || [])
+      .filter((item) => String(item.category || "").trim() === "Крепежная фурнитура")
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
+  }, [hardwareItems]);
 
   const getRef = useRef(get);
   const loggerRef = useRef(logger);
+  const postRef = useRef(post);
+  const reloadCatalogRef = useRef(reloadCatalog);
+  const sectionsRef = useRef(sections);
+  const templatesByFieldRef = useRef(templatesByField);
 
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(1);
@@ -89,6 +105,8 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
   const [itemId, setItemId] = useState(initialCatalogItemId);
   const createLockRef = useRef(false);
+
+  const [fieldBreakdown, setFieldBreakdown] = useState({});
 
   const [form, setForm] = useState({
     baseSku: "",
@@ -110,7 +128,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
     if (!Number.isFinite(Number(price)) || Number(price) <= 0) return;
     setForm((prev) => {
       if (String(prev.final_price || "").trim()) return prev;
-      return { ...prev, final_price: String(Math.round(price)) };
+      return { ...prev, final_price: String(Math.ceil(price)) };
     });
   }, []);
 
@@ -123,7 +141,14 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
   useEffect(() => {
     getRef.current = get;
     loggerRef.current = logger;
-  }, [get, logger]);
+    postRef.current = post;
+    reloadCatalogRef.current = reloadCatalog;
+  }, [get, logger, post, reloadCatalog]);
+
+  useEffect(() => {
+    sectionsRef.current = sections;
+    templatesByFieldRef.current = templatesByField;
+  }, [sections, templatesByField]);
 
   useEffect(() => {
     const loadRefs = async () => {
@@ -164,6 +189,56 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
     loadRefs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * After saving a catalog item, automatically POST any characteristic values
+   * that are NOT already in product_parameter_value_templates, so they appear
+   * in future suggestion lists.
+   */
+  const autoAddNewTemplateValues = useCallback(async (characteristics) => {
+    const secs = sectionsRef.current || [];
+    const tmpl = templatesByFieldRef.current || {};
+    const fieldToParamId = {};
+    for (const section of secs) {
+      for (const field of section.fields || []) {
+        if (field.parameterId && field.key) {
+          fieldToParamId[field.key] = field.parameterId;
+        }
+      }
+    }
+
+    const newValues = [];
+    for (const [fieldKey, raw] of Object.entries(characteristics || {})) {
+      const parsed = parseCharacteristicField(raw);
+      const value = String(parsed.value ?? "").trim();
+      if (!value) continue;
+
+      const existingValues = tmpl[fieldKey] || [];
+      if (existingValues.some((v) => String(v ?? "").trim().toLowerCase() === value.toLowerCase())) continue;
+
+      const parameterId = fieldToParamId[fieldKey];
+      if (!parameterId) continue;
+
+      newValues.push({ parameter_id: parameterId, value });
+    }
+
+    if (newValues.length === 0) return;
+
+    for (const entry of newValues) {
+      try {
+        await postRef.current("/product-parameter-value-templates", entry);
+      } catch (_) {
+        // Value might already exist (race condition / duplicate), ignore
+      }
+    }
+
+    invalidateCatalogParametersCache();
+    try {
+      await reloadCatalogRef.current?.();
+    } catch (_) {
+      // Reload is non-critical
+    }
   }, []);
 
   const canProceedBase = useCallback(() => {
@@ -242,6 +317,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       };
 
       await put(`/catalog-items/${itemId}`, payload);
+      await autoAddNewTemplateValues(form.characteristics);
       loggerRef.current?.info("Сохранено");
       onDone?.();
     } catch (e) {
@@ -451,6 +527,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       };
 
       await put(`/catalog-items/${itemId}`, payload);
+      await autoAddNewTemplateValues(form.characteristics);
       onDone?.();
 
       setItemId(null);
@@ -627,6 +704,16 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
 
       {step === 3 && (
         <div className="glass-card p-6 space-y-6">
+          {(() => {
+            const currentProductType = parseCharacteristicField(form.characteristics.product_type);
+            const autoName = String(form.name || "").trim();
+            if (!String(currentProductType.value).trim() && autoName) {
+              const chars = { ...form.characteristics };
+              chars.product_type = { ...currentProductType, value: autoName };
+              setForm((p) => ({ ...p, characteristics: chars }));
+            }
+            return null;
+          })()}
           {catalogLoading ? (
             <div className="text-sm text-night-500 flex items-center gap-2">
               <FaSpinner className="animate-spin" /> Загружаем параметры каталога…
@@ -638,8 +725,15 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
               templatesByField={templatesByField}
               fieldLabels={fieldLabels}
               colors={referenceData.colors}
+              hardwareItems={hardwareItems}
+              hardwareMatrix={hardwareMatrix}
+              onHardwareMatrixChange={setHardwareMatrix}
+              fasteningItems={fasteningItems}
+              materialsBySourceType={materialsData.bySourceType || {}}
               post={post}
               onPriceCalculated={handlePriceCalculated}
+              onFieldBreakdown={(fb) => setFieldBreakdown(fb)}
+              fieldBreakdown={fieldBreakdown}
             />
           )}
           <div className="flex justify-between pt-4 border-t border-night-200">

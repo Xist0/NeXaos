@@ -5,12 +5,13 @@ import { FaPlus, FaSave, FaTimes } from "react-icons/fa";
 import { LuPencil } from "react-icons/lu";
 
 /**
- * Список групп плашками: Добавить / Редактировать, удаление крестиком справа.
+ * Список групп плашками. readOnly — скрывает кнопки добавления/редактирования и крестик удаления.
  */
 const AdminGroupPlates = ({
   groups = [],
   selectedGroup = null,
   editMode = false,
+  readOnly = false,
   panelMode = null,
   panelValue = "",
   onPanelValueChange,
@@ -22,21 +23,23 @@ const AdminGroupPlates = ({
   onRequestDeleteGroup,
 }) => (
   <div className="space-y-4">
-    <div className="flex flex-wrap gap-2">
-      <SecureButton type="button" onClick={onStartAdd} className="px-4 py-2 text-sm flex items-center gap-2">
-        <FaPlus /> Добавить
-      </SecureButton>
-      <SecureButton
-        type="button"
-        variant={editMode ? "primary" : "outline"}
-        onClick={onToggleEdit}
-        className="px-4 py-2 text-sm flex items-center gap-2"
-      >
-        <LuPencil size={14} /> Редактировать
-      </SecureButton>
-    </div>
+    {!readOnly && (
+      <div className="flex flex-wrap gap-2">
+        <SecureButton type="button" onClick={onStartAdd} className="px-4 py-2 text-sm flex items-center gap-2">
+          <FaPlus /> Добавить
+        </SecureButton>
+        <SecureButton
+          type="button"
+          variant={editMode ? "primary" : "outline"}
+          onClick={onToggleEdit}
+          className="px-4 py-2 text-sm flex items-center gap-2"
+        >
+          <LuPencil size={14} /> Редактировать
+        </SecureButton>
+      </div>
+    )}
 
-    {panelMode ? (
+    {!readOnly && panelMode ? (
       <div className="rounded-xl border border-night-200 bg-night-50/80 p-4 space-y-3">
         <div className="text-sm font-semibold text-night-800">
           {panelMode === "add" ? "Новая группа" : "Редактирование группы"}
@@ -59,7 +62,7 @@ const AdminGroupPlates = ({
     ) : null}
 
     {groups.length === 0 ? (
-      <p className="text-sm text-night-500">Группы не добавлены. Нажмите «Добавить».</p>
+      <p className="text-sm text-night-500">Группы не добавлены.</p>
     ) : (
       <div className="flex flex-col gap-2">
         {groups.map((group) => {
@@ -79,7 +82,7 @@ const AdminGroupPlates = ({
               >
                 {group}
               </button>
-              {editMode ? (
+              {!readOnly && editMode ? (
                 <button
                   type="button"
                   onClick={(e) => {

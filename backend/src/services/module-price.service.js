@@ -8,7 +8,7 @@ const loadCalculationReferences = async () => {
        FROM sheet_materials WHERE is_active IS NOT FALSE`
     ),
     query(
-      `SELECT name, sku, price_per_unit, category
+      `SELECT id, name, sku, price_per_unit, category
        FROM hardware_items_extended WHERE is_active IS NOT FALSE`
     ),
     query(`SELECT name, numeric_value, value FROM calculation_parameters`),
@@ -34,14 +34,18 @@ const loadCalculationReferences = async () => {
   for (const row of coeffsRes.rows || []) {
     const name = String(row.name || "").trim().toLowerCase();
     const num = Number(row.numeric_value);
-    if (name.includes("общий") || name.includes("коэф. общий")) coeffMap.general = num;
-    if (name.includes("плитн")) coeffMap.sheet = num;
-    if (name.includes("кромк")) coeffMap.edge = num;
+    if (name.includes("добавочн") && name.includes("плитн")) coeffMap.addSheet = num;
+    else if (name.includes("добавочн") && name.includes("кромк")) coeffMap.addEdge = num;
+    else if (name.includes("общий") || name.includes("коэф. общий")) coeffMap.general = num;
+    else if (name.includes("плитн")) coeffMap.sheet = num;
+    else if (name.includes("кромк")) coeffMap.edge = num;
   }
 
   if (!coeffMap.general) coeffMap.general = 2.2;
   if (!coeffMap.sheet) coeffMap.sheet = 1.2;
   if (!coeffMap.edge) coeffMap.edge = 1.15;
+  if (!coeffMap.addSheet) coeffMap.addSheet = 0;
+  if (!coeffMap.addEdge) coeffMap.addEdge = 0;
 
   const edgePricePerM = linearRes.rows?.[0]?.edge_price_per_m || null;
 

@@ -31,14 +31,35 @@ const calculateCountertop = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Flatten characteristics: if values are {value, visible} objects,
+ * extract plain string/number values for the calculator.
+ */
+const flattenCharacteristics = (chars) => {
+  if (!chars || typeof chars !== "object" || Array.isArray(chars)) return chars;
+  const flat = {};
+  for (const [key, raw] of Object.entries(chars)) {
+    if (raw && typeof raw === "object" && !Array.isArray(raw) && ("value" in raw)) {
+      flat[key] = raw.value === null || raw.value === undefined ? "" : String(raw.value);
+    } else {
+      flat[key] = raw;
+    }
+  }
+  return flat;
+};
+
+/**
  * Рассчитать стоимость модуля по параметрам (логика Excel)
  * POST /api/modules/calculate-price
  */
 const calculatePrice = asyncHandler(async (req, res) => {
   const modulePriceService = require("../services/module-price.service");
-  const result = await modulePriceService.calculatePrice(req.body || {});
+  const body = req.body || {};
+  if (body.characteristics) {
+    body.characteristics = flattenCharacteristics(body.characteristics);
+  }
+  const result = await modulePriceService.calculatePrice(body);
 
-  logger.info("Выполнен расчёт стоимости модуля", {
+  logger.debug("Выполнен расчёт стоимости модуля", {
     price: result.price,
     user: req.user?.id,
   });

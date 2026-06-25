@@ -13,11 +13,15 @@ import {
 } from "react-icons/fa";
 import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
 import useCatalogParameters from "../../../../hooks/useCatalogParameters";
+import useMaterialsForSelect from "../../../../hooks/useMaterialsForSelect";
 import {
   characteristicsFromApi,
   createEmptyCharacteristicsForm,
   normalizeCharacteristicsForSave,
+  parseCharacteristicField,
 } from "../../../../utils/characteristics";
+import { MATERIAL_SELECT_SOURCE_TYPES, colorDisplayValue } from "../../../../constants/productCharacteristics";
+import ModuleCalculationTables from "./ModuleCalculationTables";
 import SecureButton from "../../../ui/SecureButton";
 import SecureInput from "../../../ui/SecureInput";
 import SmallButton from "../../ui/SmallButton";
@@ -131,9 +135,9 @@ const ModuleCreator = ({
     name: "",
     short_desc: "",
 
-    length_mm: "800",
-    depth_mm: "580",
-    height_mm: "820",
+    length_mm: "",
+    depth_mm: "",
+    height_mm: "",
 
     facade_color: "",
     corpus_color: "",
@@ -149,6 +153,10 @@ const ModuleCreator = ({
 
   const [selectedParameters, setSelectedParameters] = useState([]);
   const [selectedParameterCategories, setSelectedParameterCategories] = useState([]);
+  const [calculatedPrice, setCalculatedPrice] = useState(null);
+
+  const [fieldBreakdown, setFieldBreakdown] = useState({});
+  const [hardwareMatrix, setHardwareMatrix] = useState({});
 
   const [referenceData, setReferenceData] = useState({
     baseSkus: [],
@@ -353,6 +361,10 @@ const ModuleCreator = ({
 
     setIsActive(!!data.is_active);
 
+    if (data.hardware_matrix && typeof data.hardware_matrix === "object" && !Array.isArray(data.hardware_matrix)) {
+      setHardwareMatrix(data.hardware_matrix);
+    }
+
     const params = Array.isArray(data.parameters) ? data.parameters : [];
     setSelectedParameters(
       params
@@ -424,7 +436,7 @@ const ModuleCreator = ({
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url || null,
 
-        characteristics: normalizeCharacteristicsForSave(form.characteristics),
+        characteristics: memoizedCharacteristics,
 
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
@@ -442,6 +454,7 @@ const ModuleCreator = ({
 
         final_price: isActive ? toOptionalNumber(form.final_price) : toOptionalNumber(form.final_price) ?? 0,
         price: isActive ? toOptionalNumber(form.final_price) : toOptionalNumber(form.final_price) ?? 0,
+        hardware_matrix: hardwareMatrix || {},
         is_active: !!isActive,
 
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
@@ -567,6 +580,26 @@ const ModuleCreator = ({
   }, []);
 
   const { sections: catalogSections, templatesByField, fieldLabels, allFieldKeys } = useCatalogParameters(get);
+  const { materials: materialsData, getItemsForField } = useMaterialsForSelect(get);
+
+  const materialsBySourceType = useMemo(() => {
+    const map = {};
+    for (const [, value] of Object.entries(MATERIAL_SELECT_SOURCE_TYPES)) {
+      map[value] = getItemsForField(value);
+    }
+    return map;
+  }, [materialsData, getItemsForField]);
+
+  const fasteningItems = useMemo(() => {
+    return (materialsBySourceType.hardware || [])
+      .filter((item) => String(item.category || "").trim() === "Крепежная фурнитура")
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
+  }, [materialsBySourceType.hardware]);
+
+  const memoizedCharacteristics = useMemo(
+    () => normalizeCharacteristicsForSave(form.characteristics),
+    [form.characteristics]
+  );
 
   useEffect(() => {
     if (!allFieldKeys?.length) return;
@@ -647,14 +680,14 @@ const ModuleCreator = ({
 
     setForm((prev) => {
       if (Number(prev.description_id) === Number(baseSku.id) && prev.baseSku === baseSku.code) return prev;
-      const initialSku = buildSku({ baseSku: baseSku.code, length_mm: prev.length_mm || 800 });
+      const initialSku = buildSku({ baseSku: baseSku.code, length_mm: prev.length_mm || "" });
       return {
         ...prev,
         baseSku: baseSku.code,
         description_id: baseSku.id,
         module_category_id: String(fixedModuleCategoryId || baseSku.module_category_id || prev.module_category_id || ""),
         sku: prev.sku || initialSku,
-        name: prev.name || `${baseSku.name} ${prev.length_mm || 800}мм`,
+        name: prev.name || `${baseSku.name}`,
       };
     });
     if (fixedModuleCategoryId && fixedDescriptionId && !initialModuleId && !duplicateFromId) {
@@ -663,7 +696,7 @@ const ModuleCreator = ({
   }, [fixedDescriptionId, fixedModuleCategoryId, referenceData.isLoaded, referenceData.baseSkus, initialModuleId, duplicateFromId, buildSku]);
 
   const handleTypeSelect = (baseSku) => {
-    const initialSku = buildSku({ baseSku: baseSku.code, length_mm: 800 });
+    const initialSku = buildSku({ baseSku: baseSku.code, length_mm: "" });
 
     const categories = Array.isArray(referenceData.moduleCategories) ? referenceData.moduleCategories : [];
     const skuPrefix = String(baseSku.code || "").trim().toUpperCase();
@@ -675,21 +708,29 @@ const ModuleCreator = ({
           return skuPrefix.startsWith(prefix);
         })?.id;
 
-    setForm((prev) => ({
-      ...prev,
-      baseSku: baseSku.code,
-      description_id: baseSku.id,
-      module_category_id:
-        prev.module_category_id ||
-        inferredCategoryId ||
-        baseSku.module_category_id ||
-        prev.module_category_id,
-      sku: initialSku,
-      name: `${baseSku.name} 800мм`,
-      length_mm: "800",
-      depth_mm: "580",
-      height_mm: "820"
-    }));
+    setForm((prev) => {
+      const next = {
+        ...prev,
+        baseSku: baseSku.code,
+        description_id: baseSku.id,
+        module_category_id:
+          prev.module_category_id ||
+          inferredCategoryId ||
+          baseSku.module_category_id ||
+          prev.module_category_id,
+        sku: initialSku,
+        name: `${baseSku.name}`,
+        length_mm: "",
+        depth_mm: "",
+        height_mm: ""
+      };
+      // Auto-fill product_type from baseSKU name
+      const chars = { ...prev.characteristics };
+      const currentProductType = parseCharacteristicField(chars.product_type);
+      chars.product_type = { ...currentProductType, value: baseSku.name || baseSku.code };
+      next.characteristics = chars;
+      return next;
+    });
     setStep(2);
   };
 
@@ -707,9 +748,15 @@ const ModuleCreator = ({
 
   const handleFacadeColorSelect = (colorCode) => {
     const found = (referenceData.colorsFacade || []).find((c) => (c.code || c.sku) === colorCode) || null;
+    const displayName = found ? colorDisplayValue(found) : colorCode;
     setForm((prev) => {
+      const chars = { ...prev.characteristics };
+      const facadeChar = parseCharacteristicField(chars.facade_color);
+      chars.facade_color = { ...facadeChar, value: displayName };
+
       const next = {
         ...prev,
+        characteristics: chars,
         facade_color: colorCode,
         primary_color_id: found?.id != null ? String(found.id) : prev.primary_color_id,
       };
@@ -721,11 +768,19 @@ const ModuleCreator = ({
   const handleCorpusColorSelect = (colorCode) => {
     if (!form.facade_color) return;
     const found = (referenceData.colorsCorpus || []).find((c) => (c.code || c.sku) === colorCode) || null;
-    setForm((prev) => ({
-      ...prev,
-      corpus_color: colorCode,
-      secondary_color_id: found?.id != null ? String(found.id) : prev.secondary_color_id,
-    }));
+    const displayName = found ? colorDisplayValue(found) : colorCode;
+    setForm((prev) => {
+      const chars = { ...prev.characteristics };
+      const corpusChar = parseCharacteristicField(chars.corpus_color);
+      chars.corpus_color = { ...corpusChar, value: displayName };
+
+      return {
+        ...prev,
+        characteristics: chars,
+        corpus_color: colorCode,
+        secondary_color_id: found?.id != null ? String(found.id) : prev.secondary_color_id,
+      };
+    });
   };
 
   // ВАЖНО: создаем модуль сразу перед шагом "Фото", чтобы получить числовой ID для images.
@@ -749,7 +804,7 @@ const ModuleCreator = ({
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url || null,
 
-        characteristics: normalizeCharacteristicsForSave(form.characteristics),
+        characteristics: memoizedCharacteristics,
 
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
@@ -772,6 +827,7 @@ const ModuleCreator = ({
 
         // чтобы модуль не светился до финального шага
         is_active: false,
+        hardware_matrix: hardwareMatrix || {},
 
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
         parameterCategories: selectedParameterCategories.map((id) => ({ category_id: id })),
@@ -832,7 +888,7 @@ const ModuleCreator = ({
         short_desc: form.short_desc ? String(form.short_desc) : null,
         preview_url: form.preview_url,
 
-        characteristics: normalizeCharacteristicsForSave(form.characteristics),
+        characteristics: memoizedCharacteristics,
 
         base_sku: toOptionalString(form.baseSku),
         description_id: toOptionalInt(form.description_id),
@@ -850,6 +906,7 @@ const ModuleCreator = ({
 
         final_price: toOptionalNumber(form.final_price),
         price: toOptionalNumber(form.final_price),
+        hardware_matrix: hardwareMatrix || {},
         is_active: true,
 
         parameters: selectedParameters.map((x) => ({ parameter_id: x.parameterId, quantity: x.quantity, value: x.value })),
@@ -871,9 +928,9 @@ const ModuleCreator = ({
         sku: "",
         name: "",
         short_desc: "",
-        length_mm: "800",
-        depth_mm: "580",
-        height_mm: "820",
+        length_mm: "",
+        depth_mm: "",
+        height_mm: "",
         facade_color: "",
         corpus_color: "",
         primary_color_id: "",
@@ -884,6 +941,8 @@ const ModuleCreator = ({
       setSelectedParameters([]);
       setSelectedParameterCategories([]);
       setModuleId(null);
+      setHardwareMatrix({});
+      setFieldBreakdown({});
       setStep(1);
     } catch (e) {
       logger.error("Ошибка сохранения модуля:", e?.response?.data || e?.message || e);
@@ -904,9 +963,9 @@ const ModuleCreator = ({
       sku: "",
       name: "",
       short_desc: "",
-      length_mm: "800",
-      depth_mm: "580",
-      height_mm: "820",
+      length_mm: "",
+      depth_mm: "",
+      height_mm: "",
       facade_color: "",
       corpus_color: "",
       primary_color_id: "",
@@ -917,6 +976,8 @@ const ModuleCreator = ({
       characteristics: createEmptyCharacteristicsForm(),
     });
     setModuleId(null);
+    setHardwareMatrix({});
+    setFieldBreakdown({});
     setStep(1);
   };
 
@@ -1145,6 +1206,39 @@ const ModuleCreator = ({
                 if (c) handleCorpusColorSelect(c.code || c.sku);
               }}
               colorPickerRef={colorPickerRef}
+              materialsBySourceType={materialsBySourceType}
+              fieldBreakdown={fieldBreakdown}
+            />
+            <ModuleCalculationTables
+              form={form}
+              characteristics={memoizedCharacteristics}
+              post={post}
+              onAreasCalculated={(areas) => {
+                setForm((prev) => {
+                  const chars = { ...prev.characteristics };
+                  let changed = false;
+                  for (const [key, val] of Object.entries(areas)) {
+                    const current = parseCharacteristicField(chars[key]);
+                    if (current.value !== val) {
+                      chars[key] = { ...current, value: val };
+                      changed = true;
+                    }
+                  }
+                  if (!changed) return prev;
+                  return { ...prev, characteristics: chars };
+                });
+              }}
+              onFieldBreakdown={(fb) => setFieldBreakdown(fb)}
+              onPriceCalculated={(price) => {
+                setCalculatedPrice(price);
+                setForm((prev) => {
+                  if (prev.final_price) return prev;
+                  return { ...prev, final_price: String(price) };
+                });
+              }}
+              hardwareMatrix={hardwareMatrix}
+              onHardwareMatrixChange={setHardwareMatrix}
+              fasteningItems={fasteningItems}
             />
             <div className="flex justify-between pt-4 border-t">
               <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
@@ -1248,6 +1342,21 @@ const ModuleCreator = ({
                 <div className="text-right text-2xl font-bold text-accent">
                   {formatCurrency(Number(form.final_price || 0))}
                 </div>
+                {calculatedPrice != null && Number(form.final_price || 0) !== calculatedPrice ? (
+                  <div className="flex items-center gap-3 justify-end">
+                    <span className="text-xs text-night-500">
+                      Расчётная цена: {formatCurrency(calculatedPrice)}
+                    </span>
+                    <SecureButton
+                      type="button"
+                      variant="outline"
+                      onClick={() => setForm((prev) => ({ ...prev, final_price: String(calculatedPrice) }))}
+                      className="px-3 py-1.5 text-xs flex items-center gap-1"
+                    >
+                      <FaCalculator /> Применить расчётную цену
+                    </SecureButton>
+                  </div>
+                ) : null}
                 {!form.preview_url && (
                   <div className="p-4 rounded-2xl bg-yellow-50 border border-yellow-200 text-yellow-800">
                     Сначала выбери превью на шаге “Фото”, иначе сохранение будет заблокировано.

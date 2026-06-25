@@ -9,6 +9,16 @@ import useApi from "../../hooks/useApi";
 import { transliterate } from "../../utils/translit";
 import { invalidateCatalogParametersCache } from "../../hooks/useCatalogParameters";
 
+const SECTION_ORDER = [
+  "Общие параметры",
+  "Основные характеристики",
+  "Дополнительная информация",
+];
+const sectionSortKey = (name) => {
+  const idx = SECTION_ORDER.indexOf(String(name || "").trim());
+  return idx >= 0 ? idx : SECTION_ORDER.length;
+};
+
 const LEVEL = { CATEGORIES: "categories", PARAMETERS: "parameters", VALUES: "values" };
 
 const CatalogParametersHierarchyAdmin = () => {
@@ -89,7 +99,7 @@ const CatalogParametersHierarchyAdmin = () => {
   const categoryPlates = useMemo(
     () =>
       [...categories]
-        .sort((a, b) => String(a.name).localeCompare(String(b.name), "ru"))
+        .sort((a, b) => sectionSortKey(a.name) - sectionSortKey(b.name) || String(a.name).localeCompare(String(b.name), "ru"))
         .map((c) => ({
           id: c.id,
           label: c.name,

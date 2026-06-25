@@ -21,6 +21,7 @@ const CharacteristicCard = ({
   visible = true,
   suggestions = [],
   disabled = false,
+  extra = null,
 }) => (
   <div
     className={`rounded-xl border p-3 space-y-2 min-w-0 overflow-visible ${
@@ -28,7 +29,10 @@ const CharacteristicCard = ({
     }`}
   >
     <div className="flex items-center justify-between gap-2">
-      <div className="text-xs font-semibold text-night-800 leading-snug">{label}</div>
+      <div className="text-xs font-semibold text-night-800 leading-snug flex items-center">
+        {label}
+        {extra}
+      </div>
       <button
         type="button"
         onClick={() => onVisibilityChange?.(!visible)}

@@ -23,21 +23,37 @@ const SheetMaterialsAdmin = () => {
   const [form, setForm] = useState({
     category: "",
     name: "",
-    sheet_length_mm: "2800",
-    sheet_width_mm: "1220",
+    sheet_length_mm: "",
+    sheet_width_mm: "",
     price_per_sheet: "",
+    price_per_m2: "",
   });
 
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
 
-  const computedM2 = useMemo(
-    () => calcPricePerM2(form.price_per_sheet, form.sheet_length_mm, form.sheet_width_mm),
-    [form.price_per_sheet, form.sheet_length_mm, form.sheet_width_mm]
-  );
+  const M2_FACTOR = 5.796;
+
+  // Авто-расчёт м²: если есть размеры листа — по площади, иначе — цена/5.796
+  const computedM2 = useMemo(() => {
+    const fromDims = calcPricePerM2(form.price_per_sheet, form.sheet_length_mm, form.sheet_width_mm);
+    if (fromDims != null) return fromDims;
+    const pps = Number(form.price_per_sheet);
+    if (Number.isFinite(pps) && pps > 0) {
+      return Math.ceil((pps / M2_FACTOR) * 100) / 100;
+    }
+    return null;
+  }, [form.price_per_sheet, form.sheet_length_mm, form.sheet_width_mm]);
 
   const area = useMemo(() => sheetAreaM2(form.sheet_length_mm, form.sheet_width_mm), [form.sheet_length_mm, form.sheet_width_mm]);
+
+  // При изменении цены за лист — всегда авто-заполнить м² по формуле D3/5.796
+  useEffect(() => {
+    if (computedM2 != null) {
+      setForm((p) => ({ ...p, price_per_m2: String(Math.round(computedM2 * 100) / 100) }));
+    }
+  }, [computedM2]);
 
   const filteredItems = useMemo(() => {
     let list = items.filter((i) => !isCountertopCategory(i.category));
@@ -53,7 +69,7 @@ const SheetMaterialsAdmin = () => {
   }, [items, search]);
 
   const resetForm = () => {
-    setForm({ category: "", name: "", sheet_length_mm: "2800", sheet_width_mm: "1220", price_per_sheet: "" });
+    setForm({ category: "", name: "", sheet_length_mm: "", sheet_width_mm: "", price_per_sheet: "", price_per_m2: "" });
     setEditingId(null);
     setFormOpen(false);
   };
@@ -64,7 +80,8 @@ const SheetMaterialsAdmin = () => {
       name: item.name || "",
       sheet_length_mm: item.sheet_length_mm != null ? String(item.sheet_length_mm) : "",
       sheet_width_mm: item.sheet_width_mm != null ? String(item.sheet_width_mm) : "",
-      price_per_sheet: item.price_per_sheet ?? "",
+      price_per_sheet: item.price_per_sheet != null ? String(item.price_per_sheet) : "",
+      price_per_m2: item.price_per_m2 != null ? String(item.price_per_m2) : "",
     });
     setEditingId(item.id);
     setFormOpen(true);
@@ -72,6 +89,8 @@ const SheetMaterialsAdmin = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
+    const pricePerSheet = parsePrice(form.price_per_sheet);
+    const pricePerM2 = parsePrice(form.price_per_m2);
     const payload = {
       name: form.name.trim(),
       category: form.category.trim() || undefined,
@@ -82,8 +101,8 @@ const SheetMaterialsAdmin = () => {
       }),
       sheet_length_mm: form.sheet_length_mm ? Number(form.sheet_length_mm) : undefined,
       sheet_width_mm: form.sheet_width_mm ? Number(form.sheet_width_mm) : undefined,
-      price_per_sheet: parsePrice(form.price_per_sheet),
-      price_per_m2: computedM2 ?? undefined,
+      price_per_sheet: pricePerSheet ?? undefined,
+      price_per_m2: pricePerM2 ?? (computedM2 ?? undefined),
       is_active: true,
     };
     try {
@@ -142,24 +161,29 @@ const SheetMaterialsAdmin = () => {
               {editingId ? "Редактирование" : "Новая позиция"}
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <FormField label="Материал">
+              <FormField label="Материал (категория)">
                 <SecureInput value={form.category} onChange={(v) => setForm((p) => ({ ...p, category: v }))} placeholder="AGT, EGGER…" />
               </FormField>
               <FormField label="Наименование позиции" required>
                 <SecureInput value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} />
               </FormField>
               <FormField label="Длина листа (мм)">
-                <SecureInput type="number" value={form.sheet_length_mm} onChange={(v) => setForm((p) => ({ ...p, sheet_length_mm: v }))} />
+                <SecureInput type="number" value={form.sheet_length_mm} onChange={(v) => setForm((p) => ({ ...p, sheet_length_mm: v }))} placeholder="Не обязательно" />
               </FormField>
               <FormField label="Ширина листа (мм)">
-                <SecureInput type="number" value={form.sheet_width_mm} onChange={(v) => setForm((p) => ({ ...p, sheet_width_mm: v }))} />
+                <SecureInput type="number" value={form.sheet_width_mm} onChange={(v) => setForm((p) => ({ ...p, sheet_width_mm: v }))} placeholder="Не обязательно" />
               </FormField>
-              <FormField label="Стоимость за ед.">
+              <FormField label="Стоимость за ед. (лист)">
                 <AdminPriceInput value={form.price_per_sheet} onChange={(v) => setForm((p) => ({ ...p, price_per_sheet: v }))} />
               </FormField>
               <FormField label="Стоимость за м²">
-                <SecureInput value={computedM2 != null ? String(computedM2) : ""} onChange={() => {}} disabled />
-                {area != null ? <p className="text-xs text-night-500 mt-1">Площадь листа: {area} м²</p> : null}
+                <AdminPriceInput value={form.price_per_m2} onChange={(v) => setForm((p) => ({ ...p, price_per_m2: v }))} />
+                {computedM2 != null ? (
+                  <p className="text-xs text-night-500 mt-1">
+                    Авто: {computedM2.toFixed(2)} ₽/м²
+                    {area != null ? ` (площадь листа: ${area} м²)` : ""}
+                  </p>
+                ) : null}
               </FormField>
             </div>
             <div className="flex gap-2">

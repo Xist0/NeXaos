@@ -16,7 +16,7 @@ const getById = asyncHandler(async (req, res) => {
 
     if (row.primary_color_id) {
       const { rows: primaryColorRows } = await query(
-        `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+        `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
         [row.primary_color_id]
       );
       if (primaryColorRows[0]) row.primary_color = primaryColorRows[0];
@@ -24,7 +24,7 @@ const getById = asyncHandler(async (req, res) => {
 
     if (row.secondary_color_id) {
       const { rows: secondaryColorRows } = await query(
-        `SELECT id, name, sku, image_url FROM colors WHERE id = $1`,
+        `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
         [row.secondary_color_id]
       );
       if (secondaryColorRows[0]) row.secondary_color = secondaryColorRows[0];

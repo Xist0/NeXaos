@@ -8,8 +8,21 @@ import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { parseCharacteristicField } from "../../utils/characteristics";
 import ColorSelectDropdown from "../ui/ColorSelectDropdown";
-import { ColorPickerField } from "../ui/ColorSelectPair";
 import FormSection from "../ui/FormSection";
+
+import { formatCurrency } from "../../utils/format";
+
+/** Semi-transparent price badge shown next to fields that have a calculated breakdown value. */
+const BreakdownPriceBadge = ({ amount }) => {
+  if (amount == null || amount === "" || !Number.isFinite(Number(amount))) return null;
+  const value = Number(amount);
+  if (value <= 0) return null;
+  return (
+    <span className="ml-2 px-2 py-0.5 rounded-md text-xs font-medium bg-accent/15 text-accent/70 whitespace-nowrap select-none">
+      {formatCurrency(value)}
+    </span>
+  );
+};
 
 const getColorDropdownProps = (colorRole) => {
   if (colorRole === "facade") {
@@ -25,12 +38,8 @@ const ProductColorCharacteristicsBlock = ({
   value,
   onChange,
   colors = [],
-  primaryColorId = "",
-  secondaryColorId = "",
-  onPrimaryColorChange,
-  onSecondaryColorChange,
   colorPickerRef,
-  showProductColor = true,
+  fieldBreakdown = {},
 }) => {
   const form = value && typeof value === "object" ? value : {};
   const hasColors = Array.isArray(colors) && colors.length > 0;
@@ -52,8 +61,8 @@ const ProductColorCharacteristicsBlock = ({
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [openPrimary, openSecondary, rootRef]);
 
-  const facadeColors = colors.filter((c) => c?.type === "facade");
-  const corpusColors = colors.filter((c) => c?.type === "corpus");
+  const facadeColors = colors.filter((c) => c?.type === "facade" || !c?.type);
+  const corpusColors = colors.filter((c) => c?.type === "corpus" || !c?.type);
   const universalColors = colors.filter((c) => !c?.type);
 
   const updateField = (fieldKey, patch) => {
@@ -62,22 +71,6 @@ const ProductColorCharacteristicsBlock = ({
       ...form,
       [fieldKey]: { ...current, ...patch },
     });
-  };
-
-  const handleProductPrimaryChange = (id) => {
-    onPrimaryColorChange?.(id);
-    const color = colors.find((c) => Number(c.id) === Number(id));
-    if (color) {
-      updateField("facade_color", { value: colorDisplayValue(color) });
-    }
-  };
-
-  const handleProductSecondaryChange = (id) => {
-    onSecondaryColorChange?.(id);
-    const color = colors.find((c) => Number(c.id) === Number(id));
-    if (color) {
-      updateField("corpus_color", { value: colorDisplayValue(color) });
-    }
   };
 
   return (
@@ -96,41 +89,6 @@ const ProductColorCharacteristicsBlock = ({
           </div>
         ) : (
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
-            {showProductColor ? (
-              <>
-                <ColorPickerField
-                  label="Основной цвет"
-                  open={openPrimary}
-                  setOpen={setOpenPrimary}
-                  closeOther={() => setOpenSecondary(false)}
-                  colors={colors}
-                  selectedId={primaryColorId}
-                  placeholder="Выберите цвет"
-                  onSelect={handleProductPrimaryChange}
-                  groups={[
-                    { title: "Основные цвета", colors: facadeColors, selectedClassName: "border-accent bg-accent/5", keyPrefix: "primary-facade" },
-                    { title: "Универсальные цвета", colors: universalColors, selectedClassName: "border-accent bg-accent/5", keyPrefix: "primary-universal" },
-                  ]}
-                  rootZ={openPrimary}
-                />
-                <ColorPickerField
-                  label="Доп. цвет (опционально)"
-                  open={openSecondary}
-                  setOpen={setOpenSecondary}
-                  closeOther={() => setOpenPrimary(false)}
-                  colors={colors}
-                  selectedId={secondaryColorId}
-                  placeholder="Выберите цвет"
-                  onSelect={handleProductSecondaryChange}
-                  groups={[
-                    { title: "Доп. цвета", colors: corpusColors, selectedClassName: "border-green-500 bg-green-50", keyPrefix: "secondary-corpus" },
-                    { title: "Универсальные цвета", colors: universalColors, selectedClassName: "border-green-500 bg-green-50", keyPrefix: "secondary-universal" },
-                  ]}
-                  rootZ={openSecondary}
-                />
-              </>
-            ) : null}
-
             {COLOR_CHARACTERISTIC_KEYS.map((fieldKey) => {
               const def = PRODUCT_CHARACTERISTIC_FIELDS[fieldKey];
               if (!def) return null;
@@ -148,7 +106,10 @@ const ProductColorCharacteristicsBlock = ({
                   )}
                 >
                   <div className="flex items-center justify-between gap-2 min-h-[20px]">
-                    <div className="text-xs font-semibold text-night-800 leading-snug">{def.label}</div>
+                    <div className="text-xs font-semibold text-night-800 leading-snug flex items-center">
+                      {def.label}
+                      <BreakdownPriceBadge amount={fieldBreakdown[fieldKey]} />
+                    </div>
                     <button
                       type="button"
                       onClick={() => updateField(fieldKey, { visible: !parsed.visible })}

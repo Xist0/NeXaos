@@ -27,7 +27,7 @@ const calcPricePerM2 = (pps, l, w) => {
   if (!pps || !l || !w) return null;
   const area = (l * w) / 1_000_000;
   if (area <= 0) return null;
-  return Math.round((pps / area) * 100) / 100;
+  return Math.ceil((pps / area) * 100) / 100;
 };
 
 const fmt = (v) => (v == null ? "—" : `${Number(v).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`);
