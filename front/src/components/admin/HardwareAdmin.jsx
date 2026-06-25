@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FaUpload } from "react-icons/fa";
 import SecureInput from "../ui/SecureInput";
 import FormField from "../ui/FormField";
 import AdminGroupPlates from "./shared/AdminGroupPlates";
@@ -7,7 +8,10 @@ import AdminItemsModal, { fmtPrice } from "./shared/AdminItemsModal";
 import AdminPriceInput from "./shared/AdminPriceInput";
 import { parsePrice } from "./shared/adminFormat";
 import { useAdminCrud } from "./shared/useAdminCrud";
+import apiClient from "../../services/apiClient";
+import useAuthStore from "../../store/authStore";
 import { buildMaterialSku } from "../../utils/translit";
+import clsx from "clsx";
 
 const API = "/api/hardware-extended";
 
@@ -36,6 +40,9 @@ const HardwareAdmin = () => {
     price_per_unit: "",
   });
   const [confirm, setConfirm] = useState(null);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvResult, setCsvResult] = useState(null);
+  const csvInputRef = useRef(null);
 
   const groups = STATIC_HARDWARE_GROUPS;
 
@@ -140,12 +147,83 @@ const HardwareAdmin = () => {
     </div>
   ), [itemForm]);
 
+  const handleCsvUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCsvImporting(true);
+    setCsvResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const token = useAuthStore.getState().accessToken;
+      const { data } = await apiClient.post("/hardware-extended/import-csv", formData, {
+        headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` },
+      });
+
+      setCsvResult(data);
+      await fetchItems();
+    } catch (err) {
+      setCsvResult({ error: err?.response?.data?.message || err?.message || "Ошибка импорта" });
+    } finally {
+      setCsvImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="flex-1 min-w-0 w-full">
       <section className="glass-card p-6 space-y-6">
         <div>
           <h2 className="text-xl font-semibold text-night-900">Фурнитура</h2>
           <p className="text-sm text-night-400">Группы и позиции фурнитуры</p>
+        </div>
+
+        {/* CSV-импорт */}
+        <div className="border border-night-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-semibold text-night-800">Импорт из CSV</div>
+              <div className="text-xs text-night-500">Загрузите файл .csv с колонками: Группа, Наименование, Стоимость. Позиции обновляются по наименованию.</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleCsvUpload}
+                disabled={csvImporting}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => csvInputRef.current?.click()}
+                disabled={csvImporting}
+                className={clsx(
+                  "flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors",
+                  "border border-accent bg-accent/5 text-accent hover:bg-accent/10",
+                  csvImporting && "opacity-60 cursor-not-allowed"
+                )}
+              >
+                <FaUpload className="text-xs" />
+                {csvImporting ? "Импорт…" : "Загрузить CSV"}
+              </button>
+            </div>
+          </div>
+
+          {csvResult && !csvResult.error ? (
+            <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+              <span className="font-semibold">Импорт завершён:</span>{" "}
+              обработано {csvResult.parsed}, создано {csvResult.created}, обновлено {csvResult.updated}, без изменений {csvResult.skipped}
+            </div>
+          ) : null}
+          {csvResult?.error ? (
+            <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+              {csvResult.error}
+            </div>
+          ) : null}
         </div>
 
         <div className="border-t border-night-200 pt-4">

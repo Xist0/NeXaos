@@ -17,6 +17,7 @@ const catalogItemController = require("../controllers/catalog-item.controller");
 const catalogController = require("../controllers/catalog.controller");
 const userController = require("../controllers/user.controller");
 const siteSettingsController = require("../controllers/site-settings.controller");
+const { importHardwareCsv } = require("../controllers/hardware-import.controller");
 
 const SENSITIVE_KEYS = new Set([
   "password",
@@ -440,5 +441,21 @@ router.delete("/kit-solutions/:id", authGuard, requireAdminOrManager, asyncHandl
 
 // POST /api/kit-solutions/:id/similar - найти похожие готовые решения
 router.post("/kit-solutions/:id/similar", optionalAuth, asyncHandler(kitSolutionController.findSimilar));
+
+// CSV-импорт фурнитуры
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === ".csv" || file.mimetype === "text/csv" || file.mimetype === "application/vnd.ms-excel") {
+      cb(null, true);
+    } else {
+      cb(new Error("Допускаются только CSV-файлы"), false);
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+router.post("/hardware-extended/import-csv", authGuard, requireAdmin, csvUpload.single("file"), asyncHandler(importHardwareCsv));
 
 module.exports = router;
