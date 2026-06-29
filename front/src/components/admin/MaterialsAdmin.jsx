@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import FormField from "../ui/FormField";
 import FormSelect from "../ui/FormSelect";
-import { FaPlus, FaSave, FaTimes } from "react-icons/fa";
+import { FaPlus, FaSave, FaTimes, FaUpload } from "react-icons/fa";
 import { LuPencil, LuTrash2 } from "react-icons/lu";
 import { buildMaterialSku } from "../../utils/translit";
 import clsx from "clsx";
+import useAuthStore from "../../store/authStore";
 
 const API = "/api/sheet-materials";
 
 const DEFAULT_CATEGORIES = [
+  { id: "Пиломатериал", label: "Пиломатериал" },
   { id: "ЛХДФ", label: "ЛХДФ" },
   { id: "EGGER", label: "EGGER" },
   { id: "AGT", label: "AGT" },
@@ -49,6 +51,9 @@ const MaterialsAdmin = () => {
   });
 
   const [form, setForm] = useState(emptyForm());
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvResult, setCsvResult] = useState(null);
+  const csvInputRef = useRef(null);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -69,6 +74,40 @@ const MaterialsAdmin = () => {
   }, []);
 
   useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const handleCsvUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCsvImporting(true);
+    setCsvResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const token = useAuthStore.getState().accessToken;
+      const res = await fetch("/api/sheet-materials/import-csv", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setCsvResult({ error: data?.message || "Ошибка импорта" });
+      } else {
+        setCsvResult(data);
+        await fetchItems();
+      }
+    } catch (err) {
+      setCsvResult({ error: err?.message || "Ошибка импорта" });
+    } finally {
+      setCsvImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  };
 
   const autoSku = useMemo(() => buildMaterialSku({
     category: form.category, name: form.name,
@@ -156,8 +195,27 @@ const MaterialsAdmin = () => {
             <h2 className="text-xl font-semibold text-night-900">Материалы</h2>
             <p className="text-sm text-night-400">{filteredItems.length} записей</p>
           </div>
-          <SecureInput value={search} onChange={setSearch} placeholder="Поиск…" className="max-w-xs" />
+          <div className="flex items-center gap-3">
+            <SecureInput value={search} onChange={setSearch} placeholder="Поиск…" className="max-w-xs" />
+
+            {/* CSV импорт */}
+            <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={handleCsvUpload} disabled={csvImporting} className="hidden" />
+            <button type="button" onClick={() => csvInputRef.current?.click()} disabled={csvImporting}
+              className={clsx("flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-xl transition-colors border border-accent bg-accent/5 text-accent hover:bg-accent/10", csvImporting && "opacity-60 cursor-not-allowed")}>
+              <FaUpload className="text-xs" /> {csvImporting ? "Импорт…" : "Загрузить CSV"}
+            </button>
+          </div>
         </div>
+
+        {csvResult && !csvResult.error ? (
+          <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+            <span className="font-semibold">Импорт завершён:</span>{" "}
+            обработано {csvResult.parsed}, листовых: создано {csvResult.sheetCreated}, обновлено {csvResult.sheetUpdated}, прочих: создано {csvResult.hwCreated}, обновлено {csvResult.hwUpdated}, без изменений {csvResult.skipped}
+          </div>
+        ) : null}
+        {csvResult?.error ? (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">{csvResult.error}</div>
+        ) : null}
 
         {/* Табы категорий */}
         <div className="flex flex-wrap gap-2 items-center">

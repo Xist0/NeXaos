@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { FaPlus, FaSave, FaTimes } from "react-icons/fa";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FaPlus, FaSave, FaTimes, FaUpload } from "react-icons/fa";
 import { LuPencil, LuTrash2 } from "react-icons/lu";
+import clsx from "clsx";
 import SecureButton from "../ui/SecureButton";
 import SecureInput from "../ui/SecureInput";
 import FormField from "../ui/FormField";
@@ -8,18 +9,59 @@ import AdminConfirmDialog from "./shared/AdminConfirmDialog";
 import { calcPricePerM2, fmtPrice, parsePrice, sheetAreaM2 } from "./shared/adminFormat";
 import AdminPriceInput from "./shared/AdminPriceInput";
 import { useAdminCrud } from "./shared/useAdminCrud";
+import apiClient from "../../services/apiClient";
+import useAuthStore from "../../store/authStore";
 import { buildMaterialSku } from "../../utils/translit";
 
 const API = "/api/sheet-materials";
 
 const isCountertopCategory = (cat) => cat && String(cat).startsWith("Столешница");
 
+const NON_SHEET_CATEGORIES = new Set(["Кромка", "Пиломатериал", "Рамка", "Стекло в рамку", "Пленка под фрезу", "Вид фрезы"]);
+
+const SUB_TABS = [
+  { id: "all", label: "Все" },
+  { id: "sheet", label: "Листовой" },
+  { id: "lumber", label: "Пиломатериал" },
+  { id: "edge", label: "Кромочный" },
+  { id: "other", label: "Прочее" },
+];
+
+const matchSubTab = (item, tabId) => {
+  const cat = item.category || "";
+  switch (tabId) {
+    case "all":
+      return !isCountertopCategory(cat);
+    case "sheet":
+      return !isCountertopCategory(cat) && !NON_SHEET_CATEGORIES.has(cat);
+    case "lumber":
+      return cat === "Пиломатериал";
+    case "edge":
+      return cat === "Кромка";
+    case "other":
+      return !isCountertopCategory(cat) && cat !== "Кромка" && cat !== "Пиломатериал" && (NON_SHEET_CATEGORIES.has(cat));
+    default:
+      return !isCountertopCategory(cat);
+  }
+};
+
+const SUB_TAB_CATEGORY_PRESET = {
+  sheet: "",
+  lumber: "Пиломатериал",
+  edge: "Кромка",
+  other: "Рамка",
+};
+
 const SheetMaterialsAdmin = () => {
   const { items, loading, fetchItems, createItem, updateItem, deleteItem } = useAdminCrud(API);
   const [search, setSearch] = useState("");
+  const [activeSubTab, setActiveSubTab] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [confirm, setConfirm] = useState(null);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvResult, setCsvResult] = useState(null);
+  const csvInputRef = useRef(null);
   const [form, setForm] = useState({
     category: "",
     name: "",
@@ -56,7 +98,7 @@ const SheetMaterialsAdmin = () => {
   }, [computedM2]);
 
   const filteredItems = useMemo(() => {
-    let list = items.filter((i) => !isCountertopCategory(i.category));
+    let list = items.filter((i) => matchSubTab(i, activeSubTab));
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -66,10 +108,11 @@ const SheetMaterialsAdmin = () => {
       );
     }
     return list;
-  }, [items, search]);
+  }, [items, search, activeSubTab]);
 
   const resetForm = () => {
-    setForm({ category: "", name: "", sheet_length_mm: "", sheet_width_mm: "", price_per_sheet: "", price_per_m2: "" });
+    const preset = activeSubTab !== "all" ? (SUB_TAB_CATEGORY_PRESET[activeSubTab] || "") : "";
+    setForm({ category: preset, name: "", sheet_length_mm: "", sheet_width_mm: "", price_per_sheet: "", price_per_m2: "" });
     setEditingId(null);
     setFormOpen(false);
   };
@@ -131,6 +174,28 @@ const SheetMaterialsAdmin = () => {
     });
   };
 
+  const handleCsvUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvImporting(true);
+    setCsvResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const token = useAuthStore.getState().accessToken;
+      const { data } = await apiClient.post("/sheet-materials/import-csv", formData, {
+        headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` },
+      });
+      setCsvResult(data);
+      await fetchItems();
+    } catch (err) {
+      setCsvResult({ error: err?.response?.data?.message || err?.message || "Ошибка импорта" });
+    } finally {
+      setCsvImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="flex-1 min-w-0 w-full">
       <section className="glass-card p-6 space-y-4">
@@ -139,8 +204,34 @@ const SheetMaterialsAdmin = () => {
             <h2 className="text-xl font-semibold text-night-900">Листовой материал</h2>
             <p className="text-sm text-night-400">{filteredItems.length} записей</p>
           </div>
-          <SecureInput value={search} onChange={setSearch} placeholder="Поиск…" className="max-w-xs" />
+          <div className="flex items-center gap-3">
+            <SecureInput value={search} onChange={setSearch} placeholder="Поиск…" className="max-w-xs" />
+            <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={handleCsvUpload} disabled={csvImporting} className="hidden" />
+            <button type="button" onClick={() => csvInputRef.current?.click()} disabled={csvImporting}
+              className={clsx("flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-xl transition-colors border border-accent bg-accent/5 text-accent hover:bg-accent/10", csvImporting && "opacity-60 cursor-not-allowed")}>
+              <FaUpload className="text-xs" /> {csvImporting ? "Импорт…" : "Загрузить CSV"}
+            </button>
+          </div>
         </div>
+
+        <div className="flex flex-wrap gap-2">
+          {SUB_TABS.map((tab) => (
+            <button type="button" key={tab.id} onClick={() => setActiveSubTab(tab.id)}
+              className={clsx("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors", activeSubTab === tab.id ? "bg-accent text-white" : "bg-night-100 text-night-700 hover:bg-night-200")}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {csvResult && !csvResult.error ? (
+          <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
+            <span className="font-semibold">Импорт завершён:</span>{" "}
+            обработано {csvResult.parsed}, создано {csvResult.sheetCreated}, обновлено {csvResult.sheetUpdated}, прочих: создано {csvResult.hwCreated}, обновлено {csvResult.hwUpdated}, без изменений {csvResult.skipped}
+          </div>
+        ) : null}
+        {csvResult?.error ? (
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">{csvResult.error}</div>
+        ) : null}
 
         <div className="flex flex-wrap gap-2">
           <SecureButton

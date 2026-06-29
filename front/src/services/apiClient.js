@@ -68,13 +68,9 @@ rawClient.interceptors.response.use(
     const isAuthRegister = url.includes("/auth/register");
     const isAuthMe = url.includes("/auth/me");
 
-    // /auth/me используется как проверка авторизации.
-    // Если получили 401 — сессию нужно чистить сразу, без попыток сохранять "битое" состояние.
-    if (status === 401 && isAuthMe) {
-      useAuthStore.getState().logout();
-      redirectIfOnProtectedRoute();
-      return Promise.reject(error);
-    }
+    // /auth/me при 401 — тоже пробуем refresh, как для обычных запросов
+    // (если refresh не удался — interceptor ниже залогает и logout)
+    // Убираем отдельную обработку: /auth/me теперь проходит общий 401-flow
 
     // Если 401 и это не refresh/login/register:
     // - без access token не запускаем refresh (публичные страницы должны жить)

@@ -3,6 +3,8 @@ import { MATERIAL_SELECT_SOURCE_TYPES } from "../constants/productCharacteristic
 
 const isCountertopCategory = (cat) => cat && String(cat).startsWith("Столешница");
 
+const NON_SHEET_CATEGORIES = new Set(["Кромка", "Пиломатериал", "Рамка", "Стекло в рамку", "Пленка под фрезу", "Вид фрезы"]);
+
 let materialsCache = null;
 let materialsCachePromise = null;
 
@@ -17,12 +19,27 @@ const fetchAllMaterials = async (get) => {
   const linearItems = Array.isArray(linearRes?.data) ? linearRes.data : [];
   const hardwareItems = Array.isArray(hardwareRes?.data) ? hardwareRes.data : [];
 
+  const sheetNonCountertop = sheetItems.filter((i) => !isCountertopCategory(i.category));
+  const sheetPure = sheetNonCountertop.filter((i) => !NON_SHEET_CATEGORIES.has(i.category || ""));
+
+  // Уникальные категории листовых материалов (для поля "Материал корпуса/фасада")
+  const categorySet = new Set();
+  const sheetCategories = [];
+  for (const item of sheetNonCountertop) {
+    if (item.category && !categorySet.has(item.category)) {
+      categorySet.add(item.category);
+      sheetCategories.push({ id: item.category, name: item.category, category: item.category, price_per_m2: null });
+    }
+  }
+
   const bySourceType = {
-    [MATERIAL_SELECT_SOURCE_TYPES.sheet]: sheetItems.filter((i) => !isCountertopCategory(i.category)),
+    [MATERIAL_SELECT_SOURCE_TYPES.sheet]: sheetNonCountertop,
+    [MATERIAL_SELECT_SOURCE_TYPES.sheet_pure]: sheetPure,
     [MATERIAL_SELECT_SOURCE_TYPES.sheet_countertop]: sheetItems.filter((i) => isCountertopCategory(i.category)),
     [MATERIAL_SELECT_SOURCE_TYPES.sheet_all]: sheetItems,
     [MATERIAL_SELECT_SOURCE_TYPES.linear]: linearItems,
     [MATERIAL_SELECT_SOURCE_TYPES.hardware]: hardwareItems,
+    [MATERIAL_SELECT_SOURCE_TYPES.sheet_category]: sheetCategories,
   };
 
   return { bySourceType, sheetItems, linearItems, hardwareItems };

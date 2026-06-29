@@ -1,6 +1,7 @@
 /**
  * Тип источника данных для materialSelect-полей.
  *  "sheet"            — листовой материал (sheet_materials, category != Столешница*)
+ *  "sheet_pure"       — чисто листовой (без кромки, Пиломатериал, Рамки и прочих не-листовых)
  *  "sheet_countertop" — столешницы (sheet_materials, category starts with "Столешница")
  *  "linear"           — погонный материал (linear_materials)
  *  "sheet_all"        — все листовые без фильтра
@@ -8,18 +9,23 @@
  */
 export const MATERIAL_SELECT_SOURCE_TYPES = {
   sheet: "sheet",
+  sheet_pure: "sheet_pure",
   sheet_countertop: "sheet_countertop",
   linear: "linear",
   sheet_all: "sheet_all",
   hardware: "hardware",
+  sheet_category: "sheet_category",
 };
 
 /** Определения полей характеристик товара. */
 export const PRODUCT_CHARACTERISTIC_FIELDS = {
   product_type: { label: "Тип изделия", readOnly: true },
-  material_corpus: { label: "Материал корпуса", selectType: "sheet", priceKey: "price_per_m2" },
-  material_facade: { label: "Материал фасада", selectType: "sheet", priceKey: "price_per_m2" },
-  back_panel: { label: "Задняя стенка", selectType: "sheet", priceKey: "price_per_m2" },
+  material_corpus: { label: "Материал корпуса", selectType: "sheet", priceKey: "price_per_m2", categoryFilter: "Пиломатериал" },
+  corpus_color: { label: "Цвет корпуса", selectType: "sheet_pure", priceKey: "price_per_m2" },
+  material_facade: { label: "Материал фасада", selectType: "sheet", priceKey: "price_per_m2", categoryFilter: "Пиломатериал" },
+  facade_color: { label: "Цвет фасада", selectType: "sheet_pure", priceKey: "price_per_m2" },
+  back_panel: { label: "Задняя стенка", selectType: "sheet_pure", priceKey: "price_per_m2" },
+  showcase_back_panel_color: { label: "Цвет задней стенки витрины", selectType: "sheet_pure", priceKey: "price_per_m2" },
   facade_thickness_mm: { label: "Толщина фасада" },
   film: { label: "Пленка", selectType: "hardware", priceKey: "price_per_m2", categoryFilter: "Пленка под фрезу" },
   milling: { label: "Фрезеровка", selectType: "hardware", priceKey: "price_per_m2", categoryFilter: "Вид фрезы" },
@@ -27,10 +33,8 @@ export const PRODUCT_CHARACTERISTIC_FIELDS = {
   milling_type: { label: "Вид фрезы", selectType: "sheet_all", priceKey: "price_per_m2" },
   frame: { label: "Рамка" },
   glass_in_frame: { label: "Стекло в рамку" },
-  showcase_back_panel_color: { label: "Цвет задней стенки витрины", colorRole: "all" },
-  corpus_color: { label: "Основной цвет (корпус)", colorRole: "corpus" },
-  facade_color: { label: "Доп. цвет (фасад)", colorRole: "facade" },
-  glass_insert_color: { label: "Цвет стеклянной вставки", colorRole: "all" },
+  glass_insert_color: { label: "Цвет стеклянной вставки", selectType: "hardware", priceKey: "price_per_m2", categoryFilter: "Стекло в рамку" },
+
   module_purpose: { label: "Назначение модуля" },
   front_count: { label: "Кол-во распашных фасадов" },
   lift_mechanism_count: { label: "Кол-во подъёмных механизмов" },
@@ -70,63 +74,32 @@ export const PRODUCT_CHARACTERISTIC_FIELDS = {
   p_facade: { label: "P фасада, м" },
 };
 
-export const COLOR_CHARACTERISTIC_KEYS = [
-  "showcase_back_panel_color",
-  "corpus_color",
-  "facade_color",
-  "glass_insert_color",
-];
+export const COLOR_CHARACTERISTIC_KEYS = [];
 
-/** Поляная структура для отображения на странице товара. в редакторе. */
+/** Секции для отображения в редакторе характеристик (шаг 3). */
 export const PRODUCT_CHARACTERISTIC_SECTIONS = [
   {
     id: "materials",
-    title: "Материалы",
+    title: "Общие параметры",
     rows: [
       ["product_type"],
       ["material_corpus"],
       ["material_facade"],
       ["back_panel"],
-      // ["countertop"],        // дубль — берётся с вкладки Материалы
-      // ["countertop_thickness"], // дубль — берётся с вкладки Материалы
-      // ["countertop_color"],  // дубль — берётся с вкладки Материалы
-      ["plinth"],
-      ["cutlery_tray"],
-      ["ventilation_grid"],
-      ["dish_dryer"],
+      ["showcase_back_panel_color"],
+      ["corpus_color"],
+      ["facade_color"],
+      ["glass_insert_color"],
+      ["facade_thickness_mm"],
+      ["film"],
+      ["milling"],
     ],
   },
-  {
-    id: "other_materials",
-    title: "Прочие материалы",
-    rows: [
-      ["supports_type"],
-      ["hangers_type"],
-      ["lift_mechanism"],
-      ["drawers_detail"],
-    ],
-  },
-  // Общие параметры — убраны дубли (film, milling, film_under_milling, milling_type, frame, glass_in_frame)
-  // оставлена только Толщина фасада — перенесена в секцию Основные характеристики
-  // {
-  //   id: "general",
-  //   title: "Общие параметры",
-  //   rows: [
-  //     ["facade_thickness_mm"],
-  //     // ["film"],                // дубль — берётся с вкладки Материалы
-  //     // ["milling"],             // дубль — берётся с вкладки Материалы
-  //     // ["film_under_milling"],  // дубль — берётся с вкладки Материалы
-  //     // ["milling_type"],        // дубль — берётся с вкладки Материалы
-  //     // ["frame"],               // дубль — берётся с вкладки Материалы
-  //     // ["glass_in_frame"],      // дубль — берётся с вкладки Материалы
-  //   ],
-  // },
   {
     id: "main",
     title: "Основные характеристики",
     rows: [
-      ["facade_thickness_mm"], // перенесено из Общие параметры
-      // ["module_purpose"],      // дубль — берётся с вкладки Материалы
+      ["module_purpose"],
       ["front_count"],
       ["lift_mechanism_count"],
       ["drawer_count"],
@@ -136,10 +109,14 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
       ["supports_count"],
       ["tech_niche"],
       ["opening_type"],
+      ["lift_mechanism"],
       ["drawers_type"],
       ["hinges_type"],
       ["shelves_type"],
+      ["hangers_type"],
+      ["supports_type"],
       ["opening_method"],
+      ["drawers_detail"],
       ["supports_height_mm"],
     ],
   },
@@ -152,9 +129,14 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
     id: "extra",
     title: "Дополнительная информация",
     rows: [
+      ["countertop"],
+      ["plinth"],
+      ["cutlery_tray"],
+      ["countertop_thickness"],
       ["lighting"],
+      ["dish_dryer"],
+      ["countertop_color"],
       ["side_posts_facade_color"],
-      // Столешницы убраны — берётся с вкладки Материалы (админ → Материал → Столешницы)
     ],
   },
 ];
@@ -169,9 +151,9 @@ export const CALCULATION_ONLY_KEYS = [
   "p_facade",
 ];
 
-/** Секции редактора на шаге «Характеристики» (без габаритов и цветов). */
+/** Секции редактора на шаге «Характеристики» (без цветов). */
 export const PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS = PRODUCT_CHARACTERISTIC_SECTIONS.filter(
-  (section) => section.id !== "dimensions" && section.id !== "colors"
+  (section) => section.id !== "colors"
 );
 
 /** Секция «Габариты» для 4-й вкладки. */

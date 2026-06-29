@@ -5,43 +5,13 @@ import logger from "../services/logger";
 
 const TOKEN_CHECK_INTERVAL = 5 * 60 * 1000; // 5 минут
 
-// Глобальный таймер для проверки токена
 let tokenCheckTimer = null;
-let lastActivityTime = Date.now();
-
-// Отслеживание активности пользователя
-const trackActivity = () => {
-  lastActivityTime = Date.now();
-  
-  // Если таймер не запущен, запускаем его
-  if (!tokenCheckTimer) {
-    startTokenCheckTimer();
-  }
-};
-
-const startTokenCheckTimer = () => {
-  // Очищаем предыдущий таймер если есть
-  if (tokenCheckTimer) {
-    clearInterval(tokenCheckTimer);
-  }
-
-  tokenCheckTimer = setInterval(() => {
-    const token = useAuthStore.getState().accessToken || localStorage.getItem("nexaos_access_token");
-    const timeSinceActivity = Date.now() - lastActivityTime;
-    
-    // Проверяем токен только если прошло не менее 5 минут с последней активности
-    if (token && timeSinceActivity >= TOKEN_CHECK_INTERVAL) {
-      checkToken();
-    }
-  }, TOKEN_CHECK_INTERVAL);
-};
 
 let isCheckingToken = false;
 
 const checkToken = async () => {
-  // Предотвращаем параллельные проверки
   if (isCheckingToken) return;
-  
+
   const token = useAuthStore.getState().accessToken || localStorage.getItem("nexaos_access_token");
   if (!token) {
     if (tokenCheckTimer) {
@@ -57,11 +27,10 @@ const checkToken = async () => {
       action: "token_check",
       timestamp: new Date().toISOString(),
     });
-    
-    // Используем apiClient напрямую для видимости в Network
+
     const response = await apiClient.get("/auth/me");
     const user = response?.data?.user || response?.data;
-    
+
     if (user && user.id) {
       useAuthStore.setState({
         user,
@@ -69,7 +38,6 @@ const checkToken = async () => {
       });
       localStorage.setItem("nexaos_user", JSON.stringify(user));
     } else {
-      // Если пользователь не найден, выходим
       useAuthStore.getState().logout();
       if (tokenCheckTimer) {
         clearInterval(tokenCheckTimer);
@@ -81,43 +49,50 @@ const checkToken = async () => {
       error: error.message,
       status: error.response?.status,
     });
-    
-    // Если токен невалиден, выходим
+
+    // apiClient interceptor already handles 401 (refresh attempt then logout)
+    // If we still get here with 401/403, session is definitely invalid
     if (error.response?.status === 401 || error.response?.status === 403) {
       useAuthStore.getState().logout();
       if (tokenCheckTimer) {
         clearInterval(tokenCheckTimer);
         tokenCheckTimer = null;
       }
+      window.location.replace("/");
     }
   } finally {
     isCheckingToken = false;
   }
 };
 
-// Добавляем обработчики событий для отслеживания активности
-if (typeof window !== "undefined") {
-  const events = ["mousedown", "keydown", "scroll", "touchstart", "click"];
-  events.forEach((event) => {
-    window.addEventListener(event, trackActivity, { passive: true });
-  });
-}
+const startTokenCheckTimer = () => {
+  if (tokenCheckTimer) {
+    clearInterval(tokenCheckTimer);
+  }
+
+  tokenCheckTimer = setInterval(() => {
+    const token = useAuthStore.getState().accessToken || localStorage.getItem("nexaos_access_token");
+    if (token) {
+      checkToken();
+    } else {
+      if (tokenCheckTimer) {
+        clearInterval(tokenCheckTimer);
+        tokenCheckTimer = null;
+      }
+    }
+  }, TOKEN_CHECK_INTERVAL);
+};
 
 const useTokenCheck = () => {
-  const tokenRef = useRef(null);
   const triedSilentRefreshRef = useRef(false);
 
   useEffect(() => {
     const token = useAuthStore.getState().accessToken;
-    tokenRef.current = token;
 
     if (token) {
-      // Запускаем таймер при монтировании если есть токен
       if (!tokenCheckTimer) {
         startTokenCheckTimer();
       }
-      
-      // Проверяем токен сразу при монтировании
       checkToken();
     } else {
       const user = useAuthStore.getState().user || (() => {
@@ -142,27 +117,24 @@ const useTokenCheck = () => {
             }
           })
           .catch(() => {
-            // ignore
+            // silent refresh failed — clear stale state
+            useAuthStore.getState().logout();
           });
       }
 
-      // Останавливаем таймер если токена нет
       if (tokenCheckTimer) {
         clearInterval(tokenCheckTimer);
         tokenCheckTimer = null;
       }
     }
 
-    // Подписываемся на изменения токена
     const unsubscribe = useAuthStore.subscribe(
       (state) => state.accessToken,
       (newToken) => {
-        tokenRef.current = newToken;
         if (newToken) {
           if (!tokenCheckTimer) {
             startTokenCheckTimer();
           }
-          checkToken();
         } else {
           if (tokenCheckTimer) {
             clearInterval(tokenCheckTimer);

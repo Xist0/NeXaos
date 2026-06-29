@@ -188,9 +188,9 @@ const ModuleCalculationTables = ({
   ];
 
   const markupRows = [
-    { key: "markupSheet", label: `Наценка на плитный (×${Number(breakdown.addSheet || 0)})`, value: breakdown.markupSheet },
-    { key: "markupEdge", label: `Наценка на кромку (×${Number(breakdown.addEdge || 0)})`, value: breakdown.markupEdge },
-    { key: "markupGeneral", label: `Наценка общий коэф. (×${Number(breakdown.coefficient || 0) - 1})`, value: breakdown.markupGeneral },
+    { key: "markupSheet", label: `Наценка на плитный (×${Number(breakdown.addSheet || 0).toFixed(2)})`, value: breakdown.markupSheet },
+    { key: "markupEdge", label: `Наценка на кромку (×${Number(breakdown.addEdge || 0).toFixed(2)})`, value: breakdown.markupEdge },
+    { key: "markupGeneral", label: `Наценка общий коэф. (×${(Number(breakdown.coefficient || 0) - 1).toFixed(2)})`, value: breakdown.markupGeneral },
   ];
 
   return (

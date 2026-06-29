@@ -41,13 +41,22 @@ const loadCalculationReferences = async () => {
     else if (name.includes("кромк")) coeffMap.edge = num;
   }
 
-  if (!coeffMap.general) coeffMap.general = 2.2;
-  if (!coeffMap.sheet) coeffMap.sheet = 1.2;
-  if (!coeffMap.edge) coeffMap.edge = 1.15;
-  if (!coeffMap.addSheet) coeffMap.addSheet = 0;
-  if (!coeffMap.addEdge) coeffMap.addEdge = 0;
+  // Fallbacks only when DB has no matching row (undefined), not when value is 0
+  if (coeffMap.general === undefined) coeffMap.general = 2.2;
+  if (coeffMap.sheet === undefined) coeffMap.sheet = 1.2;
+  if (coeffMap.edge === undefined) coeffMap.edge = 1.15;
+  if (coeffMap.addSheet === undefined) coeffMap.addSheet = 0;
+  if (coeffMap.addEdge === undefined) coeffMap.addEdge = 0;
 
-  const edgePricePerM = linearRes.rows?.[0]?.edge_price_per_m || null;
+  // Try: linear_materials max edge_price → Кромка from sheet_materials → any item with edge_price_per_m
+  let edgePricePerM = linearRes.rows?.[0]?.edge_price_per_m || null;
+  if (!edgePricePerM) {
+    // Fallback: find any sheet material with category "Кромка" that has edge_price_per_m
+    const кромкаItems = materials.filter((m) => m.category === "Кромка" && m.edge_price_per_m != null);
+    if (кромкаItems.length > 0) {
+      edgePricePerM = Math.max(...кромкаItems.map((m) => Number(m.edge_price_per_m) || 0));
+    }
+  }
 
   return { materials, hardware, coefficients: coeffMap, edgePricePerM };
 };

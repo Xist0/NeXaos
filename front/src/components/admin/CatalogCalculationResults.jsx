@@ -132,7 +132,7 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
             </tr>
             {Number(breakdown.markupSheet || 0) > 0 ? (
               <tr className="border-b border-night-100 bg-yellow-50/50">
-                <td className="px-3 py-2 text-night-700">Наценка на плитный (×{Number(breakdown.addSheet || 0)})</td>
+                <td className="px-3 py-2 text-night-700">Наценка на плитный (×{Number(breakdown.addSheet || 0).toFixed(2)})</td>
                 <td className="px-3 py-2 text-right font-mono text-yellow-600">
                   + {formatCurrency(Number(breakdown.markupSheet || 0))}
                 </td>
@@ -140,7 +140,7 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
             ) : null}
             {Number(breakdown.markupEdge || 0) > 0 ? (
               <tr className="border-b border-night-100 bg-yellow-50/50">
-                <td className="px-3 py-2 text-night-700">Наценка на кромку (×{Number(breakdown.addEdge || 0)})</td>
+                <td className="px-3 py-2 text-night-700">Наценка на кромку (×{Number(breakdown.addEdge || 0).toFixed(2)})</td>
                 <td className="px-3 py-2 text-right font-mono text-yellow-600">
                   + {formatCurrency(Number(breakdown.markupEdge || 0))}
                 </td>
@@ -148,7 +148,7 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
             ) : null}
             {Number(breakdown.markupGeneral || 0) > 0 ? (
               <tr className="border-b border-night-100 bg-yellow-50/50">
-                <td className="px-3 py-2 text-night-700">Наценка общий коэф. (×{Number(breakdown.coefficient || 0) - 1})</td>
+                <td className="px-3 py-2 text-night-700">Наценка общий коэф. (×{(Number(breakdown.coefficient || 0) - 1).toFixed(2)})</td>
                 <td className="px-3 py-2 text-right font-mono text-yellow-600">
                   + {formatCurrency(Number(breakdown.markupGeneral || 0))}
                 </td>

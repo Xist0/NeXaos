@@ -10,8 +10,10 @@ import {
   FaCog,
   FaDollarSign,
   FaClipboardList,
+  FaCalculator,
 } from "react-icons/fa";
 import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
+import ColorSelectPair from "../../../ui/ColorSelectPair";
 import useCatalogParameters from "../../../../hooks/useCatalogParameters";
 import useMaterialsForSelect from "../../../../hooks/useMaterialsForSelect";
 import {
@@ -20,7 +22,7 @@ import {
   normalizeCharacteristicsForSave,
   parseCharacteristicField,
 } from "../../../../utils/characteristics";
-import { MATERIAL_SELECT_SOURCE_TYPES, colorDisplayValue } from "../../../../constants/productCharacteristics";
+import { MATERIAL_SELECT_SOURCE_TYPES } from "../../../../constants/productCharacteristics";
 import ModuleCalculationTables from "./ModuleCalculationTables";
 import SecureButton from "../../../ui/SecureButton";
 import SecureInput from "../../../ui/SecureInput";
@@ -29,7 +31,6 @@ import useApi from "../../../../hooks/useApi";
 import useLogger from "../../../../hooks/useLogger";
 import ImageManager from "../../ImageManager";
 import { formatCurrency } from "../../../../utils/format";
-import ColorBadge from "../../../ui/ColorBadge";
 import { getThumbUrl } from "../../../../utils/image";
 import PopoverSelect from "../../../ui/PopoverSelect";
 
@@ -198,10 +199,6 @@ const ModuleCreator = ({
     [parameterTemplatesById]
   );
 
-  const [openPrimary, setOpenPrimary] = useState(false);
-  const [openSecondary, setOpenSecondary] = useState(false);
-  const colorPickerRef = useRef(null);
-
   useEffect(() => {
     if (!fixedModuleCategoryId) return;
     setForm((prev) => {
@@ -216,45 +213,6 @@ const ModuleCreator = ({
       };
     });
   }, [fixedModuleCategoryId, fixedDescriptionId]);
-
-  useEffect(() => {
-    const onPointerDown = (e) => {
-      if (!openPrimary && !openSecondary) return;
-      const el = colorPickerRef.current;
-      if (!el) return;
-      if (el.contains(e.target)) return;
-      setOpenPrimary(false);
-      setOpenSecondary(false);
-    };
-
-    window.addEventListener("pointerdown", onPointerDown);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-    };
-  }, [openPrimary, openSecondary]);
-
-  const colorsByType = useMemo(() => {
-    const list = [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])];
-    return {
-      facade: list.filter((c) => c?.type === "facade"),
-      corpus: list.filter((c) => c?.type === "corpus"),
-      universal: list.filter((c) => !c?.type),
-    };
-  }, [referenceData.colorsFacade, referenceData.colorsCorpus]);
-
-  const selectedPrimaryColor = useMemo(() => {
-    const id = Number(form.primary_color_id);
-    if (!Number.isFinite(id) || id <= 0) return null;
-    const list = [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])];
-    return list.find((c) => Number(c.id) === id) || null;
-  }, [form.primary_color_id, referenceData.colorsFacade, referenceData.colorsCorpus]);
-
-  const selectedSecondaryColor = useMemo(() => {
-    const id = Number(form.secondary_color_id);
-    if (!Number.isFinite(id) || id <= 0) return null;
-    const list = [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])];
-    return list.find((c) => Number(c.id) === id) || null;
-  }, [form.secondary_color_id, referenceData.colorsFacade, referenceData.colorsCorpus]);
 
   const addParameter = (parameterId) => {
     const id = Number(parameterId);
@@ -596,6 +554,15 @@ const ModuleCreator = ({
       .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
   }, [materialsBySourceType.hardware]);
 
+  const allColorsForPicker = useMemo(() => {
+    const all = [...referenceData.colorsFacade, ...referenceData.colorsCorpus];
+    return all.sort((a, b) => {
+      const aU = a.type === "facade" || !a.type ? 0 : 1;
+      const bU = b.type === "facade" || !b.type ? 0 : 1;
+      return aU - bU || String(a.name || "").localeCompare(String(b.name || ""), "ru");
+    });
+  }, [referenceData.colorsFacade, referenceData.colorsCorpus]);
+
   const memoizedCharacteristics = useMemo(
     () => normalizeCharacteristicsForSave(form.characteristics),
     [form.characteristics]
@@ -608,11 +575,6 @@ const ModuleCreator = ({
       characteristics: characteristicsFromApi(prev.characteristics, allFieldKeys),
     }));
   }, [allFieldKeys]);
-
-  const moduleColors = useMemo(
-    () => [...(referenceData.colorsFacade || []), ...(referenceData.colorsCorpus || [])],
-    [referenceData.colorsFacade, referenceData.colorsCorpus]
-  );
 
   const steps = useMemo(
     () => [
@@ -649,16 +611,12 @@ const ModuleCreator = ({
       .sort((a, b) => String(a?.name || "").localeCompare(String(b?.name || ""), "ru"));
   }, [referenceData.productParameterCategories]);
 
-  const canSelectCorpus = !!form.facade_color;
-
-  
-
-
-  const buildSku = useCallback((draft) => {
+  const buildSku = useCallback((draft, characteristics) => {
     const parts = [draft.baseSku];
     const len = Number(draft.length_mm);
     if (Number.isFinite(len) && len > 0) parts.push(String(Math.round(len)));
-    if (draft.facade_color) parts.push(draft.facade_color);
+    const facadeVal = characteristics ? parseCharacteristicField(characteristics.facade_color).value : draft.facade_color;
+    if (facadeVal) parts.push(facadeVal);
 
     if (!skuNonceRef.current) {
       const fromSku = String(draft.sku || "").split("-").pop();
@@ -680,7 +638,7 @@ const ModuleCreator = ({
 
     setForm((prev) => {
       if (Number(prev.description_id) === Number(baseSku.id) && prev.baseSku === baseSku.code) return prev;
-      const initialSku = buildSku({ baseSku: baseSku.code, length_mm: prev.length_mm || "" });
+      const initialSku = buildSku({ baseSku: baseSku.code, length_mm: prev.length_mm || "" }, prev.characteristics);
       return {
         ...prev,
         baseSku: baseSku.code,
@@ -690,13 +648,10 @@ const ModuleCreator = ({
         name: prev.name || `${baseSku.name}`,
       };
     });
-    if (fixedModuleCategoryId && fixedDescriptionId && !initialModuleId && !duplicateFromId) {
-      setStep(2);
-    }
   }, [fixedDescriptionId, fixedModuleCategoryId, referenceData.isLoaded, referenceData.baseSkus, initialModuleId, duplicateFromId, buildSku]);
 
   const handleTypeSelect = (baseSku) => {
-    const initialSku = buildSku({ baseSku: baseSku.code, length_mm: "" });
+    const initialSku = buildSku({ baseSku: baseSku.code, length_mm: "" }, form.characteristics);
 
     const categories = Array.isArray(referenceData.moduleCategories) ? referenceData.moduleCategories : [];
     const skuPrefix = String(baseSku.code || "").trim().toUpperCase();
@@ -740,48 +695,33 @@ const ModuleCreator = ({
     setForm((prev) => {
       const next = { ...prev, [field]: value };
       if (field === "length_mm") {
-        next.sku = buildSku(next);
+        next.sku = buildSku(next, next.characteristics);
       }
       return next;
     });
   };
 
-  const handleFacadeColorSelect = (colorCode) => {
-    const found = (referenceData.colorsFacade || []).find((c) => (c.code || c.sku) === colorCode) || null;
-    const displayName = found ? colorDisplayValue(found) : colorCode;
+  // Синхронизация form.facade_color и form.corpus_color из характеристик
+  // (для SKU, фильтрации поиска на бэкенде)
+  // + primary_color_id / secondary_color_id для payload
+  useEffect(() => {
+    const facadeVal = parseCharacteristicField(form.characteristics.facade_color).value;
+    const corpusVal = parseCharacteristicField(form.characteristics.corpus_color).value;
+    const allColors = [...referenceData.colorsFacade, ...referenceData.colorsCorpus];
+    const primaryColor = allColors.find((c) => c.name === facadeVal || c.code === facadeVal || c.sku === facadeVal);
+    const secondaryColor = allColors.find((c) => c.name === corpusVal || c.code === corpusVal || c.sku === corpusVal);
+    const primaryId = primaryColor ? String(primaryColor.id) : "";
+    const secondaryId = secondaryColor ? String(secondaryColor.id) : "";
     setForm((prev) => {
-      const chars = { ...prev.characteristics };
-      const facadeChar = parseCharacteristicField(chars.facade_color);
-      chars.facade_color = { ...facadeChar, value: displayName };
-
-      const next = {
-        ...prev,
-        characteristics: chars,
-        facade_color: colorCode,
-        primary_color_id: found?.id != null ? String(found.id) : prev.primary_color_id,
-      };
-      next.sku = buildSku(next);
-      return next;
+      const next = {};
+      if (prev.facade_color !== facadeVal) next.facade_color = facadeVal || "";
+      if (prev.corpus_color !== corpusVal) next.corpus_color = corpusVal || "";
+      if (prev.primary_color_id !== primaryId) next.primary_color_id = primaryId;
+      if (prev.secondary_color_id !== secondaryId) next.secondary_color_id = secondaryId;
+      if (Object.keys(next).length === 0) return prev;
+      return { ...prev, ...next };
     });
-  };
-
-  const handleCorpusColorSelect = (colorCode) => {
-    if (!form.facade_color) return;
-    const found = (referenceData.colorsCorpus || []).find((c) => (c.code || c.sku) === colorCode) || null;
-    const displayName = found ? colorDisplayValue(found) : colorCode;
-    setForm((prev) => {
-      const chars = { ...prev.characteristics };
-      const corpusChar = parseCharacteristicField(chars.corpus_color);
-      chars.corpus_color = { ...corpusChar, value: displayName };
-
-      return {
-        ...prev,
-        characteristics: chars,
-        corpus_color: colorCode,
-        secondary_color_id: found?.id != null ? String(found.id) : prev.secondary_color_id,
-      };
-    });
-  };
+  }, [form.characteristics.facade_color, form.characteristics.corpus_color, referenceData.colorsFacade, referenceData.colorsCorpus]);
 
   // ВАЖНО: создаем модуль сразу перед шагом "Фото", чтобы получить числовой ID для images.
   const createModuleIfNeeded = useCallback(async () => {
@@ -1192,22 +1132,18 @@ const ModuleCreator = ({
               value={form.characteristics}
               onChange={(next) => setForm((prev) => ({ ...prev, characteristics: next }))}
               templatesByField={templatesByField}
-              catalogSections={catalogSections}
               fieldLabels={fieldLabels}
-              colors={moduleColors}
-              primaryColorId={form.primary_color_id}
-              secondaryColorId={form.secondary_color_id}
-              onPrimaryColorChange={(id) => {
-                const c = moduleColors.find((x) => Number(x.id) === Number(id));
-                if (c) handleFacadeColorSelect(c.code || c.sku);
-              }}
-              onSecondaryColorChange={(id) => {
-                const c = moduleColors.find((x) => Number(x.id) === Number(id));
-                if (c) handleCorpusColorSelect(c.code || c.sku);
-              }}
-              colorPickerRef={colorPickerRef}
               materialsBySourceType={materialsBySourceType}
               fieldBreakdown={fieldBreakdown}
+            />
+
+            <ColorSelectPair
+              colors={allColorsForPicker}
+              primaryColorId={form.primary_color_id}
+              secondaryColorId={form.secondary_color_id}
+              onPrimaryChange={(id) => setForm((prev) => ({ ...prev, primary_color_id: String(id) }))}
+              onSecondaryChange={(id) => setForm((prev) => ({ ...prev, secondary_color_id: String(id) }))}
+              sectionLabel="Цвет изделия"
             />
             <ModuleCalculationTables
               form={form}

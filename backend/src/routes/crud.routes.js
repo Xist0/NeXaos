@@ -18,6 +18,7 @@ const catalogController = require("../controllers/catalog.controller");
 const userController = require("../controllers/user.controller");
 const siteSettingsController = require("../controllers/site-settings.controller");
 const { importHardwareCsv } = require("../controllers/hardware-import.controller");
+const { importMaterialsCsv } = require("../controllers/materials-import.controller");
 
 const SENSITIVE_KEYS = new Set([
   "password",
@@ -457,5 +458,7 @@ const csvUpload = multer({
 });
 
 router.post("/hardware-extended/import-csv", authGuard, requireAdmin, csvUpload.single("file"), asyncHandler(importHardwareCsv));
+
+router.post("/sheet-materials/import-csv", authGuard, requireAdmin, csvUpload.single("file"), asyncHandler(importMaterialsCsv));
 
 module.exports = router;

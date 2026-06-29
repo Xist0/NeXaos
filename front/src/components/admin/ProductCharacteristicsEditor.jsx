@@ -8,7 +8,6 @@ import CharacteristicCard from "../ui/CharacteristicCard";
 import MaterialSelectField from "../ui/MaterialSelectField";
 import DrawerSelectField from "../ui/DrawerSelectField";
 import FormSection from "../ui/FormSection";
-import ProductColorCharacteristicsBlock from "./ProductColorCharacteristicsBlock";
 import { formatCurrency } from "../../utils/format";
 
 const PRICE_LABELS = {
@@ -20,15 +19,7 @@ const PRICE_LABELS = {
 
 const DIMENSION_FIELD_KEYS = ["width_mm", "height_mm_char", "depth_mm_char"];
 
-const OTHER_MATERIALS_FIELDS = [
-  { key: "supports_type", label: "Тип опор" },
-  { key: "hangers_type", label: "Тип навесов" },
-  { key: "lift_mechanism", label: "Подъёмный механизм" },
-  { key: "drawers_detail", label: "Вид и кол-во ящиков" },
-];
-
-const OTHER_MATERIALS_KEYS = OTHER_MATERIALS_FIELDS.map((f) => f.key);
-
+const OTHER_MATERIALS_KEYS = ["supports_type", "hangers_type", "lift_mechanism", "drawers_detail"];
 const OTHER_MATERIALS_SECTION_TITLES = ["Прочие материалы", "Прочее"];
 
 /** Semi-transparent price badge shown next to fields that have a calculated breakdown value. */
@@ -48,13 +39,6 @@ const ProductCharacteristicsEditor = ({
     templatesByField = {},
     catalogSections = null,
     fieldLabels = {},
-    colors = [],
-    primaryColorId = "",
-    secondaryColorId = "",
-    onPrimaryColorChange,
-    onSecondaryColorChange,
-    colorPickerRef,
-    showColorSection = true,
     materialsBySourceType = {},
     fieldBreakdown = {},
 }) => {
@@ -136,12 +120,36 @@ const ProductCharacteristicsEditor = ({
         const fieldDef = PRODUCT_CHARACTERISTIC_FIELDS[fieldKey];
         if (fieldDef?.selectType) {
             const sourceType = fieldDef.selectType;
-            let items = materialsBySourceType[sourceType] || [];
+            // When categoryFilterFrom is active and resolved, use the broader source type
+            // so items from excluded categories (like Пиломатериал) can appear when filtered by category
+            const effectiveSourceType = fieldDef.categoryFilterFromSourceType || sourceType;
+            let items = materialsBySourceType[effectiveSourceType] || [];
+
+            // Статический фильтр по категории (например, "Пленка под фрезу")
             if (fieldDef?.categoryFilter) {
                 items = items.filter((i) => String(i.category || "").trim() === fieldDef.categoryFilter);
             }
+
+            // Динамический фильтр по значению другого поля (например, categoryFilterFrom: "material_corpus")
+            if (fieldDef?.categoryFilterFrom) {
+                const sourceFieldValue = parseCharacteristicField(form[fieldDef.categoryFilterFrom]).value;
+                if (sourceFieldValue) {
+                    // Look up the selected item to get its category, not compare name vs category
+                    const sourceFieldDef = PRODUCT_CHARACTERISTIC_FIELDS[fieldDef.categoryFilterFrom];
+                    const sourceItems = materialsBySourceType[sourceFieldDef?.selectType] || [];
+                    const sourceItem = sourceItems.find((i) => String(i.name || "").trim() === String(sourceFieldValue).trim());
+                    const filterCategory = sourceItem?.category || sourceFieldValue;
+                    items = items.filter((i) => String(i.category || "").trim() === String(filterCategory).trim());
+                } else {
+                    // No source field selected — fall back to the narrower selectType (sheet_pure etc.)
+                    items = materialsBySourceType[sourceType] || [];
+                }
+            }
+
             const priceKey = fieldDef.priceKey || "price_per_m2";
             const priceLabel = PRICE_LABELS[priceKey] || "за м²";
+            // Для sheet_category — не показываем цену (это просто категория)
+            const isCategorySelect = sourceType === "sheet_category";
 
             return (
                 <MaterialSelectField
@@ -150,22 +158,33 @@ const ProductCharacteristicsEditor = ({
                     value={parsed.value}
                     onChange={(v, item) => {
                         const current = parseCharacteristicField(form[fieldKey]);
-                        onChange({
-                            ...form,
-                            [fieldKey]: { ...current, value: v },
-                        });
+                        const nextForm = { ...form, [fieldKey]: { ...current, value: v } };
+
+                        // При смене материала — очистить зависимый цвет, если он не принадлежит новой категории
+                        if (fieldDef?.categoryFilterFromKey) {
+                            const depKey = fieldDef.categoryFilterFromKey;
+                            const depDef = PRODUCT_CHARACTERISTIC_FIELDS[depKey];
+                            if (depDef?.categoryFilterFrom === fieldKey) {
+                                const depValue = parseCharacteristicField(form[depKey]).value;
+                                const selectedCategory = item?.category || v;
+                                const depItems = materialsBySourceType[depDef.selectType] || [];
+                                const belongs = depItems.some((i) => String(i.name || "").trim() === String(depValue).trim() && String(i.category || "").trim() === String(selectedCategory).trim());
+                                if (!belongs) {
+                                    nextForm[depKey] = { ...parseCharacteristicField(form[depKey]), value: "" };
+                                }
+                            }
+                        }
+
+                        onChange(nextForm);
                     }}
                     visible={parsed.visible}
                     onVisibilityChange={(nextVisible) => {
                         const current = parseCharacteristicField(form[fieldKey]);
-                        onChange({
-                            ...form,
-                            [fieldKey]: { ...current, visible: nextVisible },
-                        });
+                        onChange({ ...form, [fieldKey]: { ...current, visible: nextVisible } });
                     }}
                     items={items}
-                    priceKey={priceKey}
-                    priceLabel={priceLabel}
+                    priceKey={isCategorySelect ? null : priceKey}
+                    priceLabel={isCategorySelect ? null : priceLabel}
                     extra={breakdownPrice ? <BreakdownPriceBadge amount={breakdownPrice} /> : null}
                 />
             );
@@ -243,16 +262,6 @@ const ProductCharacteristicsEditor = ({
         );
     };
 
-    const renderOtherMaterialsSection = () => {
-      return (
-        <FormSection title="Прочие материалы">
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 items-start">
-            {OTHER_MATERIALS_FIELDS.map((f) => renderField(f.key, f.label))}
-          </div>
-        </FormSection>
-      );
-    };
-
     return (
         <div className="space-y-8">
             <p className="text-sm text-night-500">
@@ -262,55 +271,29 @@ const ProductCharacteristicsEditor = ({
 
             {useCatalog
                 ? catalogSections.map((section) => {
-                    if (isOtherMaterialsSection(section)) {
-                      return (
-                        <FormSection key={section.id} title={section.title}>
-                          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 items-start">
-                              {section.fields.map((field) => renderField(field.key, field.label))}
-                          </div>
-                        </FormSection>
-                      );
-                    }
+                    const isOther = isOtherMaterialsSection(section);
+                    const cols = isOther ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
                     return (
                       <FormSection key={section.id} title={section.title}>
-                          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
+                          <div className={`grid gap-3 ${cols} items-start`}>
                               {section.fields.map((field) => renderField(field.key, field.label))}
                           </div>
                       </FormSection>
                     );
                 })
-                : PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS.map((section) => {
-                    if (isOtherMaterialsSection(section)) {
-                      return renderOtherMaterialsSection();
-                    }
-                    return (
+                : PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS.map((section) => (
                       <FormSection key={section.id} title={section.title}>
                           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
                               {section.rows.flatMap((rowKeys) => rowKeys.map((fieldKey) => renderField(fieldKey)).filter(Boolean))}
                           </div>
                       </FormSection>
-                    );
-                })}
+                ))}
 
             <FormSection title="Габариты">
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 items-start">
                     {DIMENSION_FIELD_KEYS.map((fieldKey) => renderField(fieldKey))}
                 </div>
             </FormSection>
-
-            {showColorSection ? (
-                <ProductColorCharacteristicsBlock
-                    value={form}
-                    onChange={onChange}
-                    colors={colors}
-                    primaryColorId={primaryColorId}
-                    secondaryColorId={secondaryColorId}
-                    onPrimaryColorChange={onPrimaryColorChange}
-                    onSecondaryColorChange={onSecondaryColorChange}
-                    colorPickerRef={colorPickerRef}
-                    fieldBreakdown={fieldBreakdown}
-                />
-            ) : null}
         </div>
     );
 };

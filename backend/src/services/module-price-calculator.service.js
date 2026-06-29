@@ -5,7 +5,7 @@ const ROUND = (value, digits = 0) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   const factor = 10 ** digits;
-  return Math.ceil(n * factor) / factor;
+  return Math.round(n * factor) / factor;
 };
 
 const SUM = (...args) => {
@@ -199,24 +199,26 @@ const calculateModulePrice = (input, refs) => {
   const N11 = SUM(N20, N21, N22) * O5;
   const N13 = (D31 * (D33 - 100)) / 1_000_000 * O4;
 
-  const N14 = IFERROR(
-    () => ((D31 / D16) + (D33 - 100)) * 2 / 1000 * D16 * O5,
-    SUM(O20, O21, O22)
-  );
+  // N14 — периметр фасада для кромки
+  // Модули с ящиками: периметр фасадов ящиков (O20+O21+O22) × O5
+  // Модули с распашными дверями: дверной периметр × O5
+  const totalDrawerCount = K20 + K21 + K22;
+  const drawerFacadePerimeter = SUM(O20, O21, O22);
+  const doorFacadePerimeterRaw = ((D31 / D16) + (D33 - 100)) * 2 / 1000 * D16;
+  const N14 = totalDrawerCount > 0
+    ? drawerFacadePerimeter * O5
+    : IFERROR(() => doorFacadePerimeterRaw * O5, drawerFacadePerimeter * O5);
 
-  // H5 — задняя стенка (только для ЛХДФ белый)
-  const H5 = IF(
-    String(D11).trim().toLowerCase() === "лхдф белый",
-    IFERROR(() => (D31 * D33) / 1_000_000 * (VLOOKUP(D11, materials) + addSheet), 0),
-    0
-  );
+  // H5 — задняя стенка (для любого материала)
+  const H5 = IFERROR(() => (D31 * D33) / 1_000_000 * (VLOOKUP(D11, materials) + addSheet), 0);
 
   // E11 — цвет задней стенки витрины (для любого материала)
   const E11 = IFERROR(() => (D31 * D33) / 1_000_000 * (VLOOKUP(G5, materials) + addSheet), 0);
 
-  // H7 — корпус
+  // H7 — корпус (uses specific material's edge price with fallback to global)
   const materialPrice = VLOOKUP(G7, materials);
-  const H7 = (materialPrice + addSheet) * SUM(N10, N7) + (edgePricePerM + addEdge) * SUM(N11, N8);
+  const edgePriceCorpus = VLOOKUP(G7, materials, 2) || edgePricePerM;
+  const H7 = (materialPrice + addSheet) * SUM(N10, N7) + (edgePriceCorpus + addEdge) * SUM(N11, N8);
 
   // H9 — фасады
   const specialMaterials = ["латунь", "черный браш"];
@@ -224,7 +226,7 @@ const calculateModulePrice = (input, refs) => {
   const H9 = IF(
     specialMaterials.includes(g9lower),
     N13 * (Number(refs.specialFacadePrice1) || 0) + N13 * (Number(refs.specialFacadePrice2) || 0),
-    IFERROR(() => (VLOOKUP(G9, materials) + addSheet) * N13 + (VLOOKUP(G9, materials, 2) + addEdge) * N14, 0)
+    IFERROR(() => (VLOOKUP(G9, materials) + addSheet) * N13 + ((VLOOKUP(G9, materials, 2) || edgePricePerM) + addEdge) * N14, 0)
   );
 
   // H18 — подъёмные механизмы
@@ -328,9 +330,27 @@ const calculateModulePrice = (input, refs) => {
   const L21 = drawerHwPrice(J21, K21 || "нет");
   const L22 = drawerHwPrice(J22, K22 || "нет");
 
+  const FASTENER_SORT_ORDER = [
+    "меж-я стяжка", "межсекционная стяжка",
+    "шкант 8х30",
+    "евровинт 7х50",
+    "саморез 3,5х16",
+    "саморез 3,5х19",
+    "саморез 4x60",
+    "flipper",
+    "эксцентрик",
+    "стяжка d20",
+  ];
+
+  const fasteningSortIndex = (name) => {
+    const key = normalizeKey(name);
+    const idx = FASTENER_SORT_ORDER.findIndex((o) => key === normalizeKey(o));
+    return idx >= 0 ? idx : FASTENER_SORT_ORDER.length;
+  };
+
   const fasteningItems = (hardware || [])
     .filter((item) => normalizeKey(item.category) === FASTENER_CATEGORY)
-    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
+    .sort((a, b) => fasteningSortIndex(a.name) - fasteningSortIndex(b.name));
 
   const hardwareRows = fasteningItems.map((item) => {
     const key = String(item.id);

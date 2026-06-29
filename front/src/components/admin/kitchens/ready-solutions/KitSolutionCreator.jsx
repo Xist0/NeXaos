@@ -24,7 +24,6 @@ import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
 import useCatalogParameters from "../../../../hooks/useCatalogParameters";
 import useMaterialsForSelect from "../../../../hooks/useMaterialsForSelect";
 import {
-  characteristicsFromApi,
   createEmptyCharacteristicsForm,
   getCharacteristicDimensions,
   mergeEntityDimensionsIntoCharacteristics,
@@ -134,8 +133,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     kitchen_type_id: "",
     material_id: "",
     collection_id: "",
-    primary_color_id: "",
-    secondary_color_id: "",
 
     // размеры
     total_length_mm: "",
@@ -204,8 +201,10 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
 
     const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
     const colors = Array.isArray(referenceData.colors) ? referenceData.colors : [];
-    const primary = colors.find((c) => Number(c?.id) === Number(form.primary_color_id));
-    const secondary = colors.find((c) => Number(c?.id) === Number(form.secondary_color_id));
+    const facadeVal = parseCharacteristicField(form.characteristics.facade_color).value;
+    const corpusVal = parseCharacteristicField(form.characteristics.corpus_color).value;
+    const primary = colors.find((c) => c.name === facadeVal || c.code === facadeVal || c.sku === facadeVal);
+    const secondary = colors.find((c) => c.name === corpusVal || c.code === corpusVal || c.sku === corpusVal);
     const dims = getCharacteristicDimensions(form.characteristics);
 
     const parts = [
@@ -218,7 +217,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     ].filter(Boolean);
 
     return parts.length ? parts.join("-") : "";
-  }, [form.baseSku, form.characteristics, form.name, form.primary_color_id, form.secondary_color_id, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, referenceData.colors]);
+  }, [form.baseSku, form.characteristics, form.name, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, referenceData.colors]);
 
   const getKitPayloadParts = useCallback(() => {
     const moduleIds = ["bottom", "top"]
@@ -303,6 +302,13 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     };
   }, [isKitchen, referenceData.catalogItems, referenceData.modules, selectedCatalogItems, selectedModulesByType]);
 
+  const getColorId = useCallback((charFieldKey) => {
+    const val = parseCharacteristicField(form.characteristics[charFieldKey]).value;
+    if (!val) return null;
+    const color = (referenceData.colors || []).find((c) => c.name === val || c.code === val || c.sku === val);
+    return color ? Number(color.id) : null;
+  }, [form.characteristics, referenceData.colors]);
+
   const saveKitNow = useCallback(async () => {
     if (!kitId) {
       loggerRef.current?.error("Нет kitId. Сначала создайте решение.");
@@ -314,7 +320,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
       return;
     }
 
-    if (!form.material_id || !form.primary_color_id) {
+    const facadeColorId = getColorId("facade_color");
+    if (!form.material_id || !facadeColorId) {
       loggerRef.current?.error("Заполните материал и основной цвет");
       return;
     }
@@ -357,8 +364,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         kitchen_type_id: Number(form.kitchen_type_id) || null,
         material_id: Number(form.material_id) || null,
         collection_id: form.collection_id ? Number(form.collection_id) : null,
-        primary_color_id: Number(form.primary_color_id) || null,
-        secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
+        primary_color_id: facadeColorId,
+        secondary_color_id: getColorId("corpus_color"),
 
         ...resolveKitDimensions(form),
         countertop_length_mm: Number(form.countertop_length_mm) || null,
@@ -387,20 +394,10 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     }
   }, [fixedValues?.category, fixedValues?.category_group, form, getEffectiveSku, getKitPayloadParts, isKitchen, kitId, onDone, put, selectedParameterCategories, selectedParameters]);
 
-  const colorPickerRef = useRef(null);
   const { sections: catalogSections, templatesByField, fieldLabels } = useCatalogParameters(get);
   const { materials: materialsData } = useMaterialsForSelect(get);
 
   const [lengthWarning, setLengthWarning] = useState(null);
-
-  const colorsByType = useMemo(() => {
-    const list = Array.isArray(referenceData.colors) ? referenceData.colors : [];
-    return {
-      facade: list.filter((c) => c?.type === "facade"),
-      corpus: list.filter((c) => c?.type === "corpus"),
-      universal: list.filter((c) => !c?.type),
-    };
-  }, [referenceData.colors]);
 
   const kitchenTypeItems = useMemo(() => {
     return (referenceData.kitchenTypes || []).slice().sort((a, b) => Number(a.id) - Number(b.id));
@@ -688,8 +685,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           kitchen_type_id: data.kitchen_type_id ?? "",
           material_id: data.material_id ?? "",
           collection_id: data.collection_id ?? "",
-          primary_color_id: data.primary_color_id ?? "",
-          secondary_color_id: data.secondary_color_id ?? "",
           total_length_mm: data.total_length_mm != null ? String(data.total_length_mm) : "",
           total_depth_mm: data.total_depth_mm != null ? String(data.total_depth_mm) : "",
           total_height_mm: data.total_height_mm != null ? String(data.total_height_mm) : "",
@@ -777,8 +772,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
           kitchen_type_id: data.kitchen_type_id ?? "",
           material_id: data.material_id ?? "",
           collection_id: data.collection_id ?? "",
-          primary_color_id: data.primary_color_id ?? "",
-          secondary_color_id: data.secondary_color_id ?? "",
           total_length_mm: data.total_length_mm != null ? String(data.total_length_mm) : "",
           total_depth_mm: data.total_depth_mm != null ? String(data.total_depth_mm) : "",
           total_height_mm: data.total_height_mm != null ? String(data.total_height_mm) : "",
@@ -997,7 +990,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
       return null;
     }
 
-    if (!form.material_id || !form.primary_color_id) {
+    const facadeColorId = getColorId("facade_color");
+    if (!form.material_id || !facadeColorId) {
       loggerRef.current?.error("Заполните материал и основной цвет");
       return null;
     }
@@ -1029,8 +1023,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         kitchen_type_id: Number(form.kitchen_type_id) || null,
         material_id: Number(form.material_id) || null,
         collection_id: form.collection_id ? Number(form.collection_id) : null,
-        primary_color_id: Number(form.primary_color_id) || null,
-        secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
+        primary_color_id: facadeColorId,
+        secondary_color_id: getColorId("corpus_color"),
 
         ...resolveKitDimensions(form),
         countertop_length_mm: Number(form.countertop_length_mm) || null,
@@ -1098,8 +1092,8 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         kitchen_type_id: Number(form.kitchen_type_id) || null,
         material_id: Number(form.material_id) || null,
         collection_id: form.collection_id ? Number(form.collection_id) : null,
-        primary_color_id: Number(form.primary_color_id) || null,
-        secondary_color_id: form.secondary_color_id ? Number(form.secondary_color_id) : null,
+        primary_color_id: getColorId("facade_color"),
+        secondary_color_id: getColorId("corpus_color"),
 
         ...resolveKitDimensions(form),
         countertop_length_mm: Number(form.countertop_length_mm) || null,
@@ -1132,8 +1126,6 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
         kitchen_type_id: "",
         material_id: "",
         collection_id: "",
-        primary_color_id: "",
-        secondary_color_id: "",
         total_length_mm: "",
         total_depth_mm: "",
         total_height_mm: "",
@@ -1210,25 +1202,27 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
     return String(Math.round(n));
   };
 
-  const selectedPrimaryColor = referenceData.colors.find((c) => c.id === Number(form.primary_color_id));
-  const selectedSecondaryColor = referenceData.colors.find((c) => c.id === Number(form.secondary_color_id));
-
   const skuPreview = useMemo(() => {
     if (String(form.sku || "").trim()) return "";
     const articleName = String(form.baseSku || "").trim() || String(form.name || "").trim();
     const dims = getCharacteristicDimensions(form.characteristics);
+
+    const facadeVal = parseCharacteristicField(form.characteristics.facade_color).value;
+    const corpusVal = parseCharacteristicField(form.characteristics.corpus_color).value;
+    const primaryColor = referenceData.colors.find((c) => c.name === facadeVal || c.code === facadeVal || c.sku === facadeVal);
+    const secondaryColor = referenceData.colors.find((c) => c.name === corpusVal || c.code === corpusVal || c.sku === corpusVal);
 
     const parts = [
       normalizeSkuPart(articleName),
       normalizeNum(dims.length_mm ?? form.total_length_mm),
       normalizeNum(dims.depth_mm ?? form.total_depth_mm),
       normalizeNum(dims.height_mm ?? form.total_height_mm),
-      normalizeSkuPart(selectedPrimaryColor?.sku || ""),
-      normalizeSkuPart(selectedSecondaryColor?.sku || ""),
+      normalizeSkuPart(primaryColor?.sku || ""),
+      normalizeSkuPart(secondaryColor?.sku || ""),
     ].filter(Boolean);
 
     return parts.length ? parts.join("-") : "";
-  }, [fixedValues?.category, fixedValues?.category_group, form.baseSku, form.characteristics, form.name, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, selectedPrimaryColor?.sku, selectedSecondaryColor?.sku]);
+  }, [fixedValues?.category, fixedValues?.category_group, form.baseSku, form.characteristics, form.name, form.sku, form.total_depth_mm, form.total_height_mm, form.total_length_mm, referenceData.colors]);
 
   const effectiveSku = form.sku || skuPreview;
 
@@ -1506,14 +1500,7 @@ const KitSolutionCreator = ({ kitSolutionId: initialKitSolutionId = null, duplic
             value={form.characteristics}
             onChange={(next) => setForm((p) => ({ ...p, characteristics: next }))}
             templatesByField={templatesByField}
-            catalogSections={catalogSections}
             fieldLabels={fieldLabels}
-            colors={referenceData.colors}
-            primaryColorId={form.primary_color_id}
-            secondaryColorId={form.secondary_color_id}
-            onPrimaryColorChange={(id) => setForm((p) => ({ ...p, primary_color_id: id }))}
-            onSecondaryColorChange={(id) => setForm((p) => ({ ...p, secondary_color_id: id }))}
-            colorPickerRef={colorPickerRef}
             materialsBySourceType={materialsData.bySourceType || {}}
           />
           <div className="flex justify-between pt-4 border-t border-night-200">
