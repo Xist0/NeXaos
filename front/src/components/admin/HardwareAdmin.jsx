@@ -181,7 +181,7 @@ const HardwareAdmin = () => {
           <p className="text-sm text-night-400">Группы и позиции фурнитуры</p>
         </div>
 
-        {/* CSV-импорт */}
+        {/* CSV-импорт временно скрыт
         <div className="border border-night-200 rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -225,6 +225,7 @@ const HardwareAdmin = () => {
             </div>
           ) : null}
         </div>
+        */}
 
         <div className="border-t border-night-200 pt-4">
           <div className="text-sm font-semibold text-night-800 mb-2">Фурнитура</div>

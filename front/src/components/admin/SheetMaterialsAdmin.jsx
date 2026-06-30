@@ -206,11 +206,13 @@ const SheetMaterialsAdmin = () => {
           </div>
           <div className="flex items-center gap-3">
             <SecureInput value={search} onChange={setSearch} placeholder="Поиск…" className="max-w-xs" />
+            {/* CSV импорт временно скрыт
             <input ref={csvInputRef} type="file" accept=".csv,text/csv" onChange={handleCsvUpload} disabled={csvImporting} className="hidden" />
             <button type="button" onClick={() => csvInputRef.current?.click()} disabled={csvImporting}
               className={clsx("flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-xl transition-colors border border-accent bg-accent/5 text-accent hover:bg-accent/10", csvImporting && "opacity-60 cursor-not-allowed")}>
               <FaUpload className="text-xs" /> {csvImporting ? "Импорт…" : "Загрузить CSV"}
             </button>
+            */}
           </div>
         </div>
 
@@ -223,6 +225,7 @@ const SheetMaterialsAdmin = () => {
           ))}
         </div>
 
+        {/* Результаты CSV импорта временно скрыты
         {csvResult && !csvResult.error ? (
           <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
             <span className="font-semibold">Импорт завершён:</span>{" "}
@@ -232,6 +235,7 @@ const SheetMaterialsAdmin = () => {
         {csvResult?.error ? (
           <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">{csvResult.error}</div>
         ) : null}
+        */}
 
         <div className="flex flex-wrap gap-2">
           <SecureButton
