@@ -19,43 +19,10 @@ const isCountertopCategory = (cat) => cat && String(cat).startsWith("Столе�
 
 const NON_SHEET_CATEGORIES = new Set(["Кромка", "Пиломатериал", "Рамка", "Стекло в рамку", "Пленка под фрезу", "Вид фрезы"]);
 
-const SUB_TABS = [
-  { id: "all", label: "Все" },
-  { id: "sheet", label: "Листовой" },
-  { id: "lumber", label: "Пиломатериал" },
-  { id: "edge", label: "Кромочный" },
-  { id: "other", label: "Прочее" },
-];
-
-const matchSubTab = (item, tabId) => {
-  const cat = item.category || "";
-  switch (tabId) {
-    case "all":
-      return !isCountertopCategory(cat);
-    case "sheet":
-      return !isCountertopCategory(cat) && !NON_SHEET_CATEGORIES.has(cat);
-    case "lumber":
-      return cat === "Пиломатериал";
-    case "edge":
-      return cat === "Кромка";
-    case "other":
-      return !isCountertopCategory(cat) && cat !== "Кромка" && cat !== "Пиломатериал" && (NON_SHEET_CATEGORIES.has(cat));
-    default:
-      return !isCountertopCategory(cat);
-  }
-};
-
-const SUB_TAB_CATEGORY_PRESET = {
-  sheet: "",
-  lumber: "Пиломатериал",
-  edge: "Кромка",
-  other: "Рамка",
-};
-
 const SheetMaterialsAdmin = () => {
   const { items, loading, fetchItems, createItem, updateItem, deleteItem } = useAdminCrud(API);
   const [search, setSearch] = useState("");
-  const [activeSubTab, setActiveSubTab] = useState("all");
+  const [activeCategory, setActiveCategory] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [confirm, setConfirm] = useState(null);
@@ -75,9 +42,21 @@ const SheetMaterialsAdmin = () => {
     fetchItems();
   }, [fetchItems]);
 
+  // Только настоящие листовые материалы (без Кромки, Пиломатериала, Столешницы и прочих)
+  const sheetOnlyItems = useMemo(
+    () => items.filter((i) => !isCountertopCategory(i.category) && !NON_SHEET_CATEGORIES.has(i.category)),
+    [items]
+  );
+
+  // Уникальные категории из листовых материалов
+  const categories = useMemo(() => {
+    const cats = [...new Set(sheetOnlyItems.map((i) => i.category || "Без категории"))];
+    cats.sort();
+    return cats;
+  }, [sheetOnlyItems]);
+
   const M2_FACTOR = 5.796;
 
-  // Авто-расчёт м²: если есть размеры листа — по площади, иначе — цена/5.796
   const computedM2 = useMemo(() => {
     const fromDims = calcPricePerM2(form.price_per_sheet, form.sheet_length_mm, form.sheet_width_mm);
     if (fromDims != null) return fromDims;
@@ -90,7 +69,6 @@ const SheetMaterialsAdmin = () => {
 
   const area = useMemo(() => sheetAreaM2(form.sheet_length_mm, form.sheet_width_mm), [form.sheet_length_mm, form.sheet_width_mm]);
 
-  // При изменении цены за лист — всегда авто-заполнить м² по формуле D3/5.796
   useEffect(() => {
     if (computedM2 != null) {
       setForm((p) => ({ ...p, price_per_m2: String(Math.round(computedM2 * 100) / 100) }));
@@ -98,7 +76,10 @@ const SheetMaterialsAdmin = () => {
   }, [computedM2]);
 
   const filteredItems = useMemo(() => {
-    let list = items.filter((i) => matchSubTab(i, activeSubTab));
+    let list = sheetOnlyItems;
+    if (activeCategory) {
+      list = list.filter((i) => (i.category || "Без категории") === activeCategory);
+    }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       list = list.filter(
@@ -108,10 +89,10 @@ const SheetMaterialsAdmin = () => {
       );
     }
     return list;
-  }, [items, search, activeSubTab]);
+  }, [sheetOnlyItems, search, activeCategory]);
 
   const resetForm = () => {
-    const preset = activeSubTab !== "all" ? (SUB_TAB_CATEGORY_PRESET[activeSubTab] || "") : "";
+    const preset = activeCategory && activeCategory !== "Без категории" ? activeCategory : "";
     setForm({ category: preset, name: "", sheet_length_mm: "", sheet_width_mm: "", price_per_sheet: "", price_per_m2: "" });
     setEditingId(null);
     setFormOpen(false);
@@ -216,11 +197,16 @@ const SheetMaterialsAdmin = () => {
           </div>
         </div>
 
+        {/* Фильтр по категории */}
         <div className="flex flex-wrap gap-2">
-          {SUB_TABS.map((tab) => (
-            <button type="button" key={tab.id} onClick={() => setActiveSubTab(tab.id)}
-              className={clsx("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors", activeSubTab === tab.id ? "bg-accent text-white" : "bg-night-100 text-night-700 hover:bg-night-200")}>
-              {tab.label}
+          <button type="button" onClick={() => setActiveCategory(null)}
+            className={clsx("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors", !activeCategory ? "bg-accent text-white" : "bg-night-100 text-night-700 hover:bg-night-200")}>
+            Все
+          </button>
+          {categories.map((cat) => (
+            <button type="button" key={cat} onClick={() => setActiveCategory(cat)}
+              className={clsx("px-3 py-1.5 rounded-xl text-sm font-medium transition-colors", activeCategory === cat ? "bg-accent text-white" : "bg-night-100 text-night-700 hover:bg-night-200")}>
+              {cat}
             </button>
           ))}
         </div>

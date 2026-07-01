@@ -10,52 +10,119 @@ import AdminPriceInput from "./shared/AdminPriceInput";
 import { useAdminCrud } from "./shared/useAdminCrud";
 import { buildMaterialSku } from "../../utils/translit";
 
-const API = "/api/linear-materials";
+const LINEAR_API = "/api/linear-materials";
+const SHEET_API = "/api/sheet-materials";
 
 const LinearMaterialsAdmin = () => {
-  const { items, loading, fetchItems, createItem, updateItem, deleteItem } = useAdminCrud(API);
+  const { items: linearItems, loading: linearLoading, fetchItems: fetchLinearItems, createItem: createLinearItem, updateItem: updateLinearItem, deleteItem: deleteLinearItem } = useAdminCrud(LINEAR_API);
+  const { items: sheetItems, loading: sheetLoading, fetchItems: fetchSheetItems, createItem: createSheetItem, updateItem: updateSheetItem, deleteItem: deleteSheetItem } = useAdminCrud(SHEET_API);
+
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [confirm, setConfirm] = useState(null);
+
+  // Определяем тип редактируемой записи: "linear" или "edge"
+  const [editingSource, setEditingSource] = useState(null);
+
+  // Унифицированная форма
   const [form, setForm] = useState({ category: "", name: "", price_per_unit: "" });
 
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    fetchLinearItems();
+    fetchSheetItems();
+  }, [fetchLinearItems, fetchSheetItems]);
+
+  // Кромка items из sheet_materials — превращаем в "погонный" формат
+  const edgeRows = useMemo(
+    () => sheetItems
+      .filter((i) => i.category === "Кромка")
+      .map((i) => ({
+        ...i,
+        _source: "edge",
+        materialLabel: "Кромка",
+        priceLabel: i.edge_price_per_m ?? i.price_per_m2,
+      })),
+    [sheetItems]
+  );
+
+  // Linear items — превращаем в тот же формат
+  const linearRows = useMemo(
+    () => linearItems.map((i) => ({
+      ...i,
+      _source: "linear",
+      materialLabel: i.purpose || i.category || "—",
+      priceLabel: i.price_per_unit ?? i.price_per_piece,
+    })),
+    [linearItems]
+  );
+
+  // Объединённый список
+  const allRows = useMemo(() => [...linearRows, ...edgeRows], [linearRows, edgeRows]);
 
   const filteredItems = useMemo(() => {
-    let list = items;
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      list = list.filter(
-        (i) =>
-          String(i.name || "").toLowerCase().includes(q) ||
-          String(i.purpose || "").toLowerCase().includes(q) ||
-          String(i.category || "").toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [items, search]);
+    if (!search.trim()) return allRows;
+    const q = search.trim().toLowerCase();
+    return allRows.filter(
+      (i) =>
+        String(i.name || "").toLowerCase().includes(q) ||
+        String(i.materialLabel || "").toLowerCase().includes(q)
+    );
+  }, [allRows, search]);
 
+  const loading = linearLoading || sheetLoading;
+
+  // ——— Form handlers ———
   const resetForm = () => {
     setForm({ category: "", name: "", price_per_unit: "" });
     setEditingId(null);
+    setEditingSource(null);
     setFormOpen(false);
   };
 
   const handleEdit = (item) => {
-    setForm({
-      category: item.purpose || item.category || "",
-      name: item.name || "",
-      price_per_unit: item.price_per_unit ?? item.price_per_piece ?? "",
-    });
     setEditingId(item.id);
+    setEditingSource(item._source);
+    if (item._source === "edge") {
+      setForm({
+        category: "Кромка",
+        name: item.name || "",
+        price_per_unit: item.edge_price_per_m != null ? String(item.edge_price_per_m) : (item.price_per_m2 != null ? String(item.price_per_m2) : ""),
+      });
+    } else {
+      setForm({
+        category: item.purpose || item.category || "",
+        name: item.name || "",
+        price_per_unit: item.price_per_unit ?? item.price_per_piece ?? "",
+      });
+    }
     setFormOpen(true);
   };
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
+
+    if (editingSource === "edge" || form.category === "Кромка") {
+      const payload = {
+        name: form.name.trim(),
+        category: "Кромка",
+        sku: buildMaterialSku({ category: "Кромка", name: form.name }),
+        edge_price_per_m: parsePrice(form.price_per_unit) ?? undefined,
+        is_active: true,
+      };
+      try {
+        if (editingId) await updateSheetItem(editingId, payload);
+        else await createSheetItem(payload);
+        resetForm();
+        await fetchSheetItems();
+      } catch (e) {
+        console.error(e);
+        window.alert(e?.message || "Не удалось сохранить");
+      }
+      return;
+    }
+
+    // Linear material
     const payload = {
       name: form.name.trim(),
       purpose: form.category.trim() || undefined,
@@ -65,10 +132,10 @@ const LinearMaterialsAdmin = () => {
       is_active: true,
     };
     try {
-      if (editingId) await updateItem(editingId, payload);
-      else await createItem(payload);
+      if (editingId) await updateLinearItem(editingId, payload);
+      else await createLinearItem(payload);
       resetForm();
-      await fetchItems();
+      await fetchLinearItems();
     } catch (e) {
       console.error(e);
       window.alert(e?.message || "Не удалось сохранить материал");
@@ -80,12 +147,12 @@ const LinearMaterialsAdmin = () => {
       message: "Вы действительно хотите удалить?",
       onConfirm: async () => {
         try {
-          await deleteItem(item.id);
-          await fetchItems();
-        } catch (e) {
-          console.error(e);
-        }
+          if (item._source === "edge") await deleteSheetItem(item.id);
+          else await deleteLinearItem(item.id);
+        } catch (e) { console.error(e); }
         setConfirm(null);
+        if (item._source === "edge") await fetchSheetItems();
+        else await fetchLinearItems();
       },
     });
   };
@@ -143,10 +210,10 @@ const LinearMaterialsAdmin = () => {
                 <tr><td colSpan={4} className="py-8 text-center text-night-500">Записей нет</td></tr>
               ) : (
                 filteredItems.map((item) => (
-                  <tr key={item.id} className="border-t border-night-100 text-night-900">
-                    <td className="py-3 pr-4">{item.purpose || item.category || "—"}</td>
+                  <tr key={`${item._source}-${item.id}`} className="border-t border-night-100 text-night-900">
+                    <td className="py-3 pr-4">{item.materialLabel}</td>
                     <td className="py-3 pr-4">{item.name}</td>
-                    <td className="py-3 pr-4 text-right">{fmtPrice(item.price_per_unit ?? item.price_per_piece)}</td>
+                    <td className="py-3 pr-4 text-right">{fmtPrice(item.priceLabel)}</td>
                     <td className="py-3 pr-4 text-center">
                       <div className="flex justify-center gap-2">
                         <button type="button" onClick={() => handleEdit(item)} className="h-9 px-3 border border-accent/30 text-accent-dark hover:bg-accent/10 rounded-full"><LuPencil size={15} /></button>
