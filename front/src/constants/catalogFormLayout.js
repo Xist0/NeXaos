@@ -10,7 +10,7 @@ export const CATALOG_ITEM_FORM_SECTIONS = [
     title: "Материалы",
     columns: [
       ["material_corpus", "corpus_color", "material_facade", "facade_color", "back_panel", "showcase_back_panel_color", "film", "milling"],
-      ["plinth", "cutlery_tray", "ventilation_grid", "dish_dryer"],
+      ["frame", "plinth", "cutlery_tray", "ventilation_grid", "dish_dryer"],
     ],
   },
   {
