@@ -1115,6 +1115,26 @@ const ModuleCreator = ({
               </div>
             </div>
 
+            <div className="max-w-3xl">
+              <label className="block text-sm font-semibold text-night-700 mb-2">Описание</label>
+              <textarea
+                ref={(el) => {
+                  if (!el) return;
+                  el.style.height = "auto";
+                  el.style.height = Math.max(el.scrollHeight, 48) + "px";
+                }}
+                value={form.short_desc}
+                onChange={(e) => {
+                  e.target.style.height = "auto";
+                  e.target.style.height = Math.max(e.target.scrollHeight, 48) + "px";
+                  setForm((prev) => ({ ...prev, short_desc: e.target.value }));
+                }}
+                placeholder="Описание модуля..."
+                className="w-full px-4 py-2 border border-night-200 rounded-xl bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent min-h-[48px] overflow-hidden resize-none"
+                rows={1}
+              />
+            </div>
+
             <div className="flex justify-between pt-8 border-t">
               <SecureButton type="button" variant="outline" onClick={() => setStep(1)} className="px-4 py-2 flex items-center gap-2">
                 <FaArrowLeft /> Назад

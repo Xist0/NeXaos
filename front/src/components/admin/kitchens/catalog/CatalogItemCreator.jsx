@@ -685,10 +685,19 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
         <div className="glass-card p-6 space-y-4">
           <FormField label="Описание">
             <textarea
+              ref={(el) => {
+                if (!el) return;
+                el.style.height = "auto";
+                el.style.height = Math.max(el.scrollHeight, 48) + "px";
+              }}
               value={form.description}
-              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-              className="w-full px-4 py-2 border border-night-200 rounded-xl bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent min-h-[120px] resize-y"
-              rows={8}
+              onChange={(e) => {
+                e.target.style.height = "auto";
+                e.target.style.height = Math.max(e.target.scrollHeight, 48) + "px";
+                setForm((p) => ({ ...p, description: e.target.value }));
+              }}
+              className="w-full px-4 py-2 border border-night-200 rounded-xl bg-white text-night-900 focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent min-h-[48px] overflow-hidden resize-none"
+              rows={1}
             />
           </FormField>
           <div className="flex justify-between pt-4">
