@@ -152,6 +152,7 @@ const calculateModulePrice = (input, refs) => {
   const D11 = chars.back_panel || "";
   const G7 = chars.corpus_color || chars.material_corpus || "";
   const G9 = chars.facade_color || chars.material_facade || "";
+  const G_edge_band = chars.edge_band || "";
   const G18 = chars.lift_mechanism || "";
   const D18 = Number(chars.lift_mechanism_count) || 0;
   const G20 = chars.hinges_type || "";
@@ -223,10 +224,11 @@ const calculateModulePrice = (input, refs) => {
   // H9 — фасады
   const specialMaterials = ["латунь", "черный браш"];
   const g9lower = String(G9).trim().toLowerCase();
+  const edgePriceFacade = G_edge_band ? VLOOKUP(G_edge_band, materials, 2) : (VLOOKUP(G9, materials, 2) || edgePricePerM);
   const H9 = IF(
     specialMaterials.includes(g9lower),
     N13 * (Number(refs.specialFacadePrice1) || 0) + N13 * (Number(refs.specialFacadePrice2) || 0),
-    IFERROR(() => (VLOOKUP(G9, materials) + addSheet) * N13 + ((VLOOKUP(G9, materials, 2) || edgePricePerM) + addEdge) * N14, 0)
+    IFERROR(() => (VLOOKUP(G9, materials) + addSheet) * N13 + (edgePriceFacade + addEdge) * N14, 0)
   );
 
   // H18 — подъёмные механизмы
@@ -399,6 +401,7 @@ const calculateModulePrice = (input, refs) => {
       corpus_color: H7,
       material_facade: H9,
       facade_color: H9,
+      edge_band: edgePriceFacade * N14,
       lift_mechanism: H18,
       hinges_type: H22,
       drawers_type: 0,

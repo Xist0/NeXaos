@@ -170,13 +170,6 @@ const MaterialSelectField = ({
             )}
           />
 
-          {/* Цена выбранного — справа внутри input (видна при закрытом dropdown) */}
-          {!open && selectedItem && selectedPrice != null && Number(selectedPrice) > 0 ? (
-            <span className="absolute right-8 top-1/2 -translate-y-1/2 text-xs text-accent font-semibold whitespace-nowrap pointer-events-none">
-              {formatCurrency(Number(selectedPrice))} {priceLabel}
-            </span>
-          ) : null}
-
           {/* ✕ очистить — при наличии значения */}
           {!open && !disabled && visible && selectedItem ? (
             <button
@@ -206,6 +199,13 @@ const MaterialSelectField = ({
           ) : null}
         </div>
 
+        {/* Цена выбранного — ниже input */}
+        {!open && selectedItem && selectedPrice != null && Number(selectedPrice) > 0 ? (
+          <div className="text-xs text-accent font-semibold mt-1">
+            {formatCurrency(Number(selectedPrice))} {priceLabel}
+          </div>
+        ) : null}
+
         {open && items.length > 0 ? (
           <div className="absolute z-50 top-full left-0 right-0 w-full">
             <div className={clsx("border border-t-0 border-night-200 bg-white shadow-xl overflow-hidden", "rounded-b-xl")}>
@@ -223,16 +223,16 @@ const MaterialSelectField = ({
                           type="button"
                           onClick={() => handleSelect(item)}
                           className={clsx(
-                            "w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2",
+                            "w-full text-left px-3 py-2 text-sm transition-colors",
                             isSelected ? "bg-accent/5 text-night-900" : "text-night-700 hover:bg-night-50"
                           )}
                         >
-                          <span className="flex-1 min-w-0 truncate">{stripAnnotation(item.name)}</span>
                           {Number(item[priceKey] || 0) > 0 ? (
-                            <span className="text-xs text-accent font-semibold whitespace-nowrap">
+                            <div className="text-xs text-accent font-semibold mb-0.5">
                               {priceDisplay(item)} {priceLabel}
-                            </span>
+                            </div>
                           ) : null}
+                          <div className="min-w-0 truncate">{stripAnnotation(item.name)}</div>
                         </button>
                       );
                     })}
