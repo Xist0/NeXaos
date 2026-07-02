@@ -23,7 +23,7 @@ export const PRODUCT_CHARACTERISTIC_FIELDS = {
   material_corpus: { label: "Материал корпуса", selectType: "sheet", priceKey: "price_per_m2", categoryFilter: "Пиломатериал" },
   corpus_color: { label: "Цвет корпуса", selectType: "sheet_pure", priceKey: "price_per_m2" },
   material_facade: { label: "Материал фасада", selectType: "sheet", priceKey: "price_per_m2", categoryFilter: "Пиломатериал" },
-  facade_color: { label: "Цвет фасада", selectType: "sheet_pure", priceKey: "price_per_m2" },
+  facade_color: { label: "Цвет фасада", selectType: "sheet", priceKey: "price_per_m2" },
   back_panel: { label: "Задняя стенка", selectType: "sheet_pure", priceKey: "price_per_m2" },
   showcase_back_panel_color: { label: "Цвет задней стенки витрины", selectType: "sheet_pure", priceKey: "price_per_m2" },
   facade_thickness_mm: { label: "Толщина фасада" },

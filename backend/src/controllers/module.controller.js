@@ -54,9 +54,11 @@ const flattenCharacteristics = (chars) => {
 const calculatePrice = asyncHandler(async (req, res) => {
   const modulePriceService = require("../services/module-price.service");
   const body = req.body || {};
+
   if (body.characteristics) {
     body.characteristics = flattenCharacteristics(body.characteristics);
   }
+
   const result = await modulePriceService.calculatePrice(body);
 
   logger.debug("Выполнен расчёт стоимости модуля", {

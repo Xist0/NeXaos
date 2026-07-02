@@ -12,16 +12,22 @@ const fmtNum = (v, digits = 4) => {
 const BREAKDOWN_ROWS = [
   { key: "H5", label: "Задняя стенка" },
   { key: "E11", label: "Цвет задней стенки витрины" },
+  { key: "H7_sheet", label: "Корпус — плитный", indent: true },
+  { key: "H7_edge", label: "Корпус — кромка", indent: true },
   { key: "H7", label: "Корпус" },
+  { key: "H9_sheet", label: "Фасад — плитный", indent: true },
+  { key: "H9_edge", label: "Фасад — кромка", indent: true },
   { key: "H9", label: "Фасад" },
   { key: "H18", label: "Подъёмные механизмы" },
   { key: "H22", label: "Петли" },
   { key: "H24", label: "Полки" },
   { key: "H26", label: "Навесы" },
   { key: "H28", label: "Опоры" },
-  { key: "L20", label: "Ящик 84 мм" },
-  { key: "L21", label: "Ящик 116 мм" },
-  { key: "L22", label: "Ящик 199 мм" },
+  { key: "L20", label: "Ящик 84 мм", hideWhenZero: true },
+  { key: "L21", label: "Ящик 116 мм", hideWhenZero: true },
+  { key: "L22", label: "Ящик 199 мм", hideWhenZero: true },
+  { key: "sumL", label: "Ящики (итого)" },
+  { key: "sumH", label: "Корпус + фурнитура (итого)" },
   { key: "U37", label: "Расходники" },
 ];
 
@@ -44,11 +50,13 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
   const [error, setError] = useState("");
   const timerRef = useRef(null);
   const postRef = useRef(post);
+  const payloadRef = useRef(payload);
   const lastPayloadKeyRef = useRef("");
 
-  useEffect(() => {
-    postRef.current = post;
-  }, [post]);
+  useEffect(() => { postRef.current = post; }, [post]);
+  useEffect(() => { payloadRef.current = payload; }, [payload]);
+
+  const payloadKey = serializePayload(payload);
 
   const runCalculation = useCallback(async (body) => {
     if (!body) return;
@@ -72,17 +80,15 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
 
   useEffect(() => {
     if (!payload) return;
-
-    const key = serializePayload(payload);
-    if (key === lastPayloadKeyRef.current) return;
-    lastPayloadKeyRef.current = key;
+    if (payloadKey === lastPayloadKeyRef.current) return;
+    lastPayloadKeyRef.current = payloadKey;
 
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => runCalculation(payload), 2000);
+    timerRef.current = setTimeout(() => runCalculation(payloadRef.current), 2000);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [payload, runCalculation]);
+  }, [payloadKey, runCalculation]);
 
   const areas = result?.areas || {};
   const drawers = result?.drawers || {};
@@ -113,44 +119,70 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
             <tr className="bg-night-50 border-b border-night-200">
               <th className="px-3 py-2 text-left font-semibold text-night-700">Компонент</th>
               <th className="px-3 py-2 text-right font-semibold text-night-700">Стоимость</th>
+              <th className="px-3 py-2 text-left font-semibold text-night-700">Формула</th>
             </tr>
           </thead>
           <tbody>
-            {BREAKDOWN_ROWS.map((row) => (
-              <tr key={row.key} className="border-b border-night-100">
-                <td className="px-3 py-2 text-night-600">{row.label}</td>
-                <td className="px-3 py-2 text-right font-mono text-accent">
-                  {formatCurrency(Number(breakdown[row.key] || 0))}
-                </td>
-              </tr>
-            ))}
+            {BREAKDOWN_ROWS.filter((row) => {
+              if (!row.hideWhenZero) return true;
+              const entry = breakdown[row.key];
+              const val = entry?.value ?? entry ?? 0;
+              return Number(val) !== 0;
+            }).map((row) => {
+              const entry = breakdown[row.key];
+              const val = entry?.value ?? entry ?? 0;
+              const formula = entry?.formula ?? null;
+              return (
+                <tr key={row.key} className={`border-b border-night-100${row.indent ? " bg-night-50/30" : ""}`}>
+                  <td className={`px-3 py-2 text-night-600${row.indent ? " pl-6 text-[11px]" : ""}`}>{row.label}</td>
+                  <td className="px-3 py-2 text-right font-mono text-accent">
+                    {formatCurrency(Number(val || 0))}
+                  </td>
+                  <td className="px-3 py-2 text-night-400 text-[11px] font-mono">
+                    {formula || "—"}
+                  </td>
+                </tr>
+              );
+            })}
             <tr className="border-t-2 border-night-300 bg-night-50/50 font-semibold">
               <td className="px-3 py-2 text-night-900">Себестоимость (до наценок)</td>
               <td className="px-3 py-2 text-right font-mono text-accent">
-                {formatCurrency(Number(breakdown.S || 0))}
+                {formatCurrency(Number(breakdown.S?.value || 0))}
+              </td>
+              <td className="px-3 py-2 text-night-400 text-[11px] font-mono">
+                {breakdown.S?.formula || "—"}
               </td>
             </tr>
-            {Number(breakdown.markupSheet || 0) > 0 ? (
+            {Number(breakdown.markupSheet?.value || 0) > 0 ? (
               <tr className="border-b border-night-100 bg-yellow-50/50">
                 <td className="px-3 py-2 text-night-700">Наценка на плитный (×{Number(breakdown.addSheet || 0).toFixed(2)})</td>
                 <td className="px-3 py-2 text-right font-mono text-yellow-600">
-                  + {formatCurrency(Number(breakdown.markupSheet || 0))}
+                  + {formatCurrency(Number(breakdown.markupSheet?.value || 0))}
+                </td>
+                <td className="px-3 py-2 text-night-400 text-[11px] font-mono">
+                  {breakdown.markupSheet?.formula || "—"}
                 </td>
               </tr>
             ) : null}
-            {Number(breakdown.markupEdge || 0) > 0 ? (
+            {Number(breakdown.markupEdge?.value || 0) > 0 ? (
               <tr className="border-b border-night-100 bg-yellow-50/50">
                 <td className="px-3 py-2 text-night-700">Наценка на кромку (×{Number(breakdown.addEdge || 0).toFixed(2)})</td>
                 <td className="px-3 py-2 text-right font-mono text-yellow-600">
-                  + {formatCurrency(Number(breakdown.markupEdge || 0))}
+                  + {formatCurrency(Number(breakdown.markupEdge?.value || 0))}
+                </td>
+                <td className="px-3 py-2 text-night-400 text-[11px] font-mono">
+                  {breakdown.markupEdge?.formula || "—"}
                 </td>
               </tr>
             ) : null}
-            {Number(breakdown.markupGeneral || 0) > 0 ? (
+            {Number(breakdown.markupGeneral?.value || 0) > 0 ? (
               <tr className="border-b border-night-100 bg-yellow-50/50">
                 <td className="px-3 py-2 text-night-700">Наценка общий коэф. (×{(Number(breakdown.coefficient || 0) - 1).toFixed(2)})</td>
                 <td className="px-3 py-2 text-right font-mono text-yellow-600">
-                  + {formatCurrency(Number(breakdown.markupGeneral || 0))}
+                  + {formatCurrency(Number(breakdown.markupGeneral?.value || 0))}
+                </td>
+                <td className="px-3 py-2 text-night-400 text-[11px] font-mono">
+                  {breakdown.markupGeneral?.formula || "—"}
                 </td>
               </tr>
             ) : null}
@@ -159,6 +191,7 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
               <td className="px-3 py-2 text-right font-mono text-accent font-bold">
                 {formatCurrency(Number(result?.price || 0))}
               </td>
+              <td className="px-3 py-2 text-night-400 text-[11px] font-mono">—</td>
             </tr>
           </tbody>
         </table>
@@ -228,6 +261,7 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
                   {col.label}
                 </th>
               ))}
+              <th className="px-2 py-2 text-left font-semibold text-night-700">Формула</th>
             </tr>
           </thead>
           <tbody>
@@ -239,12 +273,16 @@ const CatalogCalculationResults = ({ post, payload, onPriceCalculated, onAreasCa
                     {col.key === "price" ? fmtNum(row.price, 2) : row[col.key] ?? ""}
                   </td>
                 ))}
+                <td className="px-2 py-1.5 text-night-400 text-[11px] font-mono whitespace-normal">
+                  {row.formula || "—"}
+                </td>
               </tr>
             ))}
             <tr className="bg-night-50 font-semibold">
               <td className="px-2 py-2 text-night-800">Всего:</td>
               <td colSpan={HARDWARE_TABLE_COLUMNS.length - 1} />
               <td className="px-2 py-2 text-center text-accent">{fmtNum(hardwareTotal, 2)}</td>
+              <td className="px-2 py-2 text-night-400 text-[11px] font-mono">—</td>
             </tr>
           </tbody>
         </table>

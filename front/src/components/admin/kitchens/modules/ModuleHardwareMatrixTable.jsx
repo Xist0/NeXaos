@@ -34,6 +34,15 @@ const ModuleHardwareMatrixTable = ({
     return prices;
   }, [items, matrix]);
 
+  /** Lookup formula from backend calculatedRows by item key. */
+  const formulaLookup = useMemo(() => {
+    const map = {};
+    for (const row of calculatedRows) {
+      map[row.key] = row.formula;
+    }
+    return map;
+  }, [calculatedRows]);
+
   /** Overall total = sum of all row prices. */
   const computedTotal = useMemo(() => {
     return items.reduce((sum, item) => sum + (rowPrices[String(item.id)] || 0), 0);
@@ -72,6 +81,7 @@ const ModuleHardwareMatrixTable = ({
                 {col.label}
               </th>
             ))}
+            <th className="px-2 py-2 text-left font-semibold text-night-700">Формула</th>
           </tr>
         </thead>
         <tbody>
@@ -103,6 +113,9 @@ const ModuleHardwareMatrixTable = ({
                 <td className="px-2 py-1.5 text-center font-medium text-accent whitespace-nowrap">
                   {fmtNum(rowPrice, 2)}
                 </td>
+                <td className="px-2 py-1.5 text-night-400 text-[11px] font-mono whitespace-normal">
+                  {formulaLookup[itemKey] || "—"}
+                </td>
               </tr>
             );
           })}
@@ -110,6 +123,7 @@ const ModuleHardwareMatrixTable = ({
             <td className="px-2 py-2 text-night-800">Всего:</td>
             <td colSpan={INPUT_COLUMNS.length} />
             <td className="px-2 py-2 text-center text-accent">{fmtNum(computedTotal, 2)}</td>
+            <td className="px-2 py-2 text-night-400 text-[11px] font-mono">—</td>
           </tr>
         </tbody>
       </table>

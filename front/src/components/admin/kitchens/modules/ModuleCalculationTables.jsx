@@ -81,6 +81,7 @@ const ModuleCalculationTables = ({
   const onPriceCalculatedRef = useRef(onPriceCalculated);
   const timerRef = useRef(null);
   const lastPayloadKeyRef = useRef("");
+  const calcPayloadRef = useRef(null);
 
   useEffect(() => { postRef.current = post; }, [post]);
   useEffect(() => { onAreasRef.current = onAreasCalculated; }, [onAreasCalculated]);
@@ -96,6 +97,8 @@ const ModuleCalculationTables = ({
     () => serializePayload(calcPayload),
     [calcPayload]
   );
+
+  useEffect(() => { calcPayloadRef.current = calcPayload; }, [calcPayload]);
 
   const hasDimensions =
     calcPayload.width_mm > 0 && calcPayload.height_mm > 0 && calcPayload.depth_mm > 0;
@@ -153,13 +156,13 @@ const ModuleCalculationTables = ({
 
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      void runCalculation(calcPayload);
+      void runCalculation(calcPayloadRef.current);
     }, 600);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [payloadKey, calcPayload, runCalculation, hasDimensions]);
+  }, [payloadKey, runCalculation, hasDimensions]);
 
   const fmt = (val, digits = 4) => {
     const n = Number(val);
@@ -174,23 +177,31 @@ const ModuleCalculationTables = ({
   const details = calcData?.details || {};
 
   const breakdownRows = [
-    { key: "H5", label: "Задняя стенка", value: breakdown.H5 },
-    { key: "E11", label: "Цвет задней стенки витрины", value: breakdown.E11 },
-    { key: "H7", label: "Цвет корпуса", value: breakdown.H7 },
-    { key: "H9", label: "Цвет фасада", value: breakdown.H9 },
-    { key: "H18", label: "Подъёмный механизм", value: breakdown.H18 },
-    { key: "H22", label: "Тип петель", value: breakdown.H22 },
-    { key: "H24", label: "Тип полок", value: breakdown.H24 },
-    { key: "H26", label: "Тип навесов", value: breakdown.H26 },
-    { key: "H28", label: "Тип опор", value: breakdown.H28 },
-    { key: "sumL", label: "Цена ящиков", value: breakdown.sumL },
-    { key: "U37", label: "Расходники", value: breakdown.U37 },
+    { key: "H5", label: "Задняя стенка" },
+    { key: "E11", label: "Цвет задней стенки витрины" },
+    { key: "H7_sheet", label: "Корпус — плитный", indent: true },
+    { key: "H7_edge", label: "Корпус — кромка", indent: true },
+    { key: "H7", label: "Корпус" },
+    { key: "H9_sheet", label: "Фасад — плитный", indent: true },
+    { key: "H9_edge", label: "Фасад — кромка", indent: true },
+    { key: "H9", label: "Фасад" },
+    { key: "H18", label: "Подъёмный механизм" },
+    { key: "H22", label: "Петли" },
+    { key: "H24", label: "Полки" },
+    { key: "H26", label: "Навесы" },
+    { key: "H28", label: "Опоры" },
+    { key: "L20", label: "Ящик 84 мм", hideWhenZero: true },
+    { key: "L21", label: "Ящик 116 мм", hideWhenZero: true },
+    { key: "L22", label: "Ящик 199 мм", hideWhenZero: true },
+    { key: "sumL", label: "Ящики (итого)" },
+    { key: "sumH", label: "Корпус + фурнитура (итого)" },
+    { key: "U37", label: "Расходники" },
   ];
 
   const markupRows = [
-    { key: "markupSheet", label: `Наценка на плитный (×${Number(breakdown.addSheet || 0).toFixed(2)})`, value: breakdown.markupSheet },
-    { key: "markupEdge", label: `Наценка на кромку (×${Number(breakdown.addEdge || 0).toFixed(2)})`, value: breakdown.markupEdge },
-    { key: "markupGeneral", label: `Наценка общий коэф. (×${(Number(breakdown.coefficient || 0) - 1).toFixed(2)})`, value: breakdown.markupGeneral },
+    { key: "markupSheet", label: `Наценка на плитный (×${Number(breakdown.addSheet || 0).toFixed(2)})` },
+    { key: "markupEdge", label: `Наценка на кромку (×${Number(breakdown.addEdge || 0).toFixed(2)})` },
+    { key: "markupGeneral", label: `Наценка общий коэф. (×${(Number(breakdown.coefficient || 0) - 1).toFixed(2)})` },
   ];
 
   return (
@@ -277,11 +288,11 @@ const ModuleCalculationTables = ({
         {/* Пояснения — формулы с подставленными значениями */}
         {calcData?.details && hasDimensions ? (
         <div className="mt-2 text-[11px] text-night-400/70 leading-relaxed space-y-0.5 select-none border-t border-night-100 pt-2">
-          <p>Ш = {details.D31} мм, В = {details.D33} мм, Г = {details.D35} мм, Фасадов = {details.D16 || 1}</p>
-          <p>S корпуса = [2×(Ш×Г) + 2×((В−100)×Г)] / 10⁶ × {Number(details.O4 || 0).toFixed(2)} = [2×({details.D31}×{details.D35}) + 2×({details.D33 - 100}×{details.D35})] / 10⁶ × {Number(details.O4 || 0).toFixed(2)} = {fmt(areas.corpusArea)}</p>
-          <p>P корпуса = [4×(Ш+Г) + 4×((В−100)+Г)] / 1000 × {Number(details.O5 || 0).toFixed(2)} = [4×({details.D31}+{details.D35}) + 4×({details.D33 - 100}+{details.D35})] / 1000 × {Number(details.O5 || 0).toFixed(2)} = {fmt(areas.corpusPerimeter)}</p>
-          <p>S фасада = Ш × (В−100) / 10⁶ × {Number(details.O4 || 0).toFixed(2)} = {details.D31} × {details.D33 - 100} / 10⁶ × {Number(details.O4 || 0).toFixed(2)} = {fmt(areas.facadeArea)}</p>
-          <p>P фасада = (Ш/Фасадов + (В−100)) × 2 / 1000 × Фасадов × {Number(details.O5 || 0).toFixed(2)} = {fmt(areas.facadePerimeter)}</p>
+          <p>Ш = {details.D31} мм, В = {details.D33} мм, Г = {details.D35} мм, Фасадов = {details.D16 || 1}, Высота опор = {details.supportsH || 100} мм</p>
+          <p>S корпуса = [2×(Ш×Г) + 2×((В−Высота опор)×Г)] / 10⁶ × {Number(details.O4 || 0).toFixed(2)} = [2×({details.D31}×{details.D35}) + 2×({details.D33 - (details.supportsH || 100)}×{details.D35})] / 10⁶ × {Number(details.O4 || 0).toFixed(2)} = {fmt(areas.corpusArea)}</p>
+          <p>P корпуса = [4×(Ш+Г) + 4×((В−Высота опор)+Г)] / 1000 × {Number(details.O5 || 0).toFixed(2)} = [4×({details.D31}+{details.D35}) + 4×({details.D33 - (details.supportsH || 100)}+{details.D35})] / 1000 × {Number(details.O5 || 0).toFixed(2)} = {fmt(areas.corpusPerimeter)}</p>
+          <p>S фасада = Ш × (В−Высота опор) / 10⁶ × {Number(details.O4 || 0).toFixed(2)} = {details.D31} × {details.D33 - (details.supportsH || 100)} / 10⁶ × {Number(details.O4 || 0).toFixed(2)} = {fmt(areas.facadeArea)}</p>
+          <p>P фасада = (Ш/Фасадов + (В−Высота опор)) × 2 / 1000 × Фасадов × {Number(details.O5 || 0).toFixed(2)} = {fmt(areas.facadePerimeter)}</p>
           {Number(details.K20 || 0) + Number(details.K21 || 0) + Number(details.K22 || 0) > 0 ? (
             <p>Ящики: 84мм × {details.K20 || 0}, 116мм × {details.K21 || 0}, 199мм × {details.K22 || 0}</p>
           ) : null}
@@ -327,7 +338,7 @@ const ModuleCalculationTables = ({
                   {drawers.types.filter((d) => d.count > 0).reduce((s, d) => s + d.count, 0)}
                 </td>
                 <td className="px-4 py-2 text-right font-mono text-accent">
-                  {formatCurrency(Number(breakdown.sumL || 0))}
+                  {formatCurrency(Number(breakdown.sumL?.value || 0))}
                 </td>
                 <td className="px-4 py-2 text-right font-mono text-accent">
                   {fmt(drawers.types.filter((d) => d.count > 0).reduce((s, d) => s + Number(d.area || 0), 0))}
@@ -361,38 +372,62 @@ const ModuleCalculationTables = ({
             <tr className="bg-night-50 text-night-600">
               <th className="px-4 py-2 text-left font-semibold">Компонент</th>
               <th className="px-4 py-2 text-right font-semibold">Стоимость</th>
+              <th className="px-4 py-2 text-left font-semibold">Формула</th>
             </tr>
           </thead>
           <tbody>
-            {breakdownRows.map((row) => (
-              <tr key={row.key} className="border-t border-night-100">
-                <td className="px-4 py-2 text-night-700">{row.label}</td>
-                <td className="px-4 py-2 text-right font-mono text-accent">
-                  {formatCurrency(Number(row.value || 0))}
-                </td>
-              </tr>
-            ))}
+            {breakdownRows.filter((row) => {
+              if (!row.hideWhenZero) return true;
+              const entry = breakdown[row.key];
+              const val = entry?.value ?? entry ?? 0;
+              return Number(val) !== 0;
+            }).map((row) => {
+              const entry = breakdown[row.key];
+              const val = entry?.value ?? entry ?? 0;
+              const formula = entry?.formula ?? null;
+              return (
+                <tr key={row.key} className={`border-t border-night-100${row.indent ? " bg-night-50/30" : ""}`}>
+                  <td className={`px-4 py-2 text-night-700${row.indent ? " pl-8 text-[12px]" : ""}`}>{row.label}</td>
+                  <td className="px-4 py-2 text-right font-mono text-accent">
+                    {formatCurrency(Number(val || 0))}
+                  </td>
+                  <td className="px-4 py-2 text-night-400 text-[11px] font-mono">
+                    {formula || "—"}
+                  </td>
+                </tr>
+              );
+            })}
             <tr className="border-t-2 border-night-300 bg-night-50/50 font-semibold">
               <td className="px-4 py-2 text-night-900">Себестоимость (до наценок)</td>
               <td className="px-4 py-2 text-right font-mono text-accent">
-                {formatCurrency(Number(breakdown.S || 0))}
+                {formatCurrency(Number(breakdown.S?.value || 0))}
+              </td>
+              <td className="px-4 py-2 text-night-400 text-[11px] font-mono">
+                {breakdown.S?.formula || "—"}
               </td>
             </tr>
-            {markupRows.map((row) => (
-              Number(row.value || 0) > 0 ? (
+            {markupRows.map((row) => {
+              const entry = breakdown[row.key];
+              const val = entry?.value ?? entry ?? 0;
+              const formula = entry?.formula ?? null;
+              return Number(val || 0) > 0 ? (
                 <tr key={row.key} className="border-t border-night-100 bg-yellow-50/50">
                   <td className="px-4 py-2 text-night-700">{row.label}</td>
                   <td className="px-4 py-2 text-right font-mono text-yellow-600">
-                    + {formatCurrency(Number(row.value || 0))}
+                    + {formatCurrency(Number(val || 0))}
+                  </td>
+                  <td className="px-4 py-2 text-night-400 text-[11px] font-mono">
+                    {formula || "—"}
                   </td>
                 </tr>
-              ) : null
-            ))}
+              ) : null;
+            })}
             <tr className="border-t border-night-100 bg-night-50/50 font-semibold">
               <td className="px-4 py-2 text-night-900">Итого с наценками (×{Number(breakdown.coefficient || 0).toFixed(2)})</td>
               <td className="px-4 py-2 text-right font-mono text-accent font-bold">
                 {formatCurrency(Number(calcData?.price || 0))}
               </td>
+              <td className="px-4 py-2 text-night-400 text-[11px] font-mono">—</td>
             </tr>
           </tbody>
         </table>
