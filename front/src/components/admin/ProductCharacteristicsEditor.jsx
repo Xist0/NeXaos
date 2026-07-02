@@ -281,19 +281,30 @@ const ProductCharacteristicsEditor = ({
                       </FormSection>
                     );
                 })
-                : PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS.map((section) => (
+                : PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS.map((section) => {
+                    if (section.id === "extra") return null;
+                    return (
                       <FormSection key={section.id} title={section.title}>
                           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
                               {section.rows.flatMap((rowKeys) => rowKeys.map((fieldKey) => renderField(fieldKey)).filter(Boolean))}
                           </div>
                       </FormSection>
-                ))}
+                    );
+                })}
 
             <FormSection title="Габариты">
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 items-start">
                     {DIMENSION_FIELD_KEYS.map((fieldKey) => renderField(fieldKey))}
                 </div>
             </FormSection>
+
+            {PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS.filter((s) => s.id === "extra").map((section) => (
+                <FormSection key={section.id} title={section.title}>
+                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
+                        {section.rows.flatMap((rowKeys) => rowKeys.map((fieldKey) => renderField(fieldKey)).filter(Boolean))}
+                    </div>
+                </FormSection>
+            ))}
         </div>
     );
 };

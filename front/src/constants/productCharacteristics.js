@@ -153,9 +153,9 @@ export const CALCULATION_ONLY_KEYS = [
   "p_facade",
 ];
 
-/** Секции редактора на шаге «Характеристики» (без цветов). */
+/** Секции редактора на шаге «Характеристики» (без цветов и без габаритов — габариты рендерятся отдельно). */
 export const PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS = PRODUCT_CHARACTERISTIC_SECTIONS.filter(
-  (section) => section.id !== "colors"
+  (section) => section.id !== "colors" && section.id !== "dimensions"
 );
 
 /** Секция «Габариты» для 4-й вкладки. */
