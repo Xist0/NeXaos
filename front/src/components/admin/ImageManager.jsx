@@ -25,6 +25,7 @@ const ImageManager = ({
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [cacheBust, setCacheBust] = useState(0);
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -150,6 +151,7 @@ const ImageManager = ({
     try {
       await del(`/images/${imageId}`);
       logger.info("✅ Изображение удалено");
+      setCacheBust(Date.now());
       await fetchImages(undefined, { bypassCache: true });
       onUpdate?.();
     } catch (error) {
@@ -159,11 +161,11 @@ const ImageManager = ({
 
   const handleSetPreview = async (imageId) => {
     try {
-      await post(`/images/${imageId}/set-preview`);
+      const res = await post(`/images/${imageId}/set-preview`);
       logger.info("✅ Превью обновлено");
-      const previewImage = images.find((img) => img.id === imageId);
-      if (previewImage?.url) {
-        onPreviewUpdate?.(previewImage.url);
+      setCacheBust(Date.now());
+      if (res?.data?.preview_url) {
+        onPreviewUpdate?.(res.data.preview_url);
       }
       await fetchImages(undefined, { bypassCache: true });
     } catch (error) {
@@ -178,7 +180,7 @@ const ImageManager = ({
 
   const getGridThumbUrl = (url) => {
     if (!url) return placeholderImage;
-    return getThumbUrl(url, { w: 420, h: 252, q: 70, fit: "cover" });
+    return getThumbUrl(url, { w: 420, h: 252, q: 70, fit: "cover", cacheBust: cacheBust || undefined });
   };
 
   const isVideoMedia = (item) => {
@@ -292,6 +294,7 @@ const ImageManager = ({
                   />
                 ) : (
                   <img
+                    key={image.url}
                     src={getGridThumbUrl(image.url)}
                     alt={image.alt || `Image ${idx + 1}`}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
@@ -334,12 +337,12 @@ const ImageManager = ({
                   </SecureButton>
                   <SecureButton
                     size="sm"
-                    variant="ghost"
+                    variant="danger"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDelete(image.id);
                     }}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 w-7 p-0"
+                    className="h-7 w-7 p-0"
                   >
                     <FaTrash className="w-3 h-3" />
                   </SecureButton>

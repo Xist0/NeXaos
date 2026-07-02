@@ -86,6 +86,8 @@ const SecureButton = ({
           ? "bg-transparent text-night-900 shadow-none border border-transparent hover:bg-night-100"
           : variant === "outline"
           ? "bg-white text-night-900 border border-night-200 shadow-sm hover:border-night-400 hover:bg-night-50"
+          : variant === "danger"
+          ? "bg-red-500 text-white shadow-sm hover:bg-red-600"
           : "bg-[#e3e161] text-[#21262d] hover:bg-[#d6d04d]",
         busy && "opacity-60 cursor-not-allowed",
         className

@@ -250,18 +250,49 @@ const renameModuleImages = async (entityType, entityId, moduleData) => {
         [rename.newUrl, rename.newSortOrder, rename.imageId]);
     } catch (err) {
       console.warn(`Не удалось переименовать временный файл ${rename.tempPath} в ${rename.newPath}:`, err.message);
-      // Пытаемся вернуть файл на старое место
-      const oldPath = rename.oldUrl.startsWith("/") 
+      const oldPath = rename.oldUrl.startsWith("/")
         ? path.join(config.uploadsDir, rename.oldUrl.replace(/^\/?uploads\//, ""))
         : path.join(config.uploadsDir, String(rename.oldUrl).replace(/^uploads\//, ""));
-      try {
-        if (fs.existsSync(rename.tempPath)) {
+      if (fs.existsSync(rename.tempPath) && !fs.existsSync(oldPath)) {
+        try {
           fs.renameSync(rename.tempPath, oldPath);
+        } catch (restoreErr) {
+          console.error(`Не удалось восстановить файл:`, restoreErr.message);
         }
-      } catch (restoreErr) {
-        console.error(`Не удалось восстановить файл:`, restoreErr.message);
       }
     }
+  }
+
+  // Полная очистка дискового кеша thumbnail — после переименования файлов
+  // все кеш-ключи устарели, проще регенерировать с нуля при следующем запросе
+  const thumbCacheDir = path.join(config.uploadsDir, ".thumbs");
+  if (fs.existsSync(thumbCacheDir)) {
+    try {
+      const cachedFiles = fs.readdirSync(thumbCacheDir);
+      for (const f of cachedFiles) {
+        try { fs.unlinkSync(path.join(thumbCacheDir, f)); } catch {}
+      }
+    } catch {}
+  }
+
+  // Обновляем preview_url в таблице сущности
+  const entityTableMap = {
+    modules: "modules",
+    kit_solutions: "kit_solutions",
+    catalog_items: "catalog_items",
+    materials: "materials",
+  };
+  const tableName = entityTableMap[entityType];
+  if (tableName) {
+    const { rows: previewRows } = await query(
+      `SELECT url FROM images WHERE entity_type = $1 AND entity_id = $2 ORDER BY sort_order ASC, id ASC LIMIT 1`,
+      [entityType, entityId]
+    );
+    const newPreviewUrl = previewRows[0]?.url || null;
+    await query(
+      `UPDATE ${tableName} SET preview_url = $1 WHERE id = $2`,
+      [newPreviewUrl, entityId]
+    );
   }
 };
 
@@ -556,6 +587,23 @@ const uploadImage = async (req, res) => {
     [entityType, parsedId, urlPath, req.body.alt || null, sortOrder, mediaType, mimeType]
   );
 
+  // Если это первое изображение (sort_order=0), обновляем preview_url в таблице сущности
+  if (sortOrder === 0) {
+    const entityTableMap = {
+      modules: "modules",
+      kit_solutions: "kit_solutions",
+      catalog_items: "catalog_items",
+      materials: "materials",
+    };
+    const tableName = entityTableMap[entityType];
+    if (tableName) {
+      await query(
+        `UPDATE ${tableName} SET preview_url = $1 WHERE id = $2`,
+        [urlPath, parsedId]
+      );
+    }
+  }
+
   // Логируем успешную загрузку
   logger.info("Изображение успешно загружено", {
     imageId: rows[0].id,
@@ -634,6 +682,26 @@ const deleteImage = async (req, res) => {
     if (moduleData && moduleData.sku) {
       await renameModuleImages(entity_type, entity_id, moduleData);
     }
+  }
+
+  // Обновляем preview_url в таблице сущности
+  const entityTableMap = {
+    modules: "modules",
+    kit_solutions: "kit_solutions",
+    catalog_items: "catalog_items",
+    materials: "materials",
+  };
+  const tableName = entityTableMap[entity_type];
+  if (tableName) {
+    const { rows: previewRows } = await query(
+      `SELECT url FROM images WHERE entity_type = $1 AND entity_id = $2 ORDER BY sort_order ASC, id ASC LIMIT 1`,
+      [entity_type, entity_id]
+    );
+    const newPreviewUrl = previewRows[0]?.url || null;
+    await query(
+      `UPDATE ${tableName} SET preview_url = $1 WHERE id = $2`,
+      [newPreviewUrl, entity_id]
+    );
   }
 
   logger.info("Изображение успешно удалено", {
@@ -808,6 +876,28 @@ const setPreview = async (req, res) => {
     }
   }
 
+  // Получаем URL нового превью (первое изображение после сортировки)
+  const { rows: previewRows } = await query(
+    `SELECT url FROM images WHERE entity_type = $1 AND entity_id = $2 ORDER BY sort_order ASC, id ASC LIMIT 1`,
+    [entity_type, entity_id]
+  );
+  const newPreviewUrl = previewRows[0]?.url || null;
+
+  // Обновляем preview_url в таблице сущности
+  const entityTableMap = {
+    modules: "modules",
+    kit_solutions: "kit_solutions",
+    catalog_items: "catalog_items",
+    materials: "materials",
+  };
+  const tableName = entityTableMap[entity_type];
+  if (tableName && newPreviewUrl) {
+    await query(
+      `UPDATE ${tableName} SET preview_url = $1 WHERE id = $2`,
+      [newPreviewUrl, entity_id]
+    );
+  }
+
   // Логируем установку превью
   logger.info("Превью изображения установлено", {
     imageId: parsedId,
@@ -818,7 +908,7 @@ const setPreview = async (req, res) => {
     userName: req.user?.fullName || req.user?.email,
   });
 
-  res.status(200).json({ message: "Превью установлено" });
+  res.status(200).json({ message: "Превью установлено", preview_url: newPreviewUrl });
 };
 
 module.exports = {

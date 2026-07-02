@@ -1231,7 +1231,7 @@ const ModuleCreator = ({
                 entityId={moduleId}
                 onUpdate={() => {}}
                 onPreviewUpdate={(previewUrl) => {
-                  setForm((prev) => ({ ...prev, preview_url: previewUrl || null }));
+                  setForm((prev) => ({ ...prev, preview_url: previewUrl || null, previewCacheBust: Date.now() }));
                 }}
               />
             ) : (
@@ -1279,7 +1279,17 @@ const ModuleCreator = ({
                   </div>
                   <div className="pt-3 border-t">
                     <div className="text-night-600">Превью</div>
-                    <div className="font-mono text-sm break-all">{form.preview_url || "не выбрано"}</div>
+                    {form.preview_url ? (
+                      <img
+                        key={form.preview_url}
+                        src={getThumbUrl(form.preview_url, { w: 420, h: 252, q: 70, fit: "cover", cacheBust: form.previewCacheBust || undefined })}
+                        alt="Превью модуля"
+                        className="mt-2 rounded-xl object-cover w-full max-w-[280px] h-[168px] shadow-md"
+                        onError={(e) => { e.target.src = ""; e.target.alt = "не выбрано"; }}
+                      />
+                    ) : (
+                      <div className="text-night-400 text-sm">не выбрано</div>
+                    )}
                   </div>
                 </div>
               </div>

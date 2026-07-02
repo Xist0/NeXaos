@@ -146,10 +146,18 @@ app.get("/uploads/thumb", async (req, res, next) => {
     const cachedPath = path.join(cacheDir, `${key}.webp`);
 
     if (fs.existsSync(cachedPath)) {
-      res.setHeader("Content-Type", "image/webp");
-      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-      res.sendFile(cachedPath);
-      return;
+      // Проверяем, не устарел ли кеш — если исходный файл новее, регенерируем
+      const srcMtime = fs.statSync(originalPath).mtimeMs;
+      const cacheMtime = fs.statSync(cachedPath).mtimeMs;
+      if (srcMtime > cacheMtime) {
+        try { fs.unlinkSync(cachedPath); } catch {}
+        // Падаем через кеш — регенерируем ниже
+      } else {
+        res.setHeader("Content-Type", "image/webp");
+        res.setHeader("Cache-Control", "no-cache");
+        res.sendFile(cachedPath);
+        return;
+      }
     }
 
     const transformer = sharp(originalPath).rotate();
@@ -163,7 +171,7 @@ app.get("/uploads/thumb", async (req, res, next) => {
     }
 
     res.setHeader("Content-Type", "image/webp");
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.setHeader("Cache-Control", "no-cache");
     res.end(buf);
   } catch (e) {
     next(e);
@@ -184,7 +192,7 @@ app.use(
     }
     res.header("Cross-Origin-Resource-Policy", "cross-origin");
     res.header("Cross-Origin-Embedder-Policy", "unsafe-none");
-    res.header("Cache-Control", "public, max-age=31536000");
+    res.header("Cache-Control", "public, max-age=86400");
     next();
   },
   express.static(config.uploadsDir, {
@@ -229,7 +237,7 @@ if (config.legacyUploadsDir && path.resolve(config.legacyUploadsDir) !== path.re
       }
       res.header("Cross-Origin-Resource-Policy", "cross-origin");
       res.header("Cross-Origin-Embedder-Policy", "unsafe-none");
-      res.header("Cache-Control", "public, max-age=31536000");
+      res.header("Cache-Control", "public, max-age=86400");
       next();
     },
     express.static(config.legacyUploadsDir, {
