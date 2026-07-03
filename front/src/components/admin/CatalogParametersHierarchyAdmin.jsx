@@ -19,6 +19,20 @@ const sectionSortKey = (name) => {
   return idx >= 0 ? idx : SECTION_ORDER.length;
 };
 
+const HIDDEN_PARAM_NAMES = [
+  "Тип изделия",
+  "Материал корпуса",
+  "Материал фасада",
+  "Задняя стенка",
+  "Пленка",
+  "Фрезеровка",
+  "Вид и кол-во ящиков",
+  "Вид и кол-во Петель",
+  "Столешница",
+  "Подъёмный механизм",
+  "Тип навесов",
+];
+
 const LEVEL = { CATEGORIES: "categories", PARAMETERS: "parameters", VALUES: "values" };
 
 const CatalogParametersHierarchyAdmin = () => {
@@ -112,6 +126,7 @@ const CatalogParametersHierarchyAdmin = () => {
   const parameterPlates = useMemo(() => {
     if (!selectedCategory) return [];
     return (paramsByCategory.get(Number(selectedCategory.id)) || [])
+      .filter((p) => !HIDDEN_PARAM_NAMES.includes(String(p.name || "").trim()))
       .slice()
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.name).localeCompare(String(b.name), "ru"))
       .map((p) => ({

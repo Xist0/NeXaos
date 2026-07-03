@@ -464,7 +464,11 @@ const calculateModulePrice = (input, refs) => {
   const K3 = ROUND(S_withAdd * L4, 0);
 
   const sumH_formula = `${fa(H5,'задняя_стенка')} + ${fa(H7,'корпус')} + ${fa(H9,'фасад')} + ${fa(H18,'механизм')} + ${fa(H22,'петли')} + ${fa(H24,'полки')} + ${fa(H26,'навесы')} + ${fa(H28,'опоры')}`;
-  const sumL_formula = `${fa(L20,'ящик_84')} + ${fa(L21,'ящик_116')} + ${fa(L22,'ящик_199')}`;
+  const sumL_parts = [];
+  if (L20 > 0) sumL_parts.push(fa(L20,'ящик_84'));
+  if (L21 > 0) sumL_parts.push(fa(L21,'ящик_116'));
+  if (L22 > 0) sumL_parts.push(fa(L22,'ящик_199'));
+  const sumL_formula = sumL_parts.length ? sumL_parts.join(' + ') : "0";
   const S_formula = `${fa(sumH,'корпус+фасад')} + ${fa(sumL,'ящики')} + ${fa(E11,'задняя_витрины')} + ${fa(U37,'расходники')}`;
   const markupSheet_formula = `${fa(addSheet,'нац_плит')} × (${fa(N10,'S_ящик')} + ${fa(N7,'S_корп')})`;
   const markupEdge_formula = `${fa(addEdge,'нац_кромки')} × (${fa(N11,'P_ящик')} + ${fa(N8,'P_корп')} + ${fa(N14,'P_фасад')})`;

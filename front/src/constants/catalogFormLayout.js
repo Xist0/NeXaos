@@ -19,7 +19,7 @@ export const CATALOG_ITEM_FORM_SECTIONS = [
     columns: [
       ["supports_type"],
       ["hangers_type"],
-      ["lift_mechanism", "drawers_detail"],
+      ["lift_mechanism", "drawers_detail", "hinges_detail"],
     ],
   },
   {
@@ -28,6 +28,7 @@ export const CATALOG_ITEM_FORM_SECTIONS = [
     columns: [
       [
         "product_type",
+        "module_purpose",
         "facade_thickness_mm",
         "front_count",
         "lift_mechanism_count",
@@ -58,7 +59,7 @@ export const CATALOG_ITEM_FORM_SECTIONS = [
     title: "Дополнительная информация",
     columns: [
       ["lighting"],
-      ["glass_insert_color"],
+      ["glass_insert_color", "countertop_thickness", "countertop_color"],
       ["side_posts_facade_color"],
     ],
   },

@@ -18,6 +18,7 @@ import CharacteristicCard from "../ui/CharacteristicCard";
 import ColorSelectDropdown from "../ui/ColorSelectDropdown";
 import MaterialSelectField from "../ui/MaterialSelectField";
 import DrawerSelectField from "../ui/DrawerSelectField";
+import HingeSelectField from "../ui/HingeSelectField";
 import FormSection from "../ui/FormSection";
 import DrawerTypesMultiSelect from "./DrawerTypesMultiSelect";
 import CatalogCalculationResults from "./CatalogCalculationResults";
@@ -25,8 +26,6 @@ import ModuleHardwareMatrixTable from "./kitchens/modules/ModuleHardwareMatrixTa
 
 const HARDWARE_CATEGORY_FIELDS = {
   lift_mechanism: "Подъемные механизмы",
-  hangers_type: "Навесы",
-  supports_type: "Опора",
 };
 
 const OTHER_MATERIALS_FIELDS = [
@@ -34,6 +33,7 @@ const OTHER_MATERIALS_FIELDS = [
   { key: "hangers_type", label: "Тип навесов" },
   { key: "lift_mechanism", label: "Подъёмный механизм" },
   { key: "drawers_detail", label: "Вид и кол-во ящиков" },
+  { key: "hinges_detail", label: "Вид и кол-во Петель" },
 ];
 
 /** Semi-transparent price badge shown next to fields that have a calculated breakdown value. */
@@ -49,6 +49,8 @@ const BreakdownPriceBadge = ({ amount }) => {
 const HARDWARE_SELECT_FIELD_KEYS = new Set(Object.keys(HARDWARE_CATEGORY_FIELDS));
 const DRAWER_SELECT_FIELD_KEY = "drawers_detail";
 const DRAWER_CATEGORY = "Выдвижные системы";
+const HINGE_DETAIL_FIELD_KEY = "hinges_detail";
+const HINGE_CATEGORY = "Петли";
 const DIMENSION_FIELD_KEYS = new Set(["width_mm", "height_mm_char", "depth_mm_char"]);
 
 const getColorDropdownProps = (colorRole) => {
@@ -120,6 +122,10 @@ const CatalogItemCharacteristicsForm = ({
 
   const drawerHardwareItems = useMemo(() => {
     return hardwareByCategory.get(DRAWER_CATEGORY) || [];
+  }, [hardwareByCategory]);
+
+  const hingeHardwareItems = useMemo(() => {
+    return hardwareByCategory.get(HINGE_CATEGORY) || [];
   }, [hardwareByCategory]);
 
   const renderColorField = (fieldKey) => {
@@ -238,6 +244,23 @@ const CatalogItemCharacteristicsForm = ({
           onVisibilityChange={(nextVisible) => updateField(fieldKey, { visible: nextVisible })}
           visible={parsed.visible}
           items={drawerHardwareItems}
+          extra={bp ? <BreakdownPriceBadge amount={bp} /> : null}
+        />
+      );
+    }
+
+    if (fieldKey === HINGE_DETAIL_FIELD_KEY && hingeHardwareItems.length > 0) {
+      const parsed = parseCharacteristicField(form[fieldKey]);
+      const bp = fieldBreakdown[fieldKey];
+      return (
+        <HingeSelectField
+          key={fieldKey}
+          label={resolveFieldLabel(fieldKey, fieldLabels)}
+          value={parsed.value}
+          onChange={(v) => updateField(fieldKey, { value: v })}
+          onVisibilityChange={(nextVisible) => updateField(fieldKey, { visible: nextVisible })}
+          visible={parsed.visible}
+          items={hingeHardwareItems}
           extra={bp ? <BreakdownPriceBadge amount={bp} /> : null}
         />
       );

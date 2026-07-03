@@ -1,3 +1,6 @@
 backend/src/public/
 backend/uploads/.thumbs/
-
+backend/uploads/
+excel
+.qwen
+.qwen\settings.json

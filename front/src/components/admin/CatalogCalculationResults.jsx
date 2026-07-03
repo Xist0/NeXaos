@@ -26,7 +26,7 @@ const BREAKDOWN_ROWS = [
   { key: "L20", label: "Ящик 84 мм", hideWhenZero: true },
   { key: "L21", label: "Ящик 116 мм", hideWhenZero: true },
   { key: "L22", label: "Ящик 199 мм", hideWhenZero: true },
-  { key: "sumL", label: "Ящики (итого)" },
+  { key: "sumL", label: "Ящики (итого)", hideWhenZero: true },
   { key: "sumH", label: "Корпус + фурнитура (итого)" },
   { key: "U37", label: "Расходники" },
 ];

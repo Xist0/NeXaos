@@ -7,6 +7,7 @@ import { parseCharacteristicField } from "../../utils/characteristics";
 import CharacteristicCard from "../ui/CharacteristicCard";
 import MaterialSelectField from "../ui/MaterialSelectField";
 import DrawerSelectField from "../ui/DrawerSelectField";
+import HingeSelectField from "../ui/HingeSelectField";
 import FormSection from "../ui/FormSection";
 import { formatCurrency } from "../../utils/format";
 
@@ -19,7 +20,7 @@ const PRICE_LABELS = {
 
 const DIMENSION_FIELD_KEYS = ["width_mm", "height_mm_char", "depth_mm_char"];
 
-const OTHER_MATERIALS_KEYS = ["supports_type", "hangers_type", "lift_mechanism", "drawers_detail"];
+const OTHER_MATERIALS_KEYS = ["supports_type", "hangers_type", "lift_mechanism", "drawers_detail", "hinges_detail"];
 const OTHER_MATERIALS_SECTION_TITLES = ["Прочие материалы", "Прочее"];
 
 /** Semi-transparent price badge shown next to fields that have a calculated breakdown value. */
@@ -90,6 +91,27 @@ const ProductCharacteristicsEditor = ({
             const drawerItems = def?.categoryFilter
                 ? hardwareItems.filter((i) => i.category === def.categoryFilter)
                 : hardwareItems;
+            if (drawerItems.length === 0) {
+                // Нет фурнитуры данной категории — fallback на CharacteristicCard
+                return (
+                    <CharacteristicCard
+                        key={fieldKey}
+                        label={label}
+                        value={parsed.value}
+                        onChange={(v) => {
+                            const current = parseCharacteristicField(form[fieldKey]);
+                            onChange({ ...form, [fieldKey]: { ...current, value: v } });
+                        }}
+                        visible={parsed.visible}
+                        onVisibilityChange={(nextVisible) => {
+                            const current = parseCharacteristicField(form[fieldKey]);
+                            onChange({ ...form, [fieldKey]: { ...current, visible: nextVisible } });
+                        }}
+                        suggestions={templatesByField[fieldKey] || []}
+                        extra={breakdownPrice ? <BreakdownPriceBadge amount={breakdownPrice} /> : null}
+                    />
+                );
+            }
             return (
                 <DrawerSelectField
                     key={fieldKey}
@@ -111,6 +133,58 @@ const ProductCharacteristicsEditor = ({
                         });
                     }}
                     items={drawerItems}
+                    extra={breakdownPrice ? <BreakdownPriceBadge amount={breakdownPrice} /> : null}
+                />
+            );
+        }
+
+        // Hinge select — специальный тип для петель (hardware-items-based multi-select с кол-во)
+        if (def?.fieldType === "hinge_select") {
+            const hingeItems = def?.categoryFilter
+                ? hardwareItems.filter((i) => i.category === def.categoryFilter)
+                : hardwareItems;
+            if (hingeItems.length === 0) {
+                // Нет фурнитуры данной категории — fallback на CharacteristicCard
+                return (
+                    <CharacteristicCard
+                        key={fieldKey}
+                        label={label}
+                        value={parsed.value}
+                        onChange={(v) => {
+                            const current = parseCharacteristicField(form[fieldKey]);
+                            onChange({ ...form, [fieldKey]: { ...current, value: v } });
+                        }}
+                        visible={parsed.visible}
+                        onVisibilityChange={(nextVisible) => {
+                            const current = parseCharacteristicField(form[fieldKey]);
+                            onChange({ ...form, [fieldKey]: { ...current, visible: nextVisible } });
+                        }}
+                        suggestions={templatesByField[fieldKey] || []}
+                        extra={breakdownPrice ? <BreakdownPriceBadge amount={breakdownPrice} /> : null}
+                    />
+                );
+            }
+            return (
+                <HingeSelectField
+                    key={fieldKey}
+                    label={label}
+                    value={parsed.value}
+                    onChange={(v) => {
+                        const current = parseCharacteristicField(form[fieldKey]);
+                        onChange({
+                            ...form,
+                            [fieldKey]: { ...current, value: v },
+                        });
+                    }}
+                    visible={parsed.visible}
+                    onVisibilityChange={(nextVisible) => {
+                        const current = parseCharacteristicField(form[fieldKey]);
+                        onChange({
+                            ...form,
+                            [fieldKey]: { ...current, visible: nextVisible },
+                        });
+                    }}
+                    items={hingeItems}
                     extra={breakdownPrice ? <BreakdownPriceBadge amount={breakdownPrice} /> : null}
                 />
             );

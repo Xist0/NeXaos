@@ -34,11 +34,11 @@ const CATALOG_STRUCTURE = [
       { name: "Тип ящиков", field_key: "drawers_type", sort: 12 },
       { name: "Тип петель", field_key: "hinges_type", sort: 13 },
       { name: "Тип полок", field_key: "shelves_type", sort: 14 },
-      { name: "Тип навесов", field_key: "hangers_type", sort: 15 },
       { name: "Тип опор", field_key: "supports_type", sort: 16 },
       { name: "Способ открывания", field_key: "opening_method", sort: 17 },
       { name: "Вид и кол-во ящиков", field_key: "drawers_detail", sort: 18 },
-      { name: "Высота опор, мм", field_key: "supports_height_mm", sort: 19 },
+      { name: "Вид и кол-во Петель", field_key: "hinges_detail", sort: 19 },
+      { name: "Высота опор, мм", field_key: "supports_height_mm", sort: 20 },
     ],
   },
   {
