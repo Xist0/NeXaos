@@ -122,7 +122,7 @@ const findSimilarCatalogItems = async (params) => {
 
   if (colorIds.length > 0) {
     const { rows: colorRows } = await query(
-      `SELECT id, name, sku, image_url
+      `SELECT id, name, sku, hex, image_url
        FROM colors
        WHERE id = ANY($1::int[])`,
       [colorIds]

@@ -206,7 +206,15 @@ const findSimilarModules = async (params) => {
      m.primary_color_id,
      m.secondary_color_id,
      c1.id as primary_color_id_val,
+     c1.name as primary_color_name,
+     c1.sku as primary_color_sku,
+     c1.hex as primary_color_hex,
+     c1.image_url as primary_color_image_url,
      c2.id as secondary_color_id_val,
+     c2.name as secondary_color_name,
+     c2.sku as secondary_color_sku,
+     c2.hex as secondary_color_hex,
+     c2.image_url as secondary_color_image_url,
      m.length_mm,
      m.depth_mm,
      m.height_mm
@@ -309,6 +317,24 @@ const findSimilarModules = async (params) => {
     .filter(m => m.similarityScore > 0)
     .sort((a, b) => b.similarityScore - a.similarityScore)
     .slice(0, limit);
+
+  // Обогащаем цвета в результатах
+  const colorIds = new Set();
+  for (const m of sorted) {
+    if (m.primary_color_id) colorIds.add(Number(m.primary_color_id));
+    if (m.secondary_color_id) colorIds.add(Number(m.secondary_color_id));
+  }
+  if (colorIds.size > 0) {
+    const { rows: colorRows } = await query(
+      `SELECT id, name, sku, hex, image_url FROM colors WHERE id = ANY($1::int[])`,
+      [Array.from(colorIds)]
+    );
+    const colorMap = new Map(colorRows.map(r => [r.id, r]));
+    for (const m of sorted) {
+      if (m.primary_color_id) m.primary_color = colorMap.get(Number(m.primary_color_id));
+      if (m.secondary_color_id) m.secondary_color = colorMap.get(Number(m.secondary_color_id));
+    }
+  }
 
   logger.info("Найдены похожие модули", {
     sourceModuleId: moduleId,

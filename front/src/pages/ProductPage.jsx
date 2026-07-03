@@ -12,7 +12,7 @@ import { getThumbUrl } from "../utils/image";
 import ProductGallery from "../components/ui/ProductGallery";
 import apiClient from "../services/apiClient";
 import { resolveColor } from "../utils/colors";
-import { characteristicsToDisplayRows, groupCharacteristicRows } from "../utils/characteristics";
+import { characteristicsToDisplayRows, groupCharacteristicRows, parseCharacteristicField, getCharacteristicDimensions } from "../utils/characteristics";
 import { PRODUCT_CHARACTERISTIC_SECTIONS } from "../constants/productCharacteristics";
 
 const ProductPage = () => {
@@ -345,7 +345,6 @@ const ProductPage = () => {
       ? item.characteristics
       : {};
 
-    if (item.sku) list.push({ label: "Артикул", value: String(item.sku) });
     if (item.category_group || item.category) {
       const left = String(item.category_group || "").trim();
       const right = String(item.category || "").trim();
@@ -354,11 +353,6 @@ const ProductPage = () => {
         value: [left, right].filter(Boolean).join(" / "),
       });
     }
-
-    const primaryColor = item.primary_color?.name || item.facade_color;
-    const secondaryColor = item.secondary_color?.name || item.corpus_color;
-    if (primaryColor) list.push({ label: "Цвет (основной)", value: String(primaryColor) });
-    if (secondaryColor) list.push({ label: "Цвет (доп.)", value: String(secondaryColor) });
 
     if (item.length_mm) list.push({ label: "Длина", value: `${item.length_mm} мм` });
     if (item.depth_mm) list.push({ label: "Глубина", value: `${item.depth_mm} мм` });
@@ -706,6 +700,51 @@ const ProductPage = () => {
               })()}
             </div>
           )}
+
+          {(() => {
+            const ch = item.characteristics && typeof item.characteristics === "object" && !Array.isArray(item.characteristics)
+              ? item.characteristics : {};
+            const materialFacade = parseCharacteristicField(ch.material_facade).value;
+            const chDims = getCharacteristicDimensions(ch);
+            const height = item.height_mm || chDims.height_mm;
+            const width = item.length_mm || chDims.length_mm;
+            const depth = item.depth_mm || chDims.depth_mm;
+            const hasDims = height || width || depth;
+            const hasAny = hasDims || materialFacade || item.primary_color || item.facade_color || item.secondary_color || item.corpus_color;
+            if (!hasAny) return null;
+            return (
+              <div className="glass-card p-3 sm:p-4">
+                <div className="grid gap-y-2 gap-x-4 sm:grid-cols-2 text-sm">
+                  {hasDims && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-night-500 shrink-0">Габариты</span>
+                      <span className="text-night-900 font-medium">
+                        {[height, width, depth].filter(Boolean).join(" × ")} мм
+                      </span>
+                    </div>
+                  )}
+                  {materialFacade && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-night-500 shrink-0">Материал фасада</span>
+                      <span className="text-night-900 font-medium truncate">{materialFacade}</span>
+                    </div>
+                  )}
+                  {(item.primary_color || item.facade_color) && (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-night-500 shrink-0">Основной цвет</span>
+                      <ColorBadge colorData={item.primary_color} value={item.primary_color ? undefined : item.facade_color} />
+                    </div>
+                  )}
+                  {(item.secondary_color || item.corpus_color) && (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-night-500 shrink-0">Доп. цвет</span>
+                      <ColorBadge colorData={item.secondary_color} value={item.secondary_color ? undefined : item.corpus_color} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Право: название + цена + действия */}

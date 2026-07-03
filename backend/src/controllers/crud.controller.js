@@ -143,7 +143,7 @@ const createCrudController = (entity) => {
 
       if (colorIds.length > 0 || colorSkus.length > 0) {
         const { rows: colorRows } = await query(
-          `SELECT id, name, sku, image_url
+          `SELECT id, name, sku, hex, image_url
            FROM colors
            WHERE (cardinality($1::int[]) > 0 AND id = ANY($1::int[]))
               OR (cardinality($2::text[]) > 0 AND sku = ANY($2::text[]))`,
