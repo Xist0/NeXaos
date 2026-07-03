@@ -135,12 +135,29 @@ const parseDrawerCounts = (drawersDetail, characteristics = {}) => {
     result.k199 = Number(characteristics.drawer_199_count) || 0;
   }
 
-  // Фоллбэк: если drawer_count задан, но типы не разбиты — всё считаем как 116 мм
-  if (!result.k84 && !result.k116 && !result.k199) {
-    const drawerCount = Number(characteristics.drawer_count) || 0;
-    if (drawerCount > 0) {
-      result.k116 = drawerCount;
-      result.types.push({ type: "116 мм", qty: drawerCount, key: "116" });
+  return result;
+};
+
+const parseHingeCounts = (hingesDetail, characteristics = {}) => {
+  const result = { types: [], totalCount: 0 };
+
+  const text = String(hingesDetail ?? characteristics.hinges_detail ?? "").trim();
+  if (text) {
+    for (const part of text.split(";")) {
+      const m = part.trim().match(/^(.+?)\s*[×x*]\s*(\d+)$/i);
+      const type = m ? m[1].trim() : part.trim();
+      const qty = m ? Number(m[2]) : 1;
+      result.types.push({ type, qty });
+      result.totalCount += qty;
+    }
+  }
+
+  if (!result.totalCount) {
+    const G20 = characteristics.hinges_type || "";
+    const D22 = Number(characteristics.hinges_count) || 0;
+    if (G20 && D22 > 0) {
+      result.types.push({ type: G20, qty: D22 });
+      result.totalCount = D22;
     }
   }
 
@@ -179,8 +196,6 @@ const calculateModulePrice = (input, refs) => {
   const G_edge_band = chars.edge_band || "";
   const G18 = chars.lift_mechanism || "";
   const D18 = Number(chars.lift_mechanism_count) || 0;
-  const G20 = chars.hinges_type || "";
-  const D22 = Number(chars.hinges_count) || 0;
   const G24 = chars.shelves_type || "";
   const D24 = Number(chars.shelf_count) || 0;
   const G26 = chars.hangers_type || "";
@@ -210,6 +225,9 @@ const calculateModulePrice = (input, refs) => {
   const K20 = drawers.k84;
   const K21 = drawers.k116;
   const K22 = drawers.k199;
+
+  const hinges = parseHingeCounts(chars.hinges_detail, chars);
+  const D22 = hinges.totalCount;
 
   // N7 — площадь корпуса (дно + крышка + 2 боковины)
   const N7 = IFERROR(
@@ -313,17 +331,28 @@ const calculateModulePrice = (input, refs) => {
     return fallback;
   };
 
-  // H22 — петли (динамический lookup по названию из dropdown)
-  const hingePrice = HW_LOOKUP(G20, hardware);
+  // H22 — петли (динамический multi-type lookup из hinges_detail)
   const N31 = rowTotalByNames(["Саморез 3,5х16", "screw_3_5x16"]);
-  const H22 = (hingePrice > 0 && D22 > 0)
-    ? IFERROR(() => hingePrice * D22 + (N31 > 0 ? N31 * screwPrice : 0), 0)
-    : 0;
-  const H22_formula = (hingePrice > 0 && D22 > 0)
-    ? N31 > 0
-      ? `${fa(hingePrice,'цена_петля')} × ${fa(D22,'кол-во')} + ${fa(N31,'кол-во_саморез')} × ${fa(screwPrice,'цена_саморез')}`
-      : `${fa(hingePrice,'цена_петля')} × ${fa(D22,'кол-во')}`
-    : "0";
+  let H22 = 0;
+  let H22_formula = "0";
+  if (hinges.types.length > 0) {
+    const parts = [];
+    const formulaParts = [];
+    for (const { type, qty } of hinges.types) {
+      const price = HW_LOOKUP(type, hardware);
+      if (price > 0 && qty > 0) {
+        parts.push(price * qty);
+        formulaParts.push(`${fa(price, type)} × ${fa(qty, 'кол-во')}`);
+      }
+    }
+    const screwCost = N31 > 0 ? N31 * screwPrice : 0;
+    H22 = IFERROR(() => SUM(parts) + screwCost, 0);
+    H22_formula = formulaParts.length
+      ? (screwCost > 0
+        ? `${formulaParts.join(' + ')} + ${fa(N31,'кол-во_саморез')} × ${fa(screwPrice,'цена_саморез')}`
+        : formulaParts.join(' + '))
+      : "0";
+  }
 
   // H24 — полки (всегда считаем материал при D24 > 0, flipper только для съемных)
   const P34 = rowTotalByNames(["FLIPPER", "flipper"], 0);
@@ -513,6 +542,7 @@ const calculateModulePrice = (input, refs) => {
       edge_band: edgePriceFacade * N14,
       lift_mechanism: H18,
       hinges_type: H22,
+      hinges_detail: H22,
       drawers_type: 0,
       shelves_type: H24,
       hangers_type: H26,
@@ -557,4 +587,5 @@ module.exports = {
   VLOOKUP,
   calculateModulePrice,
   parseDrawerCounts,
+  parseHingeCounts,
 };

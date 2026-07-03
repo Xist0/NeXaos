@@ -51,7 +51,7 @@ export const PRODUCT_CHARACTERISTIC_FIELDS = {
   hinges_detail: { label: "Вид и кол-во Петель", fieldType: "hinge_select", categoryFilter: "Петли" },
   shelves_type: { label: "Тип полок" },
   hangers_type: { label: "Тип навесов", selectType: "hardware", priceKey: "price_per_unit", categoryFilter: "Навесы" },
-  supports_type: { label: "Тип опор" },
+  supports_type: { label: "Тип опор", selectType: "hardware", priceKey: "price_per_unit", categoryFilter: "Опора" },
   opening_method: { label: "Способ открывания" },
   drawers_detail: { label: "Вид и кол-во ящиков", fieldType: "drawer_select", categoryFilter: "Выдвижные системы" },
   supports_height_mm: { label: "Высота опор, мм" },

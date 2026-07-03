@@ -61,7 +61,8 @@ const ProductCharacteristicsEditor = ({
         const parsed = parseCharacteristicField(form[fieldKey]);
         const breakdownPrice =
             fieldBreakdown[fieldKey] ??
-            (fieldKey === "drawers_type" ? fieldBreakdown.hinges_type : undefined);
+            (fieldKey === "drawers_type" ? fieldBreakdown.hinges_type : undefined) ??
+            (fieldKey === "hinges_detail" ? fieldBreakdown.hinges_detail : undefined);
 
         // ReadOnly fields — disabled display
         if (def?.readOnly) {
