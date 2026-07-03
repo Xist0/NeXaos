@@ -17,6 +17,7 @@ import LinearMaterialsAdmin from "../components/admin/LinearMaterialsAdmin";
 import CountertopsAdmin from "../components/admin/CountertopsAdmin";
 import HardwareAdmin from "../components/admin/HardwareAdmin";
 import OtherMaterialsAdmin from "../components/admin/OtherMaterialsAdmin";
+import AreaMaterialsAdmin from "../components/admin/AreaMaterialsAdmin";
 import CatalogParametersHierarchyAdmin from "../components/admin/CatalogParametersHierarchyAdmin";
 import CalculationParametersAdmin from "../components/admin/CalculationParametersAdmin";
 
@@ -39,6 +40,7 @@ const adminSections = [
       { id: "linearMaterialsAdmin", label: "Погонный материал", component: "linearMaterialsAdmin" },
       { id: "countertopsAdmin", label: "Столешницы", component: "countertopsAdmin" },
       { id: "hardwareAdmin", label: "Фурнитура", component: "hardwareAdmin" },
+      { id: "areaMaterialsAdmin", label: "Площадной материал", component: "areaMaterialsAdmin" },
       { id: "otherMaterialsAdmin", label: "Прочее материал", component: "otherMaterialsAdmin" },
     ],
   },
@@ -1255,9 +1257,10 @@ const AdminPage = () => {
           {currentItem?.component === "countertopsAdmin" && <CountertopsAdmin />}
           {currentItem?.component === "hardwareAdmin" && <HardwareAdmin />}
           {currentItem?.component === "otherMaterialsAdmin" && <OtherMaterialsAdmin />}
+          {currentItem?.component === "areaMaterialsAdmin" && <AreaMaterialsAdmin />}
           {activeTab === "siteVisual" && <SiteVisualAdmin />}
 
-          {entityConfig && !isModulesHierarchy && !isKitSolutionCreator && !isCatalogParameters && !isCalculationParameters && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && currentItem?.component !== "sheetMaterialsAdmin" && currentItem?.component !== "linearMaterialsAdmin" && currentItem?.component !== "countertopsAdmin" && currentItem?.component !== "hardwareAdmin" && currentItem?.component !== "otherMaterialsAdmin" && activeTab !== "siteVisual" && (
+          {entityConfig && !isModulesHierarchy && !isKitSolutionCreator && !isCatalogParameters && !isCalculationParameters && currentItem?.component !== "staffAuditLogs" && currentItem?.component !== "staffUsers" && currentItem?.component !== "sheetMaterialsAdmin" && currentItem?.component !== "linearMaterialsAdmin" && currentItem?.component !== "countertopsAdmin" && currentItem?.component !== "hardwareAdmin" && currentItem?.component !== "otherMaterialsAdmin" && currentItem?.component !== "areaMaterialsAdmin" && activeTab !== "siteVisual" && (
             isCatalogItemsTab ? (
               <CatalogItemsAdmin key={activeTab} title={entityConfig.title} fixedValues={entityConfig.fixedValues} />
             ) : (

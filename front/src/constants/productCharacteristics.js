@@ -6,6 +6,8 @@
  *  "linear"           — погонный материал (linear_materials)
  *  "sheet_all"        — все листовые без фильтра
  *  "hardware"         — фурнитура (hardware_items_extended)
+ *  "sheet_area"       — площадные материалы (sheet_pure + фурнитура с price_per_m2: Рамка, Стекло в рамку, Пленка под фрезу)
+ *  "sheet_facade"     — фасадные цвета (sheet_pure + только Рамка)
  */
 export const MATERIAL_SELECT_SOURCE_TYPES = {
   sheet: "sheet",
@@ -15,6 +17,8 @@ export const MATERIAL_SELECT_SOURCE_TYPES = {
   sheet_all: "sheet_all",
   hardware: "hardware",
   sheet_category: "sheet_category",
+  sheet_area: "sheet_area",
+  sheet_facade: "sheet_facade",
 };
 
 /** Определения полей характеристик товара. */
@@ -23,7 +27,8 @@ export const PRODUCT_CHARACTERISTIC_FIELDS = {
   material_corpus: { label: "Материал корпуса", selectType: "sheet", priceKey: "price_per_m2", categoryFilter: "Пиломатериал" },
   corpus_color: { label: "Цвет корпуса", selectType: "sheet_pure", priceKey: "price_per_m2" },
   material_facade: { label: "Материал фасада", selectType: "sheet", priceKey: "price_per_m2", categoryFilter: "Пиломатериал" },
-  facade_color: { label: "Цвет фасада", selectType: "sheet", priceKey: "price_per_m2" },
+  facade_color: { label: "Цвет фасада", selectType: "sheet_facade", priceKey: "price_per_m2" },
+  frame_type: { label: "Рамка", selectType: "hardware", priceKey: "price_per_m2", categoryFilter: "Рамка" },
   back_panel: { label: "Задняя стенка", selectType: "sheet_pure", priceKey: "price_per_m2" },
   showcase_back_panel_color: { label: "Цвет задней стенки витрины", selectType: "sheet_pure", priceKey: "price_per_m2" },
   facade_thickness_mm: { label: "Толщина фасада, мм" },
@@ -90,11 +95,18 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
       ["showcase_back_panel_color"],
       ["corpus_color"],
       ["facade_color"],
-      ["glass_insert_color"],
       ["facade_thickness_mm"],
-      ["film"],
-      ["milling"],
       ["edge_band"],
+      ["milling"],
+      ["glass_insert_color"],
+    ],
+  },
+  {
+    id: "area_materials",
+    title: "Площадной материал",
+    rows: [
+      ["frame_type"],
+      ["film"],
     ],
   },
   {

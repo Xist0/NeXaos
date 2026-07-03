@@ -90,7 +90,7 @@ const ProductCharacteristicsEditor = ({
         // Drawer select — специальный тип для ящиков
         if (def?.fieldType === "drawer_select") {
             const drawerItems = def?.categoryFilter
-                ? hardwareItems.filter((i) => i.category === def.categoryFilter)
+                ? hardwareItems.filter((i) => String(i.category || "").trim().toLowerCase() === String(def.categoryFilter).trim().toLowerCase())
                 : hardwareItems;
             if (drawerItems.length === 0) {
                 // Нет фурнитуры данной категории — fallback на CharacteristicCard
@@ -142,7 +142,7 @@ const ProductCharacteristicsEditor = ({
         // Hinge select — специальный тип для петель (hardware-items-based multi-select с кол-во)
         if (def?.fieldType === "hinge_select") {
             const hingeItems = def?.categoryFilter
-                ? hardwareItems.filter((i) => i.category === def.categoryFilter)
+                ? hardwareItems.filter((i) => String(i.category || "").trim().toLowerCase() === String(def.categoryFilter).trim().toLowerCase())
                 : hardwareItems;
             if (hingeItems.length === 0) {
                 // Нет фурнитуры данной категории — fallback на CharacteristicCard
@@ -202,7 +202,8 @@ const ProductCharacteristicsEditor = ({
 
             // Статический фильтр по категории (например, "Пленка под фрезу")
             if (fieldDef?.categoryFilter) {
-                items = items.filter((i) => String(i.category || "").trim() === fieldDef.categoryFilter);
+                const filterLower = String(fieldDef.categoryFilter).trim().toLowerCase();
+                items = items.filter((i) => String(i.category || "").trim().toLowerCase() === filterLower);
             }
 
             // Динамический фильтр по значению другого поля (например, categoryFilterFrom: "material_corpus")

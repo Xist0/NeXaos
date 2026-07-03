@@ -115,7 +115,8 @@ const CatalogItemCharacteristicsForm = ({
     const sourceType = def.selectType;
     const allItems = materialsBySourceType[sourceType] || [];
     if (def.categoryFilter) {
-      return allItems.filter((item) => String(item.category || "").trim() === def.categoryFilter);
+      const filterLower = String(def.categoryFilter).trim().toLowerCase();
+      return allItems.filter((item) => String(item.category || "").trim().toLowerCase() === filterLower);
     }
     return allItems;
   };

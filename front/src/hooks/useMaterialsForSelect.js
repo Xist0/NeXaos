@@ -5,6 +5,9 @@ const isCountertopCategory = (cat) => cat && String(cat).startsWith("Столе�
 
 const NON_SHEET_CATEGORIES = new Set(["Кромка", "Пиломатериал", "Рамка", "Стекло в рамку", "Пленка под фрезу", "Вид фрезы"]);
 
+const AREA_HW_CATEGORIES = new Set(["Рамка", "Стекло в рамку", "Пленка под фрезу"]);
+const FACADE_HW_CATEGORIES = new Set(["Рамка"]);
+
 let materialsCache = null;
 let materialsCachePromise = null;
 
@@ -21,6 +24,26 @@ const fetchAllMaterials = async (get) => {
 
   const sheetNonCountertop = sheetItems.filter((i) => !isCountertopCategory(i.category));
   const sheetPure = sheetNonCountertop.filter((i) => !NON_SHEET_CATEGORIES.has(i.category || ""));
+
+  // Площадные материалы: чистый листовой + фурнитура с price_per_m2 (Рамка, Стекло в рамку, Пленка под фрезу)
+  const areaHwItems = hardwareItems.filter((i) => {
+    const cat = String(i.category || "").trim().toLowerCase();
+    for (const ac of AREA_HW_CATEGORIES) {
+      if (cat === String(ac).trim().toLowerCase()) return true;
+    }
+    return false;
+  });
+  const sheetAreaItems = [...sheetPure, ...areaHwItems];
+
+  // Фасадные цвета: чистый листовой + только Рамка
+  const facadeHwItems = hardwareItems.filter((i) => {
+    const cat = String(i.category || "").trim().toLowerCase();
+    for (const fc of FACADE_HW_CATEGORIES) {
+      if (cat === String(fc).trim().toLowerCase()) return true;
+    }
+    return false;
+  });
+  const sheetFacadeItems = [...sheetPure, ...facadeHwItems];
 
   // Уникальные категории листовых материалов (для поля "Материал корпуса/фасада")
   const categorySet = new Set();
@@ -40,6 +63,8 @@ const fetchAllMaterials = async (get) => {
     [MATERIAL_SELECT_SOURCE_TYPES.linear]: linearItems,
     [MATERIAL_SELECT_SOURCE_TYPES.hardware]: hardwareItems,
     [MATERIAL_SELECT_SOURCE_TYPES.sheet_category]: sheetCategories,
+    [MATERIAL_SELECT_SOURCE_TYPES.sheet_area]: sheetAreaItems,
+    [MATERIAL_SELECT_SOURCE_TYPES.sheet_facade]: sheetFacadeItems,
   };
 
   return { bySourceType, sheetItems, linearItems, hardwareItems };

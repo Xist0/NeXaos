@@ -50,6 +50,17 @@ const HW_LOOKUP = (lookup, table) => {
   return Number(row?.price_per_unit ?? 0) || 0;
 };
 
+const HW_AREA_LOOKUP = (lookup, table) => {
+  const key = String(lookup ?? "").trim().toLowerCase();
+  if (!key) return 0;
+  const row = table.find(
+    (r) =>
+      String(r.name ?? "").trim().toLowerCase() === key ||
+      String(r.sku ?? "").trim().toLowerCase() === key
+  );
+  return Number(row?.price_per_m2 ?? 0) || 0;
+};
+
 const normalizeKey = (value) => String(value ?? "").trim().toLowerCase();
 
 const FASTENER_CATEGORY = "крепежная фурнитура";
@@ -210,7 +221,7 @@ const calculateModulePrice = (input, refs) => {
   const showcaseBackPanelPrice = VLOOKUP(G5, materials);
   const specialPrice1 = Number(refs.specialFacadePrice1) || 0;
   const specialPrice2 = Number(refs.specialFacadePrice2) || 0;
-  const facadeMaterialPrice = VLOOKUP(G9, materials);
+  const facadeMaterialPrice = VLOOKUP(G9, materials) || HW_AREA_LOOKUP(G9, hardware);
   const liftMechRow = G18 ? hardware.find(
     (r) =>
       String(r.name ?? "").trim().toLowerCase() === String(G18 ?? "").trim().toLowerCase() ||
@@ -277,6 +288,12 @@ const calculateModulePrice = (input, refs) => {
   // E11 — цвет задней стенки витрины (для любого материала)
   const E11 = IFERROR(() => (D31 * D33) / 1_000_000 * (showcaseBackPanelPrice + addSheet), 0);
   const E11_formula = `${fa(D31,'Ш')} × ${fa(D33,'В')} / 10⁶ × (${fa(showcaseBackPanelPrice,'цена_м²')} + ${fa(addSheet,'нац_плит')})`;
+
+  // H6 — рамка (площадной материал: price_per_m2 × S фасада)
+  const G6 = chars.frame_type || "";
+  const framePricePerM2 = HW_AREA_LOOKUP(G6, hardware);
+  const H6 = IFERROR(() => framePricePerM2 * N13, 0);
+  const H6_formula = `${fa(framePricePerM2,'цена_м²_рамка')} × ${fa(N13,'S_фасад')}`;
 
   // H7 — корпус (uses specific material's edge price with fallback to global)
   const materialPrice = VLOOKUP(G7, materials);
@@ -483,7 +500,7 @@ const calculateModulePrice = (input, refs) => {
   const U37 = SUM(...hardwareRows.map((row) => row.price));
   const U37_formula = hardwareRows.filter(row => row.price > 0).map(row => `${fa(row.price, row.label)}`).join(' + ') || "0";
 
-  const sumH = SUM(H5, H7, H9, H18, H22, H24, H26, H28);
+  const sumH = SUM(H5, H6, H7, H9, H18, H22, H24, H26, H28);
   const sumL = SUM(L20, L21, L22);
   const S = sumH + sumL + E11 + U37;
   const markupSheet = addSheet * SUM(N10, N7);
@@ -492,7 +509,7 @@ const calculateModulePrice = (input, refs) => {
   const S_withAdd = S + markupSheet + markupEdge;
   const K3 = ROUND(S_withAdd * L4, 0);
 
-  const sumH_formula = `${fa(H5,'задняя_стенка')} + ${fa(H7,'корпус')} + ${fa(H9,'фасад')} + ${fa(H18,'механизм')} + ${fa(H22,'петли')} + ${fa(H24,'полки')} + ${fa(H26,'навесы')} + ${fa(H28,'опоры')}`;
+  const sumH_formula = `${fa(H5,'задняя_стенка')} + ${fa(H6,'рамка')} + ${fa(H7,'корпус')} + ${fa(H9,'фасад')} + ${fa(H18,'механизм')} + ${fa(H22,'петли')} + ${fa(H24,'полки')} + ${fa(H26,'навесы')} + ${fa(H28,'опоры')}`;
   const sumL_parts = [];
   if (L20 > 0) sumL_parts.push(fa(L20,'ящик_84'));
   if (L21 > 0) sumL_parts.push(fa(L21,'ящик_116'));
@@ -508,6 +525,7 @@ const calculateModulePrice = (input, refs) => {
     breakdown: {
       H5: { value: H5, formula: H5_formula },
       E11: { value: E11, formula: E11_formula },
+      H6: { value: H6, formula: H6_formula },
       H7_sheet: { value: H7_sheet, formula: H7_sheet_formula },
       H7_edge: { value: H7_edge, formula: H7_edge_formula },
       H7: { value: H7, formula: H7_formula },
@@ -535,6 +553,7 @@ const calculateModulePrice = (input, refs) => {
     fieldBreakdown: {
       back_panel: H5,
       showcase_back_panel_color: E11,
+      frame_type: H6,
       material_corpus: H7,
       corpus_color: H7,
       material_facade: H9,

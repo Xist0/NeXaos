@@ -14,9 +14,6 @@ const SHEET_API = "/api/sheet-materials";
 
 const ALL_GROUPS = [
   "Пиломатериал",
-  "Рамка",
-  "Стекло в рамку",
-  "Пленка под фрезу",
   "Вид фрезы",
 ];
 
@@ -218,7 +215,7 @@ const OtherMaterialsAdmin = () => {
       <section className="glass-card p-6 space-y-6">
         <div>
           <h2 className="text-xl font-semibold text-night-900">Прочее материал</h2>
-          <p className="text-sm text-night-400">Пиломатериал, рамка, стекло, пленка, фрезеровка</p>
+          <p className="text-sm text-night-400">Пиломатериал, фрезеровка</p>
         </div>
 
         <AdminGroupPlates

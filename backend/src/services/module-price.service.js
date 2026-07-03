@@ -8,7 +8,7 @@ const loadCalculationReferences = async () => {
        FROM sheet_materials WHERE is_active IS NOT FALSE`
     ),
     query(
-      `SELECT id, name, sku, price_per_unit, category
+      `SELECT id, name, sku, price_per_unit, price_per_m2, category
        FROM hardware_items_extended WHERE is_active IS NOT FALSE`
     ),
     query(`SELECT name, numeric_value, value FROM calculation_parameters`),
