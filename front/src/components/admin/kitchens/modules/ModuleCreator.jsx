@@ -703,21 +703,19 @@ const ModuleCreator = ({
 
   // Синхронизация form.facade_color и form.corpus_color из характеристик
   // (для SKU, фильтрации поиска на бэкенде)
-  // + primary_color_id / secondary_color_id для payload
+  // + primary_color_id / secondary_color_id — только SET при совпадении, NEVER CLEAR
   useEffect(() => {
     const facadeVal = parseCharacteristicField(form.characteristics.facade_color).value;
     const corpusVal = parseCharacteristicField(form.characteristics.corpus_color).value;
     const allColors = [...referenceData.colorsFacade, ...referenceData.colorsCorpus];
     const primaryColor = allColors.find((c) => c.name === facadeVal || c.code === facadeVal || c.sku === facadeVal);
     const secondaryColor = allColors.find((c) => c.name === corpusVal || c.code === corpusVal || c.sku === corpusVal);
-    const primaryId = primaryColor ? String(primaryColor.id) : "";
-    const secondaryId = secondaryColor ? String(secondaryColor.id) : "";
     setForm((prev) => {
       const next = {};
       if (prev.facade_color !== facadeVal) next.facade_color = facadeVal || "";
       if (prev.corpus_color !== corpusVal) next.corpus_color = corpusVal || "";
-      if (prev.primary_color_id !== primaryId) next.primary_color_id = primaryId;
-      if (prev.secondary_color_id !== secondaryId) next.secondary_color_id = secondaryId;
+      if (primaryColor && prev.primary_color_id !== String(primaryColor.id)) next.primary_color_id = String(primaryColor.id);
+      if (secondaryColor && prev.secondary_color_id !== String(secondaryColor.id)) next.secondary_color_id = String(secondaryColor.id);
       if (Object.keys(next).length === 0) return prev;
       return { ...prev, ...next };
     });
@@ -841,6 +839,8 @@ const ModuleCreator = ({
 
         facade_color: form.facade_color || null,
         corpus_color: form.corpus_color || null,
+        primary_color_id: toOptionalInt(form.primary_color_id),
+        secondary_color_id: toOptionalInt(form.secondary_color_id),
 
         module_category_id: toOptionalInt(form.module_category_id),
 
@@ -1305,9 +1305,6 @@ const ModuleCreator = ({
                   placeholder="15000"
                   className="text-4xl font-bold text-right !pr-12"
                 />
-                <div className="text-right text-2xl font-bold text-accent">
-                  {formatCurrency(Number(form.final_price || 0))}
-                </div>
                 {calculatedPrice != null && Number(form.final_price || 0) !== calculatedPrice ? (
                   <div className="flex items-center gap-3 justify-end">
                     <span className="text-xs text-night-500">

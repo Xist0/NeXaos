@@ -704,41 +704,41 @@ const ProductPage = () => {
           {(() => {
             const ch = item.characteristics && typeof item.characteristics === "object" && !Array.isArray(item.characteristics)
               ? item.characteristics : {};
-            const materialFacade = parseCharacteristicField(ch.material_facade).value;
+            const materialCorpus = parseCharacteristicField(ch.material_corpus).value;
             const chDims = getCharacteristicDimensions(ch);
             const height = item.height_mm || chDims.height_mm;
             const width = item.length_mm || chDims.length_mm;
             const depth = item.depth_mm || chDims.depth_mm;
             const hasDims = height || width || depth;
-            const hasAny = hasDims || materialFacade || item.primary_color || item.facade_color || item.secondary_color || item.corpus_color;
+            const hasAny = hasDims || materialCorpus || item.primary_color || item.secondary_color;
             if (!hasAny) return null;
             return (
               <div className="glass-card p-3 sm:p-4">
-                <div className="grid gap-y-2 gap-x-4 sm:grid-cols-2 text-sm">
+                <div className="flex flex-col gap-2 text-sm">
                   {hasDims && (
                     <div className="flex items-center gap-2">
                       <span className="text-night-500 shrink-0">Габариты</span>
                       <span className="text-night-900 font-medium">
-                        {[height, width, depth].filter(Boolean).join(" × ")} мм
+                        {[width, height, depth].filter(Boolean).join(" × ")} мм
                       </span>
                     </div>
                   )}
-                  {materialFacade && (
+                  {materialCorpus && (
                     <div className="flex items-center gap-2">
-                      <span className="text-night-500 shrink-0">Материал фасада</span>
-                      <span className="text-night-900 font-medium truncate">{materialFacade}</span>
+                      <span className="text-night-500 shrink-0">Материал корпуса</span>
+                      <span className="text-night-900 font-medium truncate">{materialCorpus}</span>
                     </div>
                   )}
-                  {(item.primary_color || item.facade_color) && (
+                  {item.primary_color && (
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-night-500 shrink-0">Основной цвет</span>
-                      <ColorBadge colorData={item.primary_color} value={item.primary_color ? undefined : item.facade_color} />
+                      <ColorBadge colorData={item.primary_color} />
                     </div>
                   )}
-                  {(item.secondary_color || item.corpus_color) && (
+                  {item.secondary_color && (
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="text-night-500 shrink-0">Доп. цвет</span>
-                      <ColorBadge colorData={item.secondary_color} value={item.secondary_color ? undefined : item.corpus_color} />
+                      <ColorBadge colorData={item.secondary_color} />
                     </div>
                   )}
                 </div>

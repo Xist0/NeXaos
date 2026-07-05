@@ -3,7 +3,7 @@ import useApi from "../../hooks/useApi";
 import useLogger from "../../hooks/useLogger";
 import useAuthStore from "../../store/authStore";
 import SecureButton from "../ui/SecureButton";
-import { FaSpinner, FaUpload, FaImage, FaCheckCircle, FaTrash } from "react-icons/fa";
+import { FaSpinner, FaUpload, FaImage, FaCheckCircle } from "react-icons/fa";
 import { API_BASE_URL } from "../../utils/constants";
 import { getImageUrl, getThumbUrl, placeholderImage } from "../../utils/image";
 
@@ -335,17 +335,16 @@ const ImageManager = ({
                   >
                     {image.is_preview ? "Превью ✓" : "Превью"}
                   </SecureButton>
-                  <SecureButton
-                    size="sm"
-                    variant="danger"
+                  <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDelete(image.id);
                     }}
-                    className="h-7 w-7 p-0"
+                    className="h-7 w-7 rounded-full bg-red-500 hover:bg-red-600 transition-colors shadow-sm flex items-center justify-center text-white text-xs font-bold leading-none"
                   >
-                    <FaTrash className="w-3 h-3" />
-                  </SecureButton>
+                    ×
+                  </button>
                 </div>
               </div>
             </div>

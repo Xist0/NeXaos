@@ -86,8 +86,6 @@ const ProductCard = memo(({ product, onAdd, className = "", compact = false }) =
           <div className="hidden sm:flex flex-col gap-1.5 mt-1 truncate ">
             {product.primary_color && <ColorBadge colorData={product.primary_color} labelPrefix="Осн:" />}
             {product.secondary_color && <ColorBadge colorData={product.secondary_color} labelPrefix="Доп:" />}
-            {product.facade_color && !product.primary_color && <ColorBadge value={product.facade_color} labelPrefix="Фасад:" />}
-            {product.corpus_color && !product.secondary_color && <ColorBadge value={product.corpus_color} labelPrefix="Корпус:" />}
           </div>
 
           <div className={compact ? "mt-auto pt-1" : "mt-auto pt-2"}>

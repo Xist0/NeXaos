@@ -99,13 +99,6 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
       ["edge_band"],
       ["milling"],
       ["glass_insert_color"],
-    ],
-  },
-  {
-    id: "area_materials",
-    title: "Площадной материал",
-    rows: [
-      ["frame_type"],
       ["film"],
     ],
   },

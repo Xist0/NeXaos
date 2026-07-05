@@ -221,7 +221,49 @@ const createCrudController = (entity) => {
       }
     }
 
-    
+    // Для товаров каталога добавляем данные о цветах и preview_url
+    if (entity.route === "catalog-items" && Array.isArray(data)) {
+      const ids = data.map((item) => item.id).filter(Boolean);
+
+      if (ids.length > 0) {
+        const { rows: imageRows } = await query(
+          `SELECT DISTINCT ON (entity_id) id, entity_id, url
+           FROM images
+           WHERE entity_type = 'catalog-items' AND entity_id = ANY($1::int[])
+           ORDER BY entity_id, (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
+          [ids]
+        );
+        const imageByEntity = new Map(imageRows.map((row) => [row.entity_id, row]));
+        for (const item of data) {
+          const img = imageByEntity.get(item.id);
+          if (img?.url) item.preview_url = img.url;
+        }
+      }
+
+      const colorIds = Array.from(
+        new Set(
+          data
+            .flatMap((item) => [item.primary_color_id, item.secondary_color_id])
+            .filter(Boolean)
+            .map((v) => Number(v))
+            .filter((v) => Number.isFinite(v))
+        )
+      );
+
+      if (colorIds.length > 0) {
+        const { rows: colorRows } = await query(
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = ANY($1::int[])`,
+          [colorIds]
+        );
+        const byId = new Map(colorRows.map((row) => [row.id, row]));
+        for (const item of data) {
+          if (item.primary_color_id) item.primary_color = byId.get(Number(item.primary_color_id));
+          if (item.secondary_color_id) item.secondary_color = byId.get(Number(item.secondary_color_id));
+        }
+      }
+    }
+
+
     res.status(200).json({ data });
   };
 
@@ -373,7 +415,50 @@ const createCrudController = (entity) => {
           data.primary_color = primaryColorRows[0];
         }
       }
-      
+
+      if (data.secondary_color_id) {
+        const { rows: secondaryColorRows } = await query(
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
+          [data.secondary_color_id]
+        );
+        if (secondaryColorRows[0]) {
+          data.secondary_color = secondaryColorRows[0];
+        }
+      }
+    }
+
+    // Для товаров каталога добавляем preview_url, изображения и данные о цветах
+    if (entity.route === "catalog-items") {
+      const { rows: imageRows } = await query(
+        `SELECT id, url FROM images
+         WHERE entity_type = 'catalog-items' AND entity_id = $1
+         ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC LIMIT 1`,
+        [data.id]
+      );
+      if (imageRows[0]) {
+        data.preview_url = imageRows[0].url;
+      }
+
+      const { rows: allImages } = await query(
+        `SELECT id, url, alt, sort_order,
+         (sort_order = 0) as is_preview
+         FROM images
+         WHERE entity_type = 'catalog-items' AND entity_id = $1
+         ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
+        [data.id]
+      );
+      data.images = allImages;
+
+      if (data.primary_color_id) {
+        const { rows: primaryColorRows } = await query(
+          `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
+          [data.primary_color_id]
+        );
+        if (primaryColorRows[0]) {
+          data.primary_color = primaryColorRows[0];
+        }
+      }
+
       if (data.secondary_color_id) {
         const { rows: secondaryColorRows } = await query(
           `SELECT id, name, sku, hex, image_url FROM colors WHERE id = $1`,
