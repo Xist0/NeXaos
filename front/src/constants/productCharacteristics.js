@@ -49,7 +49,7 @@ export const PRODUCT_CHARACTERISTIC_FIELDS = {
   hangers_count: { label: "Кол-во навесов" },
   supports_count: { label: "Кол-во опор" },
   tech_niche: { label: "Ниша для техники" },
-  opening_type: { label: "Тип открывания" },
+  opening_type: { label: "Тип открывания", fieldType: "multi_select" },
   lift_mechanism: { label: "Подъёмный механизм", selectType: "hardware", priceKey: "price_per_unit", categoryFilter: "Подъемные механизмы" },
   drawers_type: { label: "Тип ящиков" },
   hinges_type: { label: "Тип петель" },

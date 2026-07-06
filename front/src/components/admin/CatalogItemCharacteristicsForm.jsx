@@ -15,6 +15,7 @@ import {
 import { parseCharacteristicField } from "../../utils/characteristics";
 import { formatCurrency } from "../../utils/format";
 import CharacteristicCard from "../ui/CharacteristicCard";
+import MultiTagSelect from "../ui/MultiTagSelect";
 import ColorSelectDropdown from "../ui/ColorSelectDropdown";
 import MaterialSelectField from "../ui/MaterialSelectField";
 import DrawerSelectField from "../ui/DrawerSelectField";
@@ -323,6 +324,51 @@ const CatalogItemCharacteristicsForm = ({
               "w-full h-10 px-3 py-2 border border-night-200 bg-white text-sm text-night-900 rounded-xl",
               "focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-night-50"
             )}
+          />
+        </div>
+      );
+    }
+
+    // Multi-select fields — множественный выбор из suggestions (теги)
+    if (fieldDef?.fieldType === "multi_select") {
+      const parsed = parseCharacteristicField(form[fieldKey]);
+      const bp = fieldBreakdown[fieldKey];
+      return (
+        <div
+          key={fieldKey}
+          className={clsx(
+            "rounded-xl border p-3 space-y-2 min-w-0 overflow-visible",
+            parsed.visible ? "border-night-100 bg-white" : "border-night-100/60 bg-night-50/60"
+          )}
+        >
+          <div className="flex items-center justify-between gap-2 min-h-[20px]">
+            <div className="text-xs font-semibold text-night-800 leading-snug flex items-center">
+              {resolveFieldLabel(fieldKey, fieldLabels)}
+              {bp ? <BreakdownPriceBadge amount={bp} /> : null}
+            </div>
+            <button
+              type="button"
+              onClick={() => updateField(fieldKey, { visible: !parsed.visible })}
+              className={clsx(
+                "relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent",
+                parsed.visible ? "bg-accent" : "bg-night-300"
+              )}
+              aria-pressed={parsed.visible}
+            >
+              <span
+                className={clsx(
+                  "inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform",
+                  parsed.visible ? "translate-x-4" : "translate-x-0.5"
+                )}
+              />
+            </button>
+          </div>
+          <MultiTagSelect
+            value={parsed.value}
+            onChange={(v) => updateField(fieldKey, { value: v })}
+            suggestions={templatesByField[fieldKey] || []}
+            disabled={!parsed.visible}
+            placeholder="Выберите типы..."
           />
         </div>
       );

@@ -5,6 +5,7 @@ import {
 } from "../../constants/productCharacteristics";
 import { parseCharacteristicField } from "../../utils/characteristics";
 import CharacteristicCard from "../ui/CharacteristicCard";
+import MultiTagSelect from "../ui/MultiTagSelect";
 import MaterialSelectField from "../ui/MaterialSelectField";
 import DrawerSelectField from "../ui/DrawerSelectField";
 import HingeSelectField from "../ui/HingeSelectField";
@@ -306,6 +307,52 @@ const ProductCharacteristicsEditor = ({
                         }}
                         disabled={!parsed.visible}
                         className={`w-full h-10 px-3 py-2 border border-night-200 bg-white text-sm text-night-900 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:bg-night-50`}
+                    />
+                </div>
+            );
+        }
+
+        // Multi-select fields — множественный выбор из suggestions (теги)
+        if (def?.fieldType === "multi_select") {
+            return (
+                <div
+                    key={fieldKey}
+                    className={`rounded-xl border p-3 space-y-2 min-w-0 overflow-visible ${
+                        parsed.visible ? "border-night-100 bg-white" : "border-night-100/60 bg-night-50/60"
+                    }`}
+                >
+                    <div className="flex items-center justify-between gap-2 min-h-[20px]">
+                        <div className="text-xs font-semibold text-night-800 leading-snug flex items-center">
+                            {label}
+                            {breakdownPrice ? <BreakdownPriceBadge amount={breakdownPrice} /> : null}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const current = parseCharacteristicField(form[fieldKey]);
+                                onChange({ ...form, [fieldKey]: { ...current, visible: !parsed.visible } });
+                            }}
+                            className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-accent ${
+                                parsed.visible ? "bg-accent" : "bg-night-300"
+                            }`}
+                            aria-pressed={parsed.visible}
+                        >
+                            <span
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                                    parsed.visible ? "translate-x-4" : "translate-x-0.5"
+                                }`}
+                            />
+                        </button>
+                    </div>
+                    <MultiTagSelect
+                        value={parsed.value}
+                        onChange={(v) => {
+                            const current = parseCharacteristicField(form[fieldKey]);
+                            onChange({ ...form, [fieldKey]: { ...current, value: v } });
+                        }}
+                        suggestions={templatesByField[fieldKey] || []}
+                        disabled={!parsed.visible}
+                        placeholder="Выберите типы..."
                     />
                 </div>
             );
