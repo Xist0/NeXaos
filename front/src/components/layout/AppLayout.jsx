@@ -15,7 +15,7 @@ const defaultNavLinks = [
   { label: "Избранное", to: "/favorites" },
 ];
 
-const MobileMenu = ({ closeMenu, user, role, requireAuth, logout, cartCount, headerNav, socialLinks, logoText }) => (
+const MobileMenu = ({ closeMenu, user, accessToken, role, requireAuth, logout, cartCount, headerNav, socialLinks, logoText }) => (
   <div className="fixed inset-0 bg-white z-50 lg:hidden">
     <div className="flex justify-between items-center p-4 border-b border-night-100">
       <Link to="/" onClick={closeMenu} className="text-xl font-semibold text-night-900">
@@ -63,7 +63,7 @@ const MobileMenu = ({ closeMenu, user, role, requireAuth, logout, cartCount, hea
           ))}
         </div>
       )}
-      {user ? (
+      {accessToken && user ? (
         <NavLink
           to="/account"
           onClick={closeMenu}
@@ -94,12 +94,12 @@ const MobileMenu = ({ closeMenu, user, role, requireAuth, logout, cartCount, hea
       >
         Корзина{cartCount > 0 ? ` (${cartCount})` : ""}
       </NavLink>
-      {(role === ROLES.ADMIN || role === ROLES.MANAGER) && (
+      {(accessToken && role === ROLES.ADMIN || accessToken && role === ROLES.MANAGER) && (
         <NavLink to="/admin" onClick={closeMenu} className="px-4 py-3 rounded-lg text-lg transition text-accent-dark font-semibold hover:bg-accent/10">
           Админ
         </NavLink>
       )}
-      {user && (
+      {accessToken && user && (
         <button
           type="button"
           onClick={() => {
@@ -116,7 +116,7 @@ const MobileMenu = ({ closeMenu, user, role, requireAuth, logout, cartCount, hea
 );
 
 const AppLayout = () => {
-  const { user, role, logout, requireAuth } = useAuth();
+  const { user, accessToken, role, logout, requireAuth } = useAuth();
   const { items } = useCart();
   const { get } = useApi();
   const [isMenuOpen, setMenuOpen] = useState(false);
@@ -237,7 +237,7 @@ const AppLayout = () => {
             </NavLink>
 
             <div className="hidden md:flex items-center gap-2">
-              {user ? (
+              {accessToken && user ? (
                 <>
                   {(role === ROLES.ADMIN || role === ROLES.MANAGER) && (
                     <NavLink
@@ -320,6 +320,7 @@ const AppLayout = () => {
         <MobileMenu
           closeMenu={closeMenu}
           user={user}
+          accessToken={accessToken}
           role={role}
           requireAuth={requireAuth}
           logout={logout}

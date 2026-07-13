@@ -205,6 +205,7 @@ const calculateModulePrice = (input, refs) => {
   const G7 = chars.corpus_color || chars.material_corpus || "";
   const G9 = chars.facade_color || chars.material_facade || "";
   const G_edge_band = chars.edge_band || "";
+  const G_edge_band_facade = chars.edge_band_facade || "";
   const G18 = chars.lift_mechanism || "";
   const D18 = Number(chars.lift_mechanism_count) || 0;
   const G24 = chars.shelves_type || "";
@@ -295,20 +296,20 @@ const calculateModulePrice = (input, refs) => {
   const H6 = IFERROR(() => framePricePerM2 * N13, 0);
   const H6_formula = `${fa(framePricePerM2,'цена_м²_рамка')} × ${fa(N13,'S_фасад')}`;
 
-  // H7 — корпус (uses specific material's edge price with fallback to global)
+  // H7 — корпус (кромка корпуса: edge_band → корпус_color → глобальный fallback)
   const materialPrice = VLOOKUP(G7, materials);
   const edgePriceCorpus = G_edge_band ? VLOOKUP(G_edge_band, materials, 2) : (VLOOKUP(G7, materials, 2) || edgePricePerM);
   const H7_sheet = (materialPrice + addSheet) * SUM(N10, N7);
   const H7_edge = (edgePriceCorpus + addEdge) * SUM(N11, N8);
   const H7 = H7_sheet + H7_edge;
   const H7_sheet_formula = `(${fa(materialPrice,'цена_лист')} + ${fa(addSheet,'нац_плит')}) × (${fa(N10,'S_ящик')} + ${fa(N7,'S_корп')})`;
-  const H7_edge_formula = `(${fa(edgePriceCorpus,'цена_кромки')} + ${fa(addEdge,'нац_кромки')}) × (${fa(N11,'P_ящик')} + ${fa(N8,'P_корп')})`;
+  const H7_edge_formula = `(${fa(edgePriceCorpus,'цена_кромки_корп')} + ${fa(addEdge,'нац_кромки')}) × (${fa(N11,'P_ящик')} + ${fa(N8,'P_корп')})`;
   const H7_formula = `${fa(H7_sheet,'лист')} + ${fa(H7_edge,'кромка')}`;
 
-  // H9 — фасады
+  // H9 — фасады (кромка фасада: edge_band_facade → фасад_color → глобальный fallback)
   const specialMaterials = ["латунь", "черный браш"];
   const g9lower = String(G9).trim().toLowerCase();
-  const edgePriceFacade = G_edge_band ? VLOOKUP(G_edge_band, materials, 2) : (VLOOKUP(G9, materials, 2) || edgePricePerM);
+  const edgePriceFacade = G_edge_band_facade ? VLOOKUP(G_edge_band_facade, materials, 2) : (G_edge_band ? VLOOKUP(G_edge_band, materials, 2) : (VLOOKUP(G9, materials, 2) || edgePricePerM));
   let H9_sheet, H9_edge, H9, H9_sheet_formula, H9_edge_formula, H9_formula;
   if (specialMaterials.includes(g9lower)) {
     H9_sheet = N13 * (specialPrice1 + specialPrice2);
@@ -322,7 +323,7 @@ const calculateModulePrice = (input, refs) => {
     H9_edge = (edgePriceFacade + addEdge) * N14;
     H9 = IFERROR(() => H9_sheet + H9_edge, 0);
     H9_sheet_formula = `(${fa(facadeMaterialPrice,'цена_лист')} + ${fa(addSheet,'нац_плит')}) × ${fa(N13,'S_фасад')}`;
-    H9_edge_formula = `(${fa(edgePriceFacade,'цена_кромки')} + ${fa(addEdge,'нац_кромки')}) × ${fa(N14,'P_фасад')}`;
+    H9_edge_formula = `(${fa(edgePriceFacade,'цена_кромки_фасад')} + ${fa(addEdge,'нац_кромки')}) × ${fa(N14,'P_фасад')}`;
     H9_formula = `${fa(H9_sheet,'лист')} + ${fa(H9_edge,'кромка')}`;
   }
 
@@ -558,7 +559,8 @@ const calculateModulePrice = (input, refs) => {
       corpus_color: H7,
       material_facade: H9,
       facade_color: H9,
-      edge_band: edgePriceFacade * N14,
+      edge_band: edgePriceCorpus * SUM(N11, N8),
+      edge_band_facade: edgePriceFacade * N14,
       lift_mechanism: H18,
       hinges_type: H22,
       hinges_detail: H22,
@@ -594,6 +596,8 @@ const calculateModulePrice = (input, refs) => {
       lift_mechanism_raw_price: liftMechRow?.price_per_unit ?? null,
       edge_band_key: G_edge_band,
       edge_band_used_for_corpus: !!G_edge_band,
+      edge_band_facade_key: G_edge_band_facade,
+      edge_band_facade_used_for_facade: !!G_edge_band_facade,
     },
   };
 };

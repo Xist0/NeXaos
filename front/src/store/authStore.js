@@ -20,11 +20,6 @@ const clearPersistedGetCache = () => {
   }
 };
 
-const redirectIfOnProtectedRoute = () => {
-  if (typeof window === "undefined") return;
-  window.location.replace("/");
-};
-
 const loadUser = () => {
   try {
     return JSON.parse(localStorage.getItem(USER_KEY) || "null");
@@ -119,9 +114,9 @@ const useAuthStore = create((set, get) => ({
       refreshToken: null,
       user: null,
       role: ROLES.USER,
-      authModalOpen: false,
+      authModalOpen: true,
+      redirectAfterAuth: "/",
     });
-    redirectIfOnProtectedRoute();
   },
 
   get token() {

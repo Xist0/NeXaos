@@ -23,9 +23,9 @@ const hasAccessToken = () => {
   }
 };
 
-const redirectIfOnProtectedRoute = () => {
+const showAuthModal = () => {
   if (typeof window === "undefined") return;
-  window.location.replace("/");
+  useAuthStore.getState().requireAuth("/");
 };
 
 const processQueue = (error, token = null) => {
@@ -78,7 +78,7 @@ rawClient.interceptors.response.use(
     if (status === 401 && !originalRequest._retry && !isAuthRefresh && !isAuthLogin && !isAuthRegister) {
       if (!hasAccessToken()) {
         useAuthStore.getState().logout();
-        redirectIfOnProtectedRoute();
+        showAuthModal();
         return Promise.reject(error);
       }
 
@@ -116,11 +116,11 @@ rawClient.interceptors.response.use(
 
         processQueue(error, null);
         useAuthStore.getState().logout();
-        redirectIfOnProtectedRoute();
+        showAuthModal();
       } catch (refreshError) {
         processQueue(refreshError, null);
         useAuthStore.getState().logout();
-        redirectIfOnProtectedRoute();
+        showAuthModal();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

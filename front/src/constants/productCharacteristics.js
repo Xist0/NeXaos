@@ -36,7 +36,8 @@ export const PRODUCT_CHARACTERISTIC_FIELDS = {
   milling: { label: "Фрезеровка", selectType: "hardware", priceKey: "price_per_m2", categoryFilter: "Вид фрезы" },
   film_under_milling: { label: "Пленка под фрезу", selectType: "sheet", priceKey: "price_per_m2" },
   milling_type: { label: "Вид фрезы", selectType: "sheet_all", priceKey: "price_per_m2" },
-  edge_band: { label: "Кромка", selectType: "sheet", priceKey: "edge_price_per_m", categoryFilter: "Кромка" },
+  edge_band: { label: "Кромка на корпус", selectType: "sheet", priceKey: "edge_price_per_m", categoryFilter: "Кромка" },
+  edge_band_facade: { label: "Кромка на фасад", selectType: "sheet", priceKey: "edge_price_per_m", categoryFilter: "Кромка" },
   glass_in_frame: { label: "Стекло в рамку" },
   glass_insert_color: { label: "Цвет стеклянной вставки", selectType: "hardware", priceKey: "price_per_m2", categoryFilter: "Стекло в рамку" },
 
@@ -97,6 +98,7 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
       ["facade_color"],
       ["facade_thickness_mm"],
       ["edge_band"],
+      ["edge_band_facade"],
       ["milling"],
       ["glass_insert_color"],
       ["film"],

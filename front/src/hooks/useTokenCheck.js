@@ -58,7 +58,7 @@ const checkToken = async () => {
         clearInterval(tokenCheckTimer);
         tokenCheckTimer = null;
       }
-      window.location.replace("/");
+      useAuthStore.getState().requireAuth("/");
     }
   } finally {
     isCheckingToken = false;
