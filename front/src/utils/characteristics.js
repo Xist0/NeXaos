@@ -182,7 +182,9 @@ export const groupCharacteristicRows = (rows) => {
   return Array.from(map.values());
 };
 
-/** Секции с фиксированными линиями для карточки товара (3 колонки, пустые слоты = null). */
+/** Секции с фиксированными линиями для карточки товара.
+ *  Учитывает visible toggle — невидимые поля исключаются.
+ *  Пустые слоты сжимаются: значения сдвигаются на свободные позиции влево. */
 export const buildCharacteristicSectionsWithLines = (apiValue) => {
   const source = apiValue && typeof apiValue === "object" && !Array.isArray(apiValue) ? apiValue : {};
   const valueMap = {};
@@ -196,7 +198,6 @@ export const buildCharacteristicSectionsWithLines = (apiValue) => {
   const sections = [];
   for (const section of PRODUCT_CHARACTERISTIC_SECTIONS) {
     if (!section.lines) {
-      // Габариты — без lines, обычные rows
       const rows = [];
       for (const rowKeys of section.rows) {
         for (const key of rowKeys) {
@@ -214,19 +215,24 @@ export const buildCharacteristicSectionsWithLines = (apiValue) => {
       continue;
     }
 
-    // Секции с lines: строим линии с фиксированными слотами
-    const builtLines = section.lines.map((line) =>
-      line.map((key) => {
-        if (key === null) return null;
+    // Секции с lines: собираем filled-слоты, сжимаем влево, убираем пустые линии
+    const builtLines = section.lines.map((line) => {
+      const filled = [];
+      for (const key of line) {
+        if (key === null) continue;
         const def = PRODUCT_CHARACTERISTIC_FIELDS[key];
-        if (!def) return null;
+        if (!def) continue;
         const val = valueMap[key] || "";
-        return { key, label: def.label, value: val };
-      })
-    );
+        if (val) filled.push({ key, label: def.label, value: val });
+      }
+      const cols = line.length;
+      return Array.from({ length: cols }, (_, i) => filled[i] || null);
+    });
 
-    // Секция добавляется всегда, даже если все значения пусты — сетка не прыгает
-    sections.push({ id: section.id, title: section.title, lines: builtLines });
+    const nonEmptyLines = builtLines.filter((line) => line.some((slot) => slot !== null));
+    if (nonEmptyLines.length > 0) {
+      sections.push({ id: section.id, title: section.title, lines: nonEmptyLines });
+    }
   }
 
   return sections;

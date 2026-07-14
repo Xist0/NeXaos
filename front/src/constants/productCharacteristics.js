@@ -109,6 +109,7 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
       ["material_corpus", "corpus_color", "facade_thickness_mm"],
       ["material_facade", "facade_color", "film"],
       ["back_panel", "glass_insert_color", "milling"],
+      ["edge_band", "edge_band_facade", "glass_in_frame"],
     ],
   },
   {
@@ -128,12 +129,12 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
       ["lift_mechanism"],
       ["drawers_type"],
       ["hinges_type"],
+      ["hinges_detail"],
       ["shelves_type"],
       ["hangers_type"],
       ["supports_type"],
       ["opening_method"],
       ["drawers_detail"],
-      ["hinges_detail"],
       ["supports_height_mm"],
     ],
     /** Фиксированные линии для отображения на карточке товара (3 колонки). */
@@ -142,7 +143,7 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
       ["front_count", "opening_type", "opening_method"],
       ["lift_mechanism_count", "lift_mechanism", null],
       ["drawer_count", "drawers_type", "drawers_detail"],
-      ["hinges_count", "hinges_type", null],
+      ["hinges_count", "hinges_type", "hinges_detail"],
       ["shelf_count", "shelves_type", null],
       ["hangers_count", "hangers_type", null],
       ["supports_count", "supports_type", "supports_height_mm"],
@@ -163,6 +164,7 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
       ["countertop_thickness"],
       ["lighting"],
       ["dish_dryer"],
+      ["ventilation_grid"],
       ["countertop_color"],
       ["side_posts_facade_color"],
     ],
@@ -170,7 +172,8 @@ export const PRODUCT_CHARACTERISTIC_SECTIONS = [
     lines: [
       ["countertop", "countertop_thickness", null],
       ["plinth", "lighting", "countertop_color"],
-      ["cutlery_tray", "dish_dryer", "side_posts_facade_color"],
+      ["cutlery_tray", "dish_dryer", "ventilation_grid"],
+      ["side_posts_facade_color", null, null],
     ],
   },
 ];

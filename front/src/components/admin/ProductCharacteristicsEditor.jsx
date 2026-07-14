@@ -2,6 +2,7 @@ import {
     PRODUCT_CHARACTERISTIC_FIELDS,
     PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS,
     PRODUCT_CHARACTERISTIC_DIMENSIONS_SECTION,
+    PRODUCT_CHARACTERISTIC_SECTIONS,
 } from "../../constants/productCharacteristics";
 import { parseCharacteristicField } from "../../utils/characteristics";
 import CharacteristicCard from "../ui/CharacteristicCard";
@@ -404,8 +405,25 @@ const ProductCharacteristicsEditor = ({
                       </FormSection>
                     );
                 })
-                : PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS.map((section) => {
-                    if (section.id === "extra") return null;
+                : PRODUCT_CHARACTERISTIC_SECTIONS.map((section) => {
+                    if (section.id === "dimensions") return null;
+
+                    if (section.lines) {
+                        return (
+                          <FormSection key={section.id} title={section.title}>
+                              {section.lines.map((line, lineIdx) => (
+                                  <div key={lineIdx} className="grid gap-3 grid-cols-3 items-start">
+                                      {line.map((key, slotIdx) => {
+                                          if (key === null) return <div key={slotIdx} />;
+                                          return renderField(key);
+                                      })}
+                                  </div>
+                              ))}
+                          </FormSection>
+                        );
+                    }
+
+                    // Секции без lines (legacy) — обычный flat grid
                     return (
                       <FormSection key={section.id} title={section.title}>
                           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
@@ -416,18 +434,10 @@ const ProductCharacteristicsEditor = ({
                 })}
 
             <FormSection title="Габариты">
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-3 items-start">
+                <div className="grid gap-3 grid-cols-3 items-start">
                     {DIMENSION_FIELD_KEYS.map((fieldKey) => renderField(fieldKey))}
                 </div>
             </FormSection>
-
-            {PRODUCT_CHARACTERISTIC_EDITOR_SECTIONS.filter((s) => s.id === "extra").map((section) => (
-                <FormSection key={section.id} title={section.title}>
-                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-start">
-                        {section.rows.flatMap((rowKeys) => rowKeys.map((fieldKey) => renderField(fieldKey)).filter(Boolean))}
-                    </div>
-                </FormSection>
-            ))}
         </div>
     );
 };
