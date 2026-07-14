@@ -181,3 +181,53 @@ export const groupCharacteristicRows = (rows) => {
   }
   return Array.from(map.values());
 };
+
+/** Секции с фиксированными линиями для карточки товара (3 колонки, пустые слоты = null). */
+export const buildCharacteristicSectionsWithLines = (apiValue) => {
+  const source = apiValue && typeof apiValue === "object" && !Array.isArray(apiValue) ? apiValue : {};
+  const valueMap = {};
+  for (const [key, raw] of Object.entries(source)) {
+    const parsed = parseCharacteristicField(raw);
+    if (parsed.visible && String(parsed.value ?? "").trim()) {
+      valueMap[key] = String(parsed.value).trim();
+    }
+  }
+
+  const sections = [];
+  for (const section of PRODUCT_CHARACTERISTIC_SECTIONS) {
+    if (!section.lines) {
+      // Габариты — без lines, обычные rows
+      const rows = [];
+      for (const rowKeys of section.rows) {
+        for (const key of rowKeys) {
+          if (CALCULATION_ONLY_KEYS.includes(key)) continue;
+          const def = PRODUCT_CHARACTERISTIC_FIELDS[key];
+          if (!def) continue;
+          const val = valueMap[key] || "";
+          if (!val) continue;
+          rows.push({ key, label: def.label, value: val });
+        }
+      }
+      if (rows.length > 0) {
+        sections.push({ id: section.id, title: section.title, rows, lines: null });
+      }
+      continue;
+    }
+
+    // Секции с lines: строим линии с фиксированными слотами
+    const builtLines = section.lines.map((line) =>
+      line.map((key) => {
+        if (key === null) return null;
+        const def = PRODUCT_CHARACTERISTIC_FIELDS[key];
+        if (!def) return null;
+        const val = valueMap[key] || "";
+        return { key, label: def.label, value: val };
+      })
+    );
+
+    // Секция добавляется всегда, даже если все значения пусты — сетка не прыгает
+    sections.push({ id: section.id, title: section.title, lines: builtLines });
+  }
+
+  return sections;
+};

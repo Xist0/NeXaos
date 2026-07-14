@@ -191,33 +191,21 @@ const checkModuleCompatibility = async (bottomModuleIds, topModuleIds) => {
  * @returns {Promise<Array>} Массив похожих модулей с оценкой схожести
  */
 const findSimilarModules = async (params) => {
-  const { moduleId, limit = 10, weights = {} } = params;
+  const { moduleId, limit = 10 } = params;
 
   if (!moduleId) {
     throw new Error("Необходимо указать ID модуля для поиска похожих");
   }
 
-  // Получаем данные исходного модуля с цветами
+  // Получаем данные исходного модуля
   const { rows: sourceModule } = await query(
-    `SELECT m.*, 
+    `SELECT m.id, m.base_sku, m.module_category_id,
      mc.code as category_code,
-     m.facade_color,
-     m.corpus_color,
-     m.primary_color_id,
-     m.secondary_color_id,
-     c1.id as primary_color_id_val,
-     c1.name as primary_color_name,
-     c1.sku as primary_color_sku,
-     c1.hex as primary_color_hex,
-     c1.image_url as primary_color_image_url,
-     c2.id as secondary_color_id_val,
-     c2.name as secondary_color_name,
-     c2.sku as secondary_color_sku,
-     c2.hex as secondary_color_hex,
-     c2.image_url as secondary_color_image_url,
-     m.length_mm,
-     m.depth_mm,
-     m.height_mm
+     m.primary_color_id, m.secondary_color_id,
+     m.facade_color, m.corpus_color,
+     m.length_mm, m.depth_mm, m.height_mm,
+     c1.name as primary_color_name, c1.sku as primary_color_sku,
+     c2.name as secondary_color_name, c2.sku as secondary_color_sku
      FROM modules m
      LEFT JOIN module_categories mc ON m.module_category_id = mc.id
      LEFT JOIN colors c1 ON m.primary_color_id = c1.id
@@ -232,97 +220,51 @@ const findSimilarModules = async (params) => {
 
   const source = sourceModule[0];
 
-  // Веса параметров по умолчанию (чем выше вес, тем важнее параметр)
-  const defaultWeights = {
-    category: 30,      // Категория модуля (нижний/верхний)
-    facadeColor: 20,  // Цвет фасада
-    corpusColor: 15,  // Цвет корпуса
-    length: 10,       // Длина (с учетом допустимого отклонения)
-  };
-
-  const finalWeights = { ...defaultWeights, ...weights };
-
-  // Получаем все активные модули кроме исходного с цветами
-  const { rows: allModules } = await query(
-    `SELECT m.*, 
-     mc.code as category_code,
-     m.primary_color_id,
-     m.secondary_color_id
+  // Получаем все активные модули той же категории (исключаем другие категории полностью)
+  const { rows: sameCategoryModules } = await query(
+    `SELECT m.*, mc.code as category_code, m.primary_color_id, m.secondary_color_id
      FROM modules m
      LEFT JOIN module_categories mc ON m.module_category_id = mc.id
-     WHERE m.id != $1 AND m.is_active = true
+     WHERE m.id != $1 AND m.is_active = true AND m.module_category_id = $2
      ORDER BY m.id`,
-    [moduleId]
+    [moduleId, source.module_category_id]
   );
 
-  // Вычисляем схожесть для каждого модуля
-  const similarModules = allModules.map(module => {
-    let similarityScore = 0;
-    const matches = [];
+  // Разделяем на товары той же подкатегории (base_sku) и той же категории
+  const sameSubCategory = sameCategoryModules.filter(m => m.base_sku === source.base_sku);
+  const sameCategoryOnly = sameCategoryModules.filter(m => m.base_sku !== source.base_sku);
 
-    // Сравнение категории (30 баллов)
-    if (source.category_code === module.category_code) {
-      similarityScore += finalWeights.category;
-      matches.push("category");
+  // Сортировка внутри каждой группы — по близости цвета и размера
+  const scoreModule = (m) => {
+    let score = 0;
+    // Совпадение цвета фасада
+    if (source.primary_color_id && m.primary_color_id && source.primary_color_id === m.primary_color_id) score += 20;
+    else if (source.facade_color && m.facade_color && source.facade_color === m.facade_color) score += 16;
+    // Совпадение цвета корпуса
+    if (source.secondary_color_id && m.secondary_color_id && source.secondary_color_id === m.secondary_color_id) score += 15;
+    else if (source.corpus_color && m.corpus_color && source.corpus_color === m.corpus_color) score += 12;
+    // Близость размера
+    if (source.length_mm && m.length_mm) {
+      const diff = Math.abs(source.length_mm - m.length_mm);
+      if (diff <= 50) score += 10 * (1 - diff / 50);
     }
+    return score;
+  };
 
-    // Сравнение цвета фасада (20 баллов) - сначала по primary_color_id, затем по facade_color
-    if (source.primary_color_id && module.primary_color_id && 
-        source.primary_color_id === module.primary_color_id) {
-      similarityScore += finalWeights.facadeColor;
-      matches.push("primaryColor");
-    } else if (source.facade_color && module.facade_color && 
-        source.facade_color === module.facade_color) {
-      similarityScore += finalWeights.facadeColor * 0.8; // Немного меньше баллов за текстовое совпадение
-      matches.push("facadeColor");
-    }
+  sameSubCategory.sort((a, b) => scoreModule(b) - scoreModule(a));
+  sameCategoryOnly.sort((a, b) => scoreModule(b) - scoreModule(a));
 
-    // Сравнение цвета корпуса (15 баллов) - сначала по secondary_color_id, затем по corpus_color
-    if (source.secondary_color_id && module.secondary_color_id && 
-        source.secondary_color_id === module.secondary_color_id) {
-      similarityScore += finalWeights.corpusColor;
-      matches.push("secondaryColor");
-    } else if (source.corpus_color && module.corpus_color && 
-        source.corpus_color === module.corpus_color) {
-      similarityScore += finalWeights.corpusColor * 0.8; // Немного меньше баллов за текстовое совпадение
-      matches.push("corpusColor");
-    }
+  // Сначала товары той же подкатегории, затем — той же категории
+  const combined = [...sameSubCategory, ...sameCategoryOnly].slice(0, limit);
 
-    // Сравнение длины (10 баллов, с учетом отклонения ±50мм)
-    if (source.length_mm && module.length_mm) {
-      const lengthDiff = Math.abs(source.length_mm - module.length_mm);
-      if (lengthDiff <= 50) {
-        const lengthScore = finalWeights.length * (1 - lengthDiff / 50);
-        similarityScore += lengthScore;
-        matches.push("length");
-      }
-    }
-
-    // Бонус за наличие пенала в обоих случаях
-    if (source.category_code === 'tall' && module.category_code === 'tall') {
-      similarityScore += 5;
-      matches.push("tallModule");
-    }
-
-    return {
-      ...module,
-      similarityScore,
-      matches,
-      similarityPercent: Math.min(100, Math.round((similarityScore / 100) * 100)),
-    };
-  });
-
-  // Сортируем по убыванию схожести и ограничиваем количество
-  const sorted = similarModules
-    .filter(m => m.similarityScore > 0)
-    .sort((a, b) => b.similarityScore - a.similarityScore)
-    .slice(0, limit);
-
-  // Обогащаем цвета в результатах
+  // Обогащаем цвета и изображения
   const colorIds = new Set();
-  for (const m of sorted) {
+  const moduleIds = combined.map(m => m.id);
+  for (const m of combined) {
     if (m.primary_color_id) colorIds.add(Number(m.primary_color_id));
     if (m.secondary_color_id) colorIds.add(Number(m.secondary_color_id));
+    m.__type = "module";
+    m._matchGroup = m.base_sku === source.base_sku ? "subCategory" : "category";
   }
   if (colorIds.size > 0) {
     const { rows: colorRows } = await query(
@@ -330,19 +272,40 @@ const findSimilarModules = async (params) => {
       [Array.from(colorIds)]
     );
     const colorMap = new Map(colorRows.map(r => [r.id, r]));
-    for (const m of sorted) {
+    for (const m of combined) {
       if (m.primary_color_id) m.primary_color = colorMap.get(Number(m.primary_color_id));
       if (m.secondary_color_id) m.secondary_color = colorMap.get(Number(m.secondary_color_id));
+    }
+  }
+  if (moduleIds.length > 0) {
+    const { rows: imgRows } = await query(
+      `SELECT id, url, alt, sort_order, entity_id,
+       (sort_order = 0) as is_preview
+       FROM images
+       WHERE entity_type = 'modules' AND entity_id = ANY($1::int[])
+       ORDER BY (sort_order IS NULL) ASC, sort_order ASC, id ASC`,
+      [moduleIds]
+    );
+    const imgsByEntity = new Map();
+    for (const img of imgRows) {
+      if (!imgsByEntity.has(img.entity_id)) imgsByEntity.set(img.entity_id, []);
+      imgsByEntity.get(img.entity_id).push(img);
+    }
+    for (const m of combined) {
+      m.images = imgsByEntity.get(m.id) || [];
+      if (!m.preview_url && m.images[0]?.url) m.preview_url = m.images[0].url;
     }
   }
 
   logger.info("Найдены похожие модули", {
     sourceModuleId: moduleId,
-    foundCount: sorted.length,
+    sameSubCategoryCount: sameSubCategory.length,
+    sameCategoryOnlyCount: sameCategoryOnly.length,
+    returnedCount: combined.length,
     limit,
   });
 
-  return sorted;
+  return combined;
 };
 
 /**

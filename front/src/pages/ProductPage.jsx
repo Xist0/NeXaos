@@ -12,7 +12,7 @@ import { getThumbUrl } from "../utils/image";
 import ProductGallery from "../components/ui/ProductGallery";
 import apiClient from "../services/apiClient";
 import { resolveColor } from "../utils/colors";
-import { characteristicsToDisplayRows, groupCharacteristicRows, parseCharacteristicField, getCharacteristicDimensions } from "../utils/characteristics";
+import { characteristicsToDisplayRows, groupCharacteristicRows, parseCharacteristicField, getCharacteristicDimensions, buildCharacteristicSectionsWithLines } from "../utils/characteristics";
 import { PRODUCT_CHARACTERISTIC_SECTIONS } from "../constants/productCharacteristics";
 
 const ProductPage = () => {
@@ -54,6 +54,20 @@ const ProductPage = () => {
     });
     return arr;
   }, [item, similarItems]);
+
+  /** Товары той же подкатегории для верхнего блока вариантов (размер/цвет). */
+  const sameSubCategoryVariants = useMemo(() => {
+    if (!item) return [];
+    const subKey = item.base_sku || item.category || "";
+    if (!subKey) return variantItems;
+
+    return variantItems.filter((v) => {
+      const vSubKey = v.base_sku || v.category || "";
+      if (v._matchGroup === "subCategory") return true;
+      if (v.id === item.id) return true;
+      return vSubKey === subKey;
+    });
+  }, [item, variantItems]);
 
   const getRef = useRef(get);
   const postRef = useRef(post);
@@ -232,7 +246,7 @@ const ProductPage = () => {
       window.removeEventListener("resize", onWindowResize);
       if (ro) ro.disconnect();
     };
-  }, [updateRowScrollState, variantItems.length]);
+  }, [updateRowScrollState, sameSubCategoryVariants.length]);
 
   // Похожие товары
   const loadSimilar = useCallback(async () => {
@@ -390,19 +404,16 @@ const ProductPage = () => {
     return list;
   }, [item]);
 
-  const specCharacteristicSections = useMemo(() => {
+  const charSectionsWithLines = useMemo(() => {
     if (!item) return [];
     const ch =
       item.characteristics && typeof item.characteristics === "object" && !Array.isArray(item.characteristics)
         ? item.characteristics
         : {};
-    const specRows = characteristicsToDisplayRows(ch);
-    const grouped = groupCharacteristicRows(specRows);
-    const byId = Object.fromEntries(grouped.map((g) => [g.id, g]));
-    return PRODUCT_CHARACTERISTIC_SECTIONS.map((section) => byId[section.id]).filter(Boolean);
+    return buildCharacteristicSectionsWithLines(ch);
   }, [item]);
 
-  const hasSpecCharacteristics = specCharacteristicSections.length > 0;
+  const hasSpecCharacteristics = charSectionsWithLines.length > 0;
 
   const renderColorCircle = useCallback(
     (primary, secondary) => {
@@ -488,7 +499,7 @@ const ProductPage = () => {
 
         {/* Центр: варианты + характеристики */}
         <div className="space-y-4 sm:space-y-6 lg:pt-0 min-w-0 lg:self-start">
-          {variantItems.length > 1 && (
+          {sameSubCategoryVariants.length > 1 && (
             <div>
               {(() => {
                 const selectedSize = item?.length_mm ? Number(item.length_mm) : null;
@@ -504,7 +515,7 @@ const ProductPage = () => {
 
                 const sizes = Array.from(
                   new Set(
-                    variantItems
+                    sameSubCategoryVariants
                       .map((v) => (v.length_mm ? Number(v.length_mm) : null))
                       .filter((x) => x !== null)
                   )
@@ -512,7 +523,7 @@ const ProductPage = () => {
 
                 const colors = Array.from(
                   new Map(
-                    variantItems.map((v) => {
+                    sameSubCategoryVariants.map((v) => {
                       const primary = (v.primary_color?.name || v.facade_color || "").trim();
                       const secondary = (v.secondary_color?.name || v.corpus_color || "").trim();
                       const label = [primary, secondary].filter(Boolean).join(" + ");
@@ -578,7 +589,7 @@ const ProductPage = () => {
                               data-size={len}
                               onClick={(e) => {
                                 const currentColor = selectedColor;
-                                const candidates = variantItems.filter((v) => Number(v.length_mm) === Number(len));
+                                const candidates = sameSubCategoryVariants.filter((v) => Number(v.length_mm) === Number(len));
                                 const next =
                                   candidates.find((v) => (v.primary_color?.name || v.facade_color || "") === currentColor) ||
                                   candidates[0];
@@ -653,8 +664,8 @@ const ProductPage = () => {
                               onClick={(e) => {
                                 const currentLen = selectedSize !== null ? Number(selectedSize) : null;
                                 const candidates = currentLen
-                                  ? variantItems.filter((x) => Number(x.length_mm) === Number(currentLen))
-                                  : variantItems;
+                                  ? sameSubCategoryVariants.filter((x) => Number(x.length_mm) === Number(currentLen))
+                                  : sameSubCategoryVariants;
                                 let next = sample;
                                 if (label) {
                                   const match = (x) => {
@@ -662,7 +673,7 @@ const ProductPage = () => {
                                     const s = ((x.secondary_color?.name || x.corpus_color || "").trim());
                                     return p === (primary || "") && s === (secondary || "");
                                   };
-                                  next = candidates.find(match) || variantItems.find(match) || sample;
+                                  next = candidates.find(match) || sameSubCategoryVariants.find(match) || sample;
                                 }
                                 if (!next) return;
                                 if (String(next.id) === String(item.id)) {
@@ -866,17 +877,18 @@ const ProductPage = () => {
       </div>
 
       {(fullCharacteristics.length > 0 || hasSpecCharacteristics) && (
-        <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12 space-y-8">
+        <div className="glass-card p-4 sm:p-8 mb-8 sm:mb-12 space-y-6">
           <h3 className="font-bold text-night-900 text-lg sm:text-2xl">Характеристики</h3>
 
+          {/* Секция: fullCharacteristics (категория, параметры, parameterCategories) */}
           {fullCharacteristics.length > 0 && (
-            <div className="space-y-4">
+            <div className="space-y-2 text-sm text-night-800">
               {(() => {
-                const leftRows = fullCharacteristics.filter((r) => r?.type !== "parameterCategories");
-                const rightRows = fullCharacteristics.filter((r) => r?.type === "parameterCategories");
+                const dataRows = fullCharacteristics.filter((r) => r?.type !== "parameterCategories");
+                const catRows = fullCharacteristics.filter((r) => r?.type === "parameterCategories");
 
                 const renderRow = (row) => (
-                  <div key={row.label} className="grid grid-cols-[minmax(140px,200px)_1fr] gap-3 min-w-0">
+                  <div key={row.label} className="grid grid-cols-[minmax(140px,180px)_1fr] gap-2 min-w-0">
                     <div className="text-night-500 font-medium">{row.label}</div>
                     {row.type === "parameterCategories" ? (
                       <span className="font-semibold text-night-900 min-w-0">
@@ -899,23 +911,63 @@ const ProductPage = () => {
                 );
 
                 return (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3 text-sm text-night-800">
-                    <div className="space-y-2">{leftRows.map(renderRow)}</div>
-                    <div className="space-y-2">{rightRows.map(renderRow)}</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
+                    <div className="space-y-2">{dataRows.map(renderRow)}</div>
+                    <div className="space-y-2">{catRows.map(renderRow)}</div>
                   </div>
                 );
               })()}
             </div>
           )}
 
+          {/* Секции с фиксированными линиями (3 колонки, пустые слоты = пропуск) */}
           {hasSpecCharacteristics && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 text-sm">
-              {specCharacteristicSections.flatMap((section) => section.rows).map((row) => (
-                <div key={row.key} className="min-w-0">
-                  <div className="text-night-500 text-xs mb-0.5">{row.label}</div>
-                  <div className="font-semibold text-night-900 break-words">{row.value}</div>
-                </div>
-              ))}
+            <div className="space-y-4">
+              {charSectionsWithLines.map((section) => {
+                if (section.lines) {
+                  // Секции с lines — фиксированная строчная сетка
+                  return (
+                    <div key={section.id} className="space-y-2">
+                      <h4 className="text-sm font-semibold text-night-900 uppercase tracking-wide border-b border-night-200 pb-1">
+                        {section.title}
+                      </h4>
+                      {section.lines.map((line, lineIdx) => (
+                        <div key={lineIdx} className="grid grid-cols-3 gap-x-6 gap-y-0 text-sm">
+                          {line.map((slot, slotIdx) => {
+                            if (!slot) return <div key={slotIdx} />;
+                            const hasValue = String(slot.value ?? "").trim();
+                            if (!hasValue) return <div key={slotIdx} />;
+                            return (
+                              <div key={slot.key} className="min-w-0">
+                                <div className="text-night-500 text-xs mb-0.5">{slot.label}</div>
+                                <div className="font-semibold text-night-900 break-words">{slot.value}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+
+                // Секции без lines (Габариты) — обычный рендер
+                if (!section.rows || section.rows.length === 0) return null;
+                return (
+                  <div key={section.id} className="space-y-2">
+                    <h4 className="text-sm font-semibold text-night-900 uppercase tracking-wide border-b border-night-200 pb-1">
+                      {section.title}
+                    </h4>
+                    <div className="grid grid-cols-3 gap-x-6 text-sm">
+                      {section.rows.map((row) => (
+                        <div key={row.key} className="min-w-0">
+                          <div className="text-night-500 text-xs mb-0.5">{row.label}</div>
+                          <div className="font-semibold text-night-900 break-words">{row.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

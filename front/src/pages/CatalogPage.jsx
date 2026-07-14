@@ -64,44 +64,31 @@ const CatalogPage = () => {
   const [productParameterCategories, setProductParameterCategories] = useState([]);
 
   const roomCatalog = useMemo(
-    () => [
-      // ——— Только кухня (остальные комнаты — на будущее) ———
-      {
-        code: "kitchen",
-        label: "Кухня",
-        group: "Кухня",
-        subs: [
-          { code: "__kitchen_kits", label: "Готовые решения", isKits: true },
-          { code: "__modules", label: "Модули", isModulesToggle: true },
-          { code: "Нижние модули", label: "Нижние модули", targetCategory: "bottom", isModuleItem: true },
-          { code: "Верхние модули", label: "Верхние модули", targetCategory: "top", isModuleItem: true },
-          { code: "Антресольные модули", label: "Антресольные модули", targetCategory: "top", isModuleItem: true },
-          { code: "Пеналы", label: "Пеналы", targetCategory: "tall", isModuleItem: true },
-          { code: "Столешницы", label: "Столешницы" },
-          { code: "Доборные элементы", label: "Доборные элементы" },
-          { code: "Аксессуары для кухни", label: "Аксессуары для кухни" },
-        ],
-      },
-      // {
-      //   code: "hallway",
-      //   label: "Прихожая",
-      //   group: "Прихожая",
-      //   subs: [...],
-      // },
-      // {
-      //   code: "livingroom",
-      //   label: "Гостиная",
-      //   group: "Гостиная",
-      //   subs: [...],
-      // },
-      // {
-      //   code: "bedroom",
-      //   label: "Спальня",
-      //   group: "Спальня",
-      //   subs: [...],
-      // },
-    ],
-    []
+    () => {
+      const dynamicModuleSubs = moduleCategories.map((mc) => ({
+        code: mc.name || mc.code,
+        label: mc.name || mc.code,
+        targetCategory: mc.code,
+        isModuleItem: true,
+      }));
+
+      return [
+        {
+          code: "kitchen",
+          label: "Кухня",
+          group: "Кухня",
+          subs: [
+            { code: "__kitchen_kits", label: "Готовые решения", isKits: true },
+            { code: "__modules", label: "Модули", isModulesToggle: true },
+            ...dynamicModuleSubs,
+            { code: "Столешницы", label: "Столешницы" },
+            { code: "Доборные элементы", label: "Доборные элементы" },
+            { code: "Аксессуары для кухни", label: "Аксессуары для кухни" },
+          ],
+        },
+      ];
+    },
+    [moduleCategories]
   );
   const roomCategoryCodes = useMemo(() => new Set(roomCatalog.map((x) => x.code)), [roomCatalog]);
 
