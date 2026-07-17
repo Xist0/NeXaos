@@ -30,7 +30,7 @@ const HARDWARE_CATEGORY_FIELDS = {
 };
 
 const OTHER_MATERIALS_FIELDS = [
-  { key: "supports_type", label: "Тип опор" },
+  // { key: "supports_type", label: "Тип опор" },
   { key: "hangers_type", label: "Тип навесов" },
   { key: "lift_mechanism", label: "Подъёмный механизм" },
   { key: "drawers_detail", label: "Вид и кол-во ящиков" },

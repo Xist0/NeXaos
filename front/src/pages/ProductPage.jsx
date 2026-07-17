@@ -502,11 +502,18 @@ const ProductPage = () => {
           {sameSubCategoryVariants.length > 1 && (
             <div>
               {(() => {
-                const selectedSize = item?.length_mm ? Number(item.length_mm) : null;
+                const chDims = getCharacteristicDimensions(item.characteristics);
+                const dims = {
+                  length_mm: item?.length_mm || chDims.length_mm || null,
+                  depth_mm: item?.depth_mm || chDims.depth_mm || null,
+                  height_mm: item?.height_mm || chDims.height_mm || null,
+                };
+                const selectedSize = dims.height_mm ? Number(dims.height_mm) : null;
+                const sizeDisplay = dims.height_mm ? `${Math.round(Number(dims.height_mm))} мм` : "—";
                 const selectedPrimaryId = item?.primary_color?.id ?? item?.primary_color_id ?? null;
                 const selectedSecondaryId = item?.secondary_color?.id ?? item?.secondary_color_id ?? null;
-                const selectedPrimary = (item?.primary_color?.name || item?.facade_color || "").trim();
-                const selectedSecondary = (item?.secondary_color?.name || item?.corpus_color || "").trim();
+                const selectedPrimary = (item?.corpus_color || item?.primary_color?.name || "").trim();
+                const selectedSecondary = (item?.facade_color || item?.secondary_color?.name || "").trim();
                 const selectedColor = [selectedPrimary, selectedSecondary].filter(Boolean).join(" + ");
                 const selectedColorLabel = [selectedPrimary, selectedSecondary].filter(Boolean).join(" + ");
                 const selectedColorKey = selectedPrimaryId || selectedSecondaryId
@@ -516,14 +523,17 @@ const ProductPage = () => {
                 const sizes = Array.from(
                   new Set(
                     sameSubCategoryVariants
-                      .map((v) => (v.length_mm ? Number(v.length_mm) : null))
+                      .map((v) => {
+                        if (v.height_mm) return Number(v.height_mm);
+                        const vd = getCharacteristicDimensions(v.characteristics);
+                        return vd.height_mm || null;
+                      })
                       .filter((x) => x !== null)
                   )
                 ).sort((a, b) => a - b);
 
-                const colors = Array.from(
-                  new Map(
-                    sameSubCategoryVariants.map((v) => {
+                const colorsMap = new Map();
+                for (const v of sameSubCategoryVariants) {
                       const primary = (v.primary_color?.name || v.facade_color || "").trim();
                       const secondary = (v.secondary_color?.name || v.corpus_color || "").trim();
                       const label = [primary, secondary].filter(Boolean).join(" + ");
@@ -531,10 +541,11 @@ const ProductPage = () => {
                       const sid = v?.secondary_color?.id ?? v?.secondary_color_id ?? null;
                       const key = pid || sid ? `${String(pid ?? "")}||${String(sid ?? "")}` : (label || String(v.id));
                       const imgUrl = Array.isArray(v.images) && v.images[0]?.url ? v.images[0].url : (v.preview_url || v.image_url);
-                      return [key, { key, label, primary, secondary, imgUrl, sample: v }];
-                    })
-                  ).values()
-                );
+                      if (!colorsMap.has(key)) {
+                        colorsMap.set(key, { key, label, primary, secondary, imgUrl, sample: v });
+                      }
+                    }
+                const colors = Array.from(colorsMap.values());
 
                 const scrollToCenterSmooth = (container, target) => {
                   if (!container || !target) return;
@@ -543,10 +554,10 @@ const ProductPage = () => {
                 };
 
                 return (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
+                  <div className="space-y-4">
+                    <div className="space-y-1">
                       <div className="text-night-500 text-sm">
-                        Выбран размер: <span className="text-night-900 font-medium">{selectedSize ? `${Math.round(selectedSize / 10)} см` : "—"}</span>
+                        Выбран размер: <span className="text-night-900 font-medium">{sizeDisplay}</span>
                       </div>
                       <div className="relative overflow-hidden">
                         <button
@@ -589,7 +600,10 @@ const ProductPage = () => {
                               data-size={len}
                               onClick={(e) => {
                                 const currentColor = selectedColor;
-                                const candidates = sameSubCategoryVariants.filter((v) => Number(v.length_mm) === Number(len));
+                                const candidates = sameSubCategoryVariants.filter((v) => {
+                                  const vH = v.height_mm ? Number(v.height_mm) : (getCharacteristicDimensions(v.characteristics).height_mm || null);
+                                  return vH !== null && vH === Number(len);
+                                });
                                 const next =
                                   candidates.find((v) => (v.primary_color?.name || v.facade_color || "") === currentColor) ||
                                   candidates[0];
@@ -601,7 +615,7 @@ const ProductPage = () => {
                                 isActive ? "border-accent text-accent bg-accent/5" : "border-night-200 hover:border-night-300"
                               }`}
                             >
-                              {Math.round(Number(len) / 10)}
+                              {Math.round(Number(len))}
                             </button>
                           );
                         })}
@@ -609,14 +623,22 @@ const ProductPage = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <div className="text-night-500 text-sm flex items-center gap-2">
-                        Выбран цвет: <span className="text-night-900 font-medium">{selectedColorLabel || "—"}</span>
+                    <div className="space-y-1">
+                      <div className="text-night-500 text-sm">
+                        Выбран цвет: <span className="text-night-900 font-medium break-words">{selectedColorLabel || "—"}</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
                         {item?.primary_color && (
-                          <ColorBadge value={selectedColorLabel} colorData={item.primary_color} labelPrefix="" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-night-500 text-sm shrink-0">Цвет корпуса:</span>
+                            <ColorBadge colorData={item.primary_color} />
+                          </div>
                         )}
                         {item?.secondary_color && (
-                          <ColorBadge value="" colorData={item.secondary_color} labelPrefix="Доп:" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-night-500 text-sm shrink-0">Цвет фасада:</span>
+                            <ColorBadge colorData={item.secondary_color} />
+                          </div>
                         )}
                       </div>
                       <div className="relative overflow-hidden">
@@ -652,7 +674,7 @@ const ProductPage = () => {
                           style={{ scrollbarWidth: "none" }}
                         >
                         {colors.map(({ key, label, primary, secondary, sample }) => {
-                          const isActive = key === selectedColorKey;
+                          const isActive = String(sample.id) === String(item.id);
                           const safeLabel = encodeURIComponent(label || String(sample?.id || ""));
                           const pColor = sample?.primary_color || sample?.facade_color || null;
                           const sColor = sample?.secondary_color || sample?.corpus_color || null;
@@ -664,7 +686,10 @@ const ProductPage = () => {
                               onClick={(e) => {
                                 const currentLen = selectedSize !== null ? Number(selectedSize) : null;
                                 const candidates = currentLen
-                                  ? sameSubCategoryVariants.filter((x) => Number(x.length_mm) === Number(currentLen))
+                                  ? sameSubCategoryVariants.filter((x) => {
+                                      const xH = x.height_mm ? Number(x.height_mm) : (getCharacteristicDimensions(x.characteristics).height_mm || null);
+                                      return xH !== null && xH === Number(currentLen);
+                                    })
                                   : sameSubCategoryVariants;
                                 let next = sample;
                                 if (label) {
@@ -740,16 +765,16 @@ const ProductPage = () => {
                       <span className="text-night-900 font-medium truncate">{materialCorpus}</span>
                     </div>
                   )}
-                  {item.primary_color && (
+                  {item.corpus_color && (
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-night-500 shrink-0">Основной цвет</span>
-                      <ColorBadge colorData={item.primary_color} />
+                      <span className="text-night-500 shrink-0">Цвет корпуса</span>
+                      <span className="text-night-900 font-medium truncate">{item.corpus_color}</span>
                     </div>
                   )}
-                  {item.secondary_color && (
+                  {item.facade_color && (
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-night-500 shrink-0">Доп. цвет</span>
-                      <ColorBadge colorData={item.secondary_color} />
+                      <span className="text-night-500 shrink-0">Цвет фасада</span>
+                      <span className="text-night-900 font-medium truncate">{item.facade_color}</span>
                     </div>
                   )}
                 </div>
@@ -855,7 +880,7 @@ const ProductPage = () => {
                       <div className="w-20 flex items-center justify-center flex-shrink-0">{renderColorCircle(pColor, sColor)}</div>
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-night-900 truncate">
-                          {showSize && sizeLabel ? `${Math.round(Number(sizeLabel) / 10)} см` : (colorLabel || "—")}
+                          {showSize && sizeLabel ? `${Math.round(Number(sizeLabel))} мм` : (colorLabel || "—")}
                         </div>
                         {showSize && showColor ? <div className="text-xs text-night-500 truncate">{colorLabel || ""}</div> : null}
                       </div>

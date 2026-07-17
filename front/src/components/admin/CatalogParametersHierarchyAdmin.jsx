@@ -31,6 +31,7 @@ const HIDDEN_PARAM_NAMES = [
   "Столешница",
   "Подъёмный механизм",
   "Тип навесов",
+  "Тип опор",
 ];
 
 const LEVEL = { CATEGORIES: "categories", PARAMETERS: "parameters", VALUES: "values" };

@@ -53,7 +53,8 @@ const buildCatalog = (categories, parameters, valueTemplates) => {
           templatesByField[key] = suggestions;
           return { key, label: param.name || key, parameterId: param.id, suggestions };
         })
-        .filter((f) => f.key);
+        .filter((f) => f.key)
+        .filter((f) => f.key !== "supports_type");
 
       return {
         id: `cat_${cat.id}`,

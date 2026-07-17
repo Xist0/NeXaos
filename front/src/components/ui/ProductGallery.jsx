@@ -144,7 +144,7 @@ const ProductGallery = ({
       <div className={`grid gap-3 sm:gap-4 ${hasMany ? "lg:grid-cols-[48px_1fr]" : "lg:grid-cols-1"} lg:items-start`}>
         {/* Thumbnails (desktop only) */}
         {hasMany && (
-          <div className="hidden lg:block relative">
+          <div className="hidden lg:flex lg:flex-col relative items-center">
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
@@ -164,14 +164,14 @@ const ProductGallery = ({
             <div
               ref={thumbsRef}
               onScroll={syncThumbScrollState}
-              className="h-full max-h-[667px] overflow-y-auto space-y-2 pt-10 pb-10"
+              className="h-full max-h-[667px] overflow-y-auto overflow-x-hidden space-y-2 pt-10 pb-10"
             >
               {safeImages.map((img, index) => (
                 <button
                   key={img.id || index}
                   type="button"
                   onClick={() => onSelect?.(index)}
-                  className={`w-12 mx-auto rounded-xl overflow-hidden border-2 transition-all bg-white ${
+                  className={`rounded-xl overflow-hidden border-2 transition-all bg-white ${
                     Number(selectedIndex) === index
                       ? "border-accent shadow-md ring-2 ring-accent/40"
                       : "border-night-200 hover:border-night-300"

@@ -25,7 +25,7 @@ export const CATALOG_ITEM_FORM_SECTIONS = [
     id: "other_materials",
     title: "Прочие материалы",
     columns: [
-      ["supports_type"],
+      // ["supports_type"],
       ["hangers_type"],
       ["lift_mechanism", "drawers_detail", "hinges_detail"],
     ],

@@ -15,7 +15,7 @@ import {
 import ProductCharacteristicsEditor from "../../ProductCharacteristicsEditor";
 import ColorSelectPair from "../../../ui/ColorSelectPair";
 import useCatalogParameters from "../../../../hooks/useCatalogParameters";
-import useMaterialsForSelect from "../../../../hooks/useMaterialsForSelect";
+import useMaterialsForSelect, { invalidateMaterialsCache } from "../../../../hooks/useMaterialsForSelect";
 import {
   characteristicsFromApi,
   createEmptyCharacteristicsForm,
@@ -538,7 +538,13 @@ const ModuleCreator = ({
   }, []);
 
   const { sections: catalogSections, templatesByField, fieldLabels, allFieldKeys } = useCatalogParameters(get);
-  const { materials: materialsData, getItemsForField } = useMaterialsForSelect(get);
+  const { materials: materialsData, getItemsForField, reload: reloadMaterials } = useMaterialsForSelect(get);
+
+  // Invalidate cached materials on mount so newly added items appear
+  useEffect(() => {
+    invalidateMaterialsCache();
+    reloadMaterials();
+  }, []);
 
   const materialsBySourceType = useMemo(() => {
     const map = {};

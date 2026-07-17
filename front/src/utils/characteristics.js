@@ -158,8 +158,10 @@ export const characteristicsToDisplayRows = (apiValue, catalogSections = null, f
     }
   }
 
+  const HIDDEN_KEYS = ["supports_type"];
   for (const [key, raw] of Object.entries(source)) {
     if (LABEL_BY_KEY[key]) continue;
+    if (HIDDEN_KEYS.includes(key)) continue;
     const parsed = parseCharacteristicField(raw);
     if (!parsed.visible) continue;
     const value = String(parsed.value ?? "").trim();
