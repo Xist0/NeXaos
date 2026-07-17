@@ -114,9 +114,19 @@ const useAuthStore = create((set, get) => ({
       refreshToken: null,
       user: null,
       role: ROLES.USER,
-      authModalOpen: true,
+      authModalOpen: false,
       redirectAfterAuth: "/",
     });
+    try {
+      fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      }).catch(() => {});
+    } catch (_e) {}
+    if (typeof window !== "undefined" && window.location.pathname !== "/") {
+      window.location.href = "/";
+    }
   },
 
   get token() {

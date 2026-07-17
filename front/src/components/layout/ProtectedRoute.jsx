@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import useAuth from "../../hooks/useAuth";
 import { canAccessRole } from "../../utils/roleUtils";
 
@@ -14,29 +14,42 @@ const isJwtExpired = (token) => {
   }
 };
 
-const UnauthorizedRedirect = ({ location }) => {
-  const { requireAuth } = useAuth();
-  useEffect(() => {
-    requireAuth(location.pathname);
-  }, [requireAuth, location.pathname]);
-  return <Navigate to="/" state={{ from: location }} replace />;
-};
-
 const ProtectedRoute = ({ allowedRoles = [] }) => {
   const location = useLocation();
-  const { accessToken: token, role, user } = useAuth();
+  const { accessToken: token, role, user, refreshAccess } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
 
-  const isProd = typeof process !== "undefined" && process.env?.NODE_ENV === "production";
+  useEffect(() => {
+    if (token && isJwtExpired(token) && !refreshing && !refreshFailed) {
+      setRefreshing(true);
+      refreshAccess()
+        .then((newToken) => {
+          if (!newToken) {
+            setRefreshFailed(true);
+          }
+        })
+        .catch(() => {
+          setRefreshFailed(true);
+        })
+        .finally(() => {
+          setRefreshing(false);
+        });
+    }
+  }, [token, refreshing, refreshFailed, refreshAccess]);
 
-  if (!token || isJwtExpired(token)) {
-    return <UnauthorizedRedirect location={location} />;
+  if (refreshing) {
+    return null;
+  }
+
+  if (!token || isJwtExpired(token) || refreshFailed) {
+    useAuth.getState().logout();
+    return null;
   }
 
   if (allowedRoles.length > 0 && !canAccessRole(role, allowedRoles)) {
-    if (!isProd) {
-      console.warn("[ProtectedRoute] Доступ запрещен:", { role, allowedRoles, user });
-    }
-    return <UnauthorizedRedirect location={location} />;
+    useAuth.getState().logout();
+    return null;
   }
 
   return <Outlet />;

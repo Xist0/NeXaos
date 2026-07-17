@@ -23,11 +23,6 @@ const hasAccessToken = () => {
   }
 };
 
-const showAuthModal = () => {
-  if (typeof window === "undefined") return;
-  useAuthStore.getState().requireAuth("/");
-};
-
 const processQueue = (error, token = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -78,7 +73,6 @@ rawClient.interceptors.response.use(
     if (status === 401 && !originalRequest._retry && !isAuthRefresh && !isAuthLogin && !isAuthRegister) {
       if (!hasAccessToken()) {
         useAuthStore.getState().logout();
-        showAuthModal();
         return Promise.reject(error);
       }
 
@@ -116,11 +110,9 @@ rawClient.interceptors.response.use(
 
         processQueue(error, null);
         useAuthStore.getState().logout();
-        showAuthModal();
       } catch (refreshError) {
         processQueue(refreshError, null);
         useAuthStore.getState().logout();
-        showAuthModal();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

@@ -8,7 +8,7 @@ const AuthLayer = () => {
 
     return (
         <div className="fixed inset-0 z-[1000] bg-black/40 backdrop-blur-sm flex items-center justify-center">
-            <div 
+            <div
                 className="fixed inset-0 sm:inset-auto sm:relative w-full h-full sm:w-auto sm:h-auto bg-white sm:bg-transparent"
             >
                 <div className="w-full max-w-md mx-auto h-full flex flex-col justify-center p-4 sm:p-0">

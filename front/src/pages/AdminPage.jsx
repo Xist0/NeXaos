@@ -895,15 +895,34 @@ const entityConfigs = {
 const AdminPage = () => {
   const { role } = useAuth();
   const location = useLocation();
-  const [activeSection, setActiveSection] = useState("orders");
-  const [activeTab, setActiveTab] = useState("orders");
+
+  const ADMIN_NAV_KEY = "nexaos_admin_nav";
+
+  const loadAdminNav = () => {
+    try {
+      const saved = sessionStorage.getItem(ADMIN_NAV_KEY);
+      if (saved) return JSON.parse(saved);
+    } catch {} // ignore
+    return { activeSection: "orders", activeTab: "orders" };
+  };
+
+  const saveAdminNav = (section, tab) => {
+    try {
+      sessionStorage.setItem(ADMIN_NAV_KEY, JSON.stringify({ activeSection: section, activeTab: tab }));
+    } catch {} // ignore
+  };
+
+  const initialNav = loadAdminNav();
+  const [activeSection, setActiveSection] = useState(initialNav.activeSection);
+  const [activeTab, setActiveTab] = useState(initialNav.activeTab);
   const [expandedSections, setExpandedSections] = useState({
-    orders: true,
-    materials: false,
-    catalog: false,
-    content: false,
-    other: false,
-    staff: false,
+    orders: initialNav.activeSection === "orders",
+    materials: initialNav.activeSection === "materials",
+    catalog: initialNav.activeSection === "catalog",
+    content: initialNav.activeSection === "content",
+    other: initialNav.activeSection === "other",
+    calculations: initialNav.activeSection === "calculations",
+    staff: initialNav.activeSection === "staff",
   });
   const [expandedCatalogGroups, setExpandedCatalogGroups] = useState({
     // hallway: false,
@@ -919,6 +938,7 @@ const AdminPage = () => {
     setActiveTab(nav.activeTab);
     if (nav.activeSection) {
       setActiveSection(nav.activeSection);
+      saveAdminNav(nav.activeSection, nav.activeTab);
       setExpandedSections((prev) => ({
         ...Object.fromEntries(Object.keys(prev).map((k) => [k, false])),
         [nav.activeSection]: true,
@@ -951,8 +971,10 @@ const AdminPage = () => {
   };
 
   const handleTabClick = (tabId, item) => {
+    const section = item?.sectionId || tabId;
     setActiveTab(tabId);
-    setActiveSection(item?.sectionId || tabId);
+    setActiveSection(section);
+    saveAdminNav(section, tabId);
   };
 
   const allowedSections = adminSections
