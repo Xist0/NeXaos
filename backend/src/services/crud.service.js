@@ -13,7 +13,11 @@ const sanitizePayload = (entity, payload) => {
   return Object.keys(payload)
     .filter((key) => allowedFields.includes(key))
     .reduce((acc, key) => {
-      acc[key] = payload[key];
+      let value = payload[key];
+      if (entity.columns[key]?.type === "json" && value !== null && value !== undefined) {
+        value = JSON.stringify(value);
+      }
+      acc[key] = value;
       return acc;
     }, {});
 };

@@ -70,6 +70,7 @@ const ModuleCalculationTables = ({
   hardwareMatrix = {},
   onHardwareMatrixChange,
   fasteningItems = [],
+  onAutoFill,
 }) => {
   const [calcData, setCalcData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -362,6 +363,7 @@ const ModuleCalculationTables = ({
         onChange={onHardwareMatrixChange}
         calculatedRows={hardware.rows || []}
         total={hardware.total ?? breakdown.U37 ?? 0}
+        onAutoFill={onAutoFill}
       />
 
       {/* Разбивка стоимости — всегда показывается */}

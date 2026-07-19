@@ -4,6 +4,9 @@ import { formatCurrency } from "../../../../utils/format";
 
 const INPUT_COLUMNS = HARDWARE_TABLE_COLUMNS.filter((col) => col.key !== "price");
 
+/** Колонки, которые автозаполняются из крепежа фурнитуры. */
+const AUTO_FILL_COLUMN_KEYS = new Set(["drawer", "hinge", "support"]);
+
 const fmtNum = (value, digits = 2) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
@@ -21,6 +24,7 @@ const ModuleHardwareMatrixTable = ({
   onChange,
   calculatedRows = [],
   total = 0,
+  onAutoFill,
 }) => {
   /** Compute row price for each item: price_per_unit × sum of all column quantities. */
   const rowPrices = useMemo(() => {
@@ -69,7 +73,18 @@ const ModuleHardwareMatrixTable = ({
 
   return (
     <div className="overflow-x-auto">
-      <div className="text-sm font-semibold text-night-800 mb-2">Расходники (крепёжная фурнитура)</div>
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm font-semibold text-night-800">Расходники (крепёжная фурнитура)</div>
+        {onAutoFill ? (
+          <button
+            type="button"
+            onClick={onAutoFill}
+            className="px-3 py-1.5 text-xs font-medium text-accent border border-accent/30 rounded-lg hover:bg-accent/10 transition-colors"
+          >
+            Автозаполнение из фурнитуры
+          </button>
+        ) : null}
+      </div>
       <table className="w-full text-xs border border-night-200 rounded-xl overflow-hidden min-w-[720px]">
         <thead>
           <tr className="bg-night-50 border-b border-night-200">
@@ -98,18 +113,26 @@ const ModuleHardwareMatrixTable = ({
                     <div className="text-[10px] text-night-400">{formatCurrency(Number(item.price_per_unit))} за ед.</div>
                   ) : null}
                 </td>
-                {INPUT_COLUMNS.map((col) => (
-                  <td key={col.key} className="px-1 py-1">
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={rowValues[col.key] ?? ""}
-                      onChange={(e) => updateCell(item.id, col.key, e.target.value)}
-                      className="w-full min-w-[44px] h-8 px-1 text-center border border-night-200 rounded-lg text-night-900 focus:outline-none focus:ring-2 focus:ring-accent/20"
-                    />
-                  </td>
-                ))}
+                {INPUT_COLUMNS.map((col) => {
+                  const isAutoFill = AUTO_FILL_COLUMN_KEYS.has(col.key);
+                  const hasValue = rowValues[col.key] !== undefined && rowValues[col.key] !== "";
+                  return (
+                    <td key={col.key} className="px-1 py-1">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={rowValues[col.key] ?? ""}
+                        onChange={(e) => updateCell(item.id, col.key, e.target.value)}
+                        className={`w-full min-w-[44px] h-8 px-1 text-center border rounded-lg text-night-900 focus:outline-none focus:ring-2 focus:ring-accent/20 ${
+                          isAutoFill && hasValue
+                            ? "border-accent/40 bg-accent/5"
+                            : "border-night-200"
+                        }`}
+                      />
+                    </td>
+                  );
+                })}
                 <td className="px-2 py-1.5 text-center font-medium text-accent whitespace-nowrap">
                   {fmtNum(rowPrice, 2)}
                 </td>

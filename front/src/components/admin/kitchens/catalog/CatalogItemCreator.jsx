@@ -11,6 +11,7 @@ import {
   normalizeCharacteristicsForSave,
   parseCharacteristicField,
 } from "../../../../utils/characteristics";
+import { computeAutoFillMatrix } from "../../../../utils/hardwareMatrixAutoFill";
 import SecureButton from "../../../ui/SecureButton";
 import SecureInput from "../../../ui/SecureInput";
 import useApi from "../../../../hooks/useApi";
@@ -83,6 +84,12 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
       .filter((item) => String(item.category || "").trim() === "Крепежная фурнитура")
       .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
   }, [hardwareItems]);
+
+  const handleAutoFillHardwareMatrix = useCallback(() => {
+    const flatChars = normalizeCharacteristicsForSave(form.characteristics);
+    const filled = computeAutoFillMatrix(flatChars, hardwareItems || [], hardwareMatrix);
+    setHardwareMatrix(filled);
+  }, [form.characteristics, hardwareItems, hardwareMatrix]);
 
   const getRef = useRef(get);
   const loggerRef = useRef(logger);
@@ -738,6 +745,7 @@ const CatalogItemCreator = ({ catalogItemId: initialCatalogItemId = null, duplic
               hardwareMatrix={hardwareMatrix}
               onHardwareMatrixChange={setHardwareMatrix}
               fasteningItems={fasteningItems}
+              onAutoFill={handleAutoFillHardwareMatrix}
               materialsBySourceType={materialsData.bySourceType || {}}
               post={post}
               onPriceCalculated={handlePriceCalculated}

@@ -80,6 +80,7 @@ const CatalogItemCharacteristicsForm = ({
   onAreasCalculated,
   onFieldBreakdown,
   fieldBreakdown = {},
+  onAutoFill,
 }) => {
   const form = value && typeof value === "object" ? value : {};
 
@@ -461,6 +462,7 @@ const CatalogItemCharacteristicsForm = ({
           onChange={onHardwareMatrixChange}
           calculatedRows={hardwareCalcResult.rows || []}
           total={hardwareCalcResult.total ?? 0}
+          onAutoFill={onAutoFill}
         />
       ) : null}
 

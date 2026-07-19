@@ -24,7 +24,7 @@
         field = Joi.date();
         break;
       case "json":
-        field = Joi.object();
+        field = Joi.alternatives().try(Joi.object(), Joi.array());
         break;
       default:
         field = Joi.string();

@@ -22,6 +22,7 @@ import {
   normalizeCharacteristicsForSave,
   parseCharacteristicField,
 } from "../../../../utils/characteristics";
+import { computeAutoFillMatrix } from "../../../../utils/hardwareMatrixAutoFill";
 import { MATERIAL_SELECT_SOURCE_TYPES } from "../../../../constants/productCharacteristics";
 import ModuleCalculationTables from "./ModuleCalculationTables";
 import SecureButton from "../../../ui/SecureButton";
@@ -559,6 +560,13 @@ const ModuleCreator = ({
       .filter((item) => String(item.category || "").trim() === "Крепежная фурнитура")
       .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
   }, [materialsBySourceType.hardware]);
+
+  const handleAutoFillHardwareMatrix = useCallback(() => {
+    const flatChars = normalizeCharacteristicsForSave(form.characteristics);
+    const allHwItems = materialsBySourceType.hardware || [];
+    const filled = computeAutoFillMatrix(flatChars, allHwItems, hardwareMatrix);
+    setHardwareMatrix(filled);
+  }, [form.characteristics, materialsBySourceType.hardware, hardwareMatrix]);
 
   const allColorsForPicker = useMemo(() => {
     const all = [...referenceData.colorsFacade, ...referenceData.colorsCorpus];
@@ -1201,6 +1209,7 @@ const ModuleCreator = ({
               hardwareMatrix={hardwareMatrix}
               onHardwareMatrixChange={setHardwareMatrix}
               fasteningItems={fasteningItems}
+              onAutoFill={handleAutoFillHardwareMatrix}
             />
             <div className="flex justify-between pt-4 border-t">
               <SecureButton type="button" variant="outline" onClick={() => setStep(2)} className="px-4 py-2 flex items-center gap-2">
