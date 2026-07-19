@@ -28,10 +28,36 @@ const loadUser = () => {
   }
 };
 
+/** Проверить, истёк ли JWT-токен. */
+const isJwtExpired = (token) => {
+  if (!token) return true;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!payload.exp) return true;
+    return Date.now() >= payload.exp * 1000;
+  } catch {
+    return true;
+  }
+};
+
+/** Очистить stale-данные из localStorage если токен истёк. */
+const cleanStaleAuth = () => {
+  const token = localStorage.getItem(ACCESS_TOKEN_KEY);
+  if (token && isJwtExpired(token)) {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    return true;
+  }
+  return false;
+};
+
+cleanStaleAuth();
+
+const initialAccessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
 const initialUser = loadUser();
 
 const useAuthStore = create((set, get) => ({
-  accessToken: localStorage.getItem(ACCESS_TOKEN_KEY),
+  accessToken: initialAccessToken,
   refreshToken: null,
   user: initialUser,
   role: initialUser?.roleName || ROLES.USER,
