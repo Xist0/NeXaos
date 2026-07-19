@@ -664,6 +664,7 @@
         primary_color_id: { type: "integer", allowNull: true },
         secondary_color_id: { type: "integer", allowNull: true },
         is_active: { type: "boolean" },
+        fasteners: { type: "json", allowNull: true },
       },
     },
     {

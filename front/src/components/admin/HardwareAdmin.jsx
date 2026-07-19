@@ -8,6 +8,7 @@ import AdminItemsModal, { fmtPrice } from "./shared/AdminItemsModal";
 import AdminPriceInput from "./shared/AdminPriceInput";
 import { parsePrice } from "./shared/adminFormat";
 import { useAdminCrud } from "./shared/useAdminCrud";
+import HardwareFastenerPicker, { HW_CATEGORIES_WITH_FASTENERS } from "./HardwareFastenerPicker";
 import apiClient from "../../services/apiClient";
 import useAuthStore from "../../store/authStore";
 import { buildMaterialSku } from "../../utils/translit";
@@ -28,6 +29,8 @@ const STATIC_HARDWARE_GROUPS = [
   "Выдвижные системы",
 ];
 
+const FASTENER_CATEGORIES = new Set(["Крепежная фурнитура", "Расходники"]);
+
 const HardwareAdmin = () => {
   const { items, loading, fetchItems, createItem, updateItem, deleteItem } = useAdminCrud(API);
 
@@ -38,6 +41,7 @@ const HardwareAdmin = () => {
   const [itemForm, setItemForm] = useState({
     name: "",
     price_per_unit: "",
+    fasteners: [],
   });
   const [confirm, setConfirm] = useState(null);
   const [csvImporting, setCsvImporting] = useState(false);
@@ -51,6 +55,13 @@ const HardwareAdmin = () => {
     [items, selectedGroup]
   );
 
+  const fastenerItems = useMemo(
+    () => items.filter((i) => FASTENER_CATEGORIES.has(i.category) && i.is_active),
+    [items]
+  );
+
+  const showFastenerPicker = HW_CATEGORIES_WITH_FASTENERS.includes(selectedGroup);
+
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
@@ -63,6 +74,7 @@ const HardwareAdmin = () => {
     setItemForm({
       name: "",
       price_per_unit: "",
+      fasteners: [],
     });
   };
 
@@ -84,6 +96,9 @@ const HardwareAdmin = () => {
     };
 
     if (pricePerUnit !== undefined) payload.price_per_unit = pricePerUnit;
+    if (showFastenerPicker) {
+      payload.fasteners = itemForm.fasteners.length > 0 ? itemForm.fasteners : [];
+    }
 
     try {
       if (editingId) {
@@ -96,6 +111,7 @@ const HardwareAdmin = () => {
       setItemForm({
         name: "",
         price_per_unit: "",
+        fasteners: [],
       });
       await fetchItems();
     } catch (e) {
@@ -106,9 +122,11 @@ const HardwareAdmin = () => {
 
   const handleEditItem = (row) => {
     setEditingId(row.id);
+    const fasteners = Array.isArray(row.fasteners) ? row.fasteners : [];
     setItemForm({
       name: row.name || "",
       price_per_unit: row.price_per_unit != null && row.price_per_unit !== "" ? String(row.price_per_unit) : "",
+      fasteners,
     });
     setFormOpen(true);
   };
@@ -128,24 +146,47 @@ const HardwareAdmin = () => {
     });
   };
 
-  const columnsForGroup = useMemo(() => [
-    { key: "name", label: "Наименование позиции" },
-    { key: "price", label: "Стоимость", className: "text-right", render: (r) => fmtPrice(r.price_per_unit) },
-  ], []);
+  const renderFasteners = (row) => {
+    const fasteners = Array.isArray(row.fasteners) ? row.fasteners : [];
+    if (fasteners.length === 0) return "—";
+    return fasteners.map((f) => `${f.name} (${f.quantity} шт.)`).join(", ");
+  };
+
+  const columnsForGroup = useMemo(() => {
+    const cols = [
+      { key: "name", label: "Наименование позиции" },
+      { key: "price", label: "Стоимость", className: "text-right", render: (r) => fmtPrice(r.price_per_unit) },
+    ];
+    if (showFastenerPicker) {
+      cols.push({ key: "fasteners", label: "Крепеж / расходники", render: renderFasteners });
+    }
+    return cols;
+  }, [showFastenerPicker]);
 
   const formFieldsForGroup = useMemo(() => (
-    <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-      <FormField label="Наименование позиции" required>
-        <SecureInput value={itemForm.name} onChange={(v) => setItemForm((p) => ({ ...p, name: v }))} />
-      </FormField>
-      <FormField label="Стоимость">
-        <AdminPriceInput
-          value={itemForm.price_per_unit}
-          onChange={(v) => setItemForm((p) => ({ ...p, price_per_unit: v }))}
-        />
-      </FormField>
+    <div className="space-y-4 max-w-2xl">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField label="Наименование позиции" required>
+          <SecureInput value={itemForm.name} onChange={(v) => setItemForm((p) => ({ ...p, name: v }))} />
+        </FormField>
+        <FormField label="Стоимость">
+          <AdminPriceInput
+            value={itemForm.price_per_unit}
+            onChange={(v) => setItemForm((p) => ({ ...p, price_per_unit: v }))}
+          />
+        </FormField>
+      </div>
+      {showFastenerPicker && (
+        <FormField label="Крепеж и расходники">
+          <HardwareFastenerPicker
+            hardwareItems={fastenerItems}
+            value={itemForm.fasteners}
+            onChange={(v) => setItemForm((p) => ({ ...p, fasteners: v }))}
+          />
+        </FormField>
+      )}
     </div>
-  ), [itemForm]);
+  ), [itemForm, showFastenerPicker, fastenerItems]);
 
   const handleCsvUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -181,52 +222,6 @@ const HardwareAdmin = () => {
           <p className="text-sm text-night-400">Группы и позиции фурнитуры</p>
         </div>
 
-        {/* CSV-импорт временно скрыт
-        <div className="border border-night-200 rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-semibold text-night-800">Импорт из CSV</div>
-              <div className="text-xs text-night-500">Загрузите файл .csv с колонками: Группа, Наименование, Стоимость. Позиции обновляются по наименованию.</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                ref={csvInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleCsvUpload}
-                disabled={csvImporting}
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => csvInputRef.current?.click()}
-                disabled={csvImporting}
-                className={clsx(
-                  "flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl transition-colors",
-                  "border border-accent bg-accent/5 text-accent hover:bg-accent/10",
-                  csvImporting && "opacity-60 cursor-not-allowed"
-                )}
-              >
-                <FaUpload className="text-xs" />
-                {csvImporting ? "Импорт…" : "Загрузить CSV"}
-              </button>
-            </div>
-          </div>
-
-          {csvResult && !csvResult.error ? (
-            <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-800">
-              <span className="font-semibold">Импорт завершён:</span>{" "}
-              обработано {csvResult.parsed}, создано {csvResult.created}, обновлено {csvResult.updated}, без изменений {csvResult.skipped}
-            </div>
-          ) : null}
-          {csvResult?.error ? (
-            <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-800">
-              {csvResult.error}
-            </div>
-          ) : null}
-        </div>
-        */}
-
         <div className="border-t border-night-200 pt-4">
           <div className="text-sm font-semibold text-night-800 mb-2">Фурнитура</div>
           <AdminGroupPlates
@@ -259,6 +254,7 @@ const HardwareAdmin = () => {
           setItemForm({
             name: "",
             price_per_unit: "",
+            fasteners: [],
           });
           setFormOpen(true);
         }}
@@ -269,6 +265,7 @@ const HardwareAdmin = () => {
           setItemForm({
             name: "",
             price_per_unit: "",
+            fasteners: [],
           });
         }}
         onSaveForm={handleSaveItem}

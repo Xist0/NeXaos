@@ -41,5 +41,6 @@ module.exports = [
   require("./040_add_price_per_m2_and_sheet_dims_to_hardware"),
   require("./041_add_hardware_matrix_to_modules"),
   require("./042_rename_polimaterial_to_pilomaterial"),
+  require("./043_add_fasteners_to_hardware"),
 ];
 
